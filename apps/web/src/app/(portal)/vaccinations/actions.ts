@@ -85,12 +85,22 @@ export async function sendVaccinationReminderNow(formData: FormData) {
 
   const message = `${pet?.name ?? "Your pet"} has a vaccination due on ${row.due_on ?? "the scheduled date"}.`;
 
-  const inserts = [
+  type VaccinationReminderInsert = {
+    clinic_id: string;
+    owner_id: string;
+    user_id: string | null;
+    channel: "push" | "email";
+    title: string;
+    message: string;
+    payload: { event: string; entity_id: string; email?: string };
+  };
+
+  const inserts: VaccinationReminderInsert[] = [
     {
       clinic_id,
       owner_id: ownerId,
       user_id: owner?.user_id ?? null,
-      channel: "push" as const,
+      channel: "push",
       title: "Vaccination due reminder",
       message,
       payload: { event: "vaccination_due_manual", entity_id: row.id },
@@ -101,7 +111,7 @@ export async function sendVaccinationReminderNow(formData: FormData) {
       clinic_id,
       owner_id: ownerId,
       user_id: owner?.user_id ?? null,
-      channel: "email" as const,
+      channel: "email",
       title: "Vaccination due reminder",
       message,
       payload: { event: "vaccination_due_manual", entity_id: row.id, email: owner.email },

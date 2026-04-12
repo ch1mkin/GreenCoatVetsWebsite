@@ -137,7 +137,7 @@ export default async function SuperAdminUsersPage() {
                     <form action={superAdminDeactivateUserEverywhereAction} className="inline-flex flex-col items-end gap-1">
                       <input type="hidden" name="target_user_id" value={u.id} />
                       <label className="flex flex-col items-end gap-1 text-[10px] text-slate-600">
-                        <span>Type "confirm" to deactivate</span>
+                        <span>Type &quot;confirm&quot; to deactivate</span>
                         <input
                           name="confirm_deactivate_text"
                           required
@@ -152,7 +152,7 @@ export default async function SuperAdminUsersPage() {
                     <form action={superAdminDeleteUserFromDatabaseAction} className="inline-flex flex-col items-end gap-1">
                       <input type="hidden" name="target_user_id" value={u.id} />
                       <label className="flex flex-col items-end gap-1 text-[10px] text-slate-600">
-                        <span>Type "confirm" to delete user</span>
+                        <span>Type &quot;confirm&quot; to delete user</span>
                         <input
                           name="confirm_delete_text"
                           required
