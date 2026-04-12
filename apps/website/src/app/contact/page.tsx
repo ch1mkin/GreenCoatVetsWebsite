@@ -18,7 +18,7 @@ export async function generateMetadata() {
 export default async function ContactPage() {
   const clinic = await resolveClinic();
   const supabase = createClient();
-  const [locations, branchesRes] = await Promise.all([
+  const [locationsAll, branchesRes] = await Promise.all([
     getMarketingLocationsOrDefaults(),
     supabase
       .from("branches")
@@ -28,6 +28,12 @@ export default async function ContactPage() {
       .order("name", { ascending: true }),
   ]);
   const branches = branchesRes.data;
+
+  /** Public site: show Phase 9 (Mohali) contact only for phone blocks. */
+  const isPhase9Location = (loc: { id: string; name: string }) =>
+    loc.id === "default-phase-9" || /phase\s*9/i.test(loc.name);
+
+  const locations = locationsAll.filter(isPhase9Location);
 
   type EmergencyLine = { label: string; display: string; href: string };
   const emergencyLines: EmergencyLine[] = [];
@@ -52,13 +58,8 @@ export default async function ContactPage() {
   for (const loc of locations) {
     pushLine(loc.name, loc.phoneDisplay, loc.telHref);
   }
-  for (const b of branches ?? []) {
-    if (b.emergency_phone?.trim()) {
-      pushLine(`${b.name} (emergency)`, b.emergency_phone, `tel:${b.emergency_phone.replace(/\D/g, "")}`);
-    } else if (b.phone?.trim()) {
-      pushLine(b.name, b.phone, `tel:${b.phone.replace(/\D/g, "")}`);
-    }
-  }
+
+  const branchesPhase9 = branches?.filter((b) => /phase\s*9/i.test(b.name)) ?? [];
 
   return (
     <main className="bg-surface pb-20">
@@ -83,7 +84,7 @@ export default async function ContactPage() {
                   <span className="material-symbols-outlined text-3xl">medical_services</span>
                   <h3 className="text-xl font-bold uppercase tracking-wider">Emergency &amp; urgent</h3>
                 </div>
-                <p className="mb-4 text-lg font-medium">Need immediate help? Call the right line for your branch.</p>
+                <p className="mb-4 text-lg font-medium">Need immediate help? Call our Phase 9 Mohali line.</p>
                 {emergencyLines.length ? (
                   <ul className="space-y-3">
                     {emergencyLines.map((line) => (
@@ -100,7 +101,7 @@ export default async function ContactPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm opacity-90">Add phone numbers under Locations in admin, or branch phone numbers in the portal.</p>
+                  <p className="text-sm opacity-90">Phase 9 contact numbers will appear here when configured in Locations (admin).</p>
                 )}
               </div>
               <div className="absolute -bottom-10 -right-10 h-40 w-40 animate-pulse rounded-full bg-error/10" />
@@ -125,13 +126,27 @@ export default async function ContactPage() {
             <div className="rounded-xl bg-surface-container-highest p-8">
               <h3 className="mb-4 text-lg font-bold text-on-surface">Locations</h3>
               <ul className="space-y-4 text-sm text-on-surface-variant">
-                {branches?.map((branch) => (
-                  <li key={branch.id}>
-                    <p className="font-semibold text-on-surface">{branch.name}</p>
-                    <p>{[branch.address_line1, branch.city, branch.state, branch.postal_code, branch.country].filter(Boolean).join(", ")}</p>
-                    {branch.phone ? <p className="mt-1">Tel: {branch.phone}</p> : null}
-                  </li>
-                ))}
+                {branchesPhase9.length > 0
+                  ? branchesPhase9.map((branch) => (
+                      <li key={branch.id}>
+                        <p className="font-semibold text-on-surface">{branch.name}</p>
+                        <p>
+                          {[branch.address_line1, branch.city, branch.state, branch.postal_code, branch.country].filter(Boolean).join(", ")}
+                        </p>
+                        {branch.phone?.trim() ? <p className="mt-1">Tel: {branch.phone}</p> : null}
+                      </li>
+                    ))
+                  : locations.length > 0
+                    ? locations.map((loc) => (
+                        <li key={loc.id}>
+                          <p className="font-semibold text-on-surface">{loc.name}</p>
+                          <p>{loc.addressLines.join(", ")}</p>
+                          {loc.phoneDisplay?.trim() ? <p className="mt-1">Tel: {loc.phoneDisplay}</p> : null}
+                        </li>
+                      ))
+                    : (
+                        <li className="text-on-surface-variant">Phase 9 address and phone will appear here when configured.</li>
+                      )}
               </ul>
               <Link href="/locations" className="mt-4 inline-block text-sm font-bold text-primary hover:underline">
                 View all locations →

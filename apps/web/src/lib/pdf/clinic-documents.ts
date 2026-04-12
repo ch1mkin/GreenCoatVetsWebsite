@@ -4,19 +4,27 @@ import { normalizeInvoiceTemplateLayout } from "@/lib/invoicing/invoice-template
 
 const PAGE_W = 595;
 const PAGE_H = 842;
+/** ~20px outer margin (reference body padding), then ~35px inner (reference .invoice padding). */
+const OUT_MARGIN = 15;
 const MARGIN = 48;
 const LINE_H = 13;
 const MAX_LINE_CHARS = 85;
 /** Reserve space at bottom of every page for footer band + disclaimer (prevents overlap). */
 const FOOTER_H = 44;
 
-/** Veterinary brand palette (teal / mint) — readable on white and in headers. */
-const VET_TEAL = rgb(0.06, 0.44, 0.4);
-const VET_TEAL_DEEP = rgb(0.04, 0.32, 0.3);
+/** Website primary #006c50 + companions (marketing tailwind theme). */
+const BRAND_PRIMARY = rgb(0, 108 / 255, 80 / 255);
+const BRAND_PRIMARY_DEEP = rgb(0, 76 / 255, 56 / 255);
+const PAGE_BG = rgb(244 / 255, 246 / 255, 248 / 255);
+const CARD_WHITE = rgb(1, 1, 1);
+
+const VET_TEAL = BRAND_PRIMARY;
+const VET_TEAL_DEEP = BRAND_PRIMARY_DEEP;
 const TEXT_MAIN = rgb(0.12, 0.14, 0.16);
 const TEXT_MUTED = rgb(0.38, 0.42, 0.45);
 const ROW_ALT = rgb(0.93, 0.97, 0.96);
-const TABLE_HEAD = rgb(0.82, 0.93, 0.9);
+/** Table header: solid brand, white text (reference invoice th). */
+const TABLE_HEAD = BRAND_PRIMARY;
 
 /**
  * Standard 14 PDF fonts (Helvetica) encode text as WinAnsi — no ₹, €, smart quotes, etc.
@@ -36,6 +44,19 @@ function currencyLabel(c: string): string {
   const t = sanitizePdfText(c).trim().toUpperCase();
   if (t === "INR" || t === "RS." || !t) return "Rs.";
   return sanitizePdfText(c);
+}
+
+/** Reference-style page: soft gray surround, white document card. */
+function drawPrintPageFrame(page: { drawRectangle: (o: Record<string, unknown>) => void }) {
+  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: PAGE_BG, borderWidth: 0 });
+  page.drawRectangle({
+    x: OUT_MARGIN,
+    y: OUT_MARGIN,
+    width: PAGE_W - 2 * OUT_MARGIN,
+    height: PAGE_H - 2 * OUT_MARGIN,
+    color: CARD_WHITE,
+    borderWidth: 0,
+  });
 }
 
 function wrapLines(text: string, maxChars: number): string[] {
@@ -102,6 +123,7 @@ export async function buildInvoicePdfBytes(opts: {
   const layout = normalizeInvoiceTemplateLayout(opts.layout);
   const doc = await PDFDocument.create();
   let page = doc.addPage([PAGE_W, PAGE_H]);
+  drawPrintPageFrame(page);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
@@ -123,6 +145,7 @@ export async function buildInvoicePdfBytes(opts: {
 
   const newPage = () => {
     page = doc.addPage([PAGE_W, PAGE_H]);
+    drawPrintPageFrame(page);
     y = PAGE_H - MARGIN;
   };
 
@@ -289,13 +312,14 @@ export async function buildInvoicePdfBytes(opts: {
       width: PAGE_W - MARGIN * 2,
       height: 22,
       color: TABLE_HEAD,
-      borderColor: VET_TEAL,
+      borderColor: BRAND_PRIMARY_DEEP,
       borderWidth: 0.6,
     });
-    page.drawText("Description", { x: MARGIN + 6, y: y - 14, size: 9, font: fontBold, color: VET_TEAL_DEEP });
-    drawRight(page, "Qty", colQty + 18, y - 14, 9, fontBold, VET_TEAL_DEEP);
-    drawRight(page, `Unit (${cur})`, colUnit + 28, y - 14, 8, fontBold, VET_TEAL_DEEP);
-    drawRight(page, `Amount (${cur})`, colAmt, y - 14, 8, fontBold, VET_TEAL_DEEP);
+    const th = rgb(1, 1, 1);
+    page.drawText("Description", { x: MARGIN + 6, y: y - 14, size: 9, font: fontBold, color: th });
+    drawRight(page, "Qty", colQty + 18, y - 14, 9, fontBold, th);
+    drawRight(page, `Unit (${cur})`, colUnit + 28, y - 14, 8, fontBold, th);
+    drawRight(page, `Amount (${cur})`, colAmt, y - 14, 8, fontBold, th);
     y -= 28;
 
     let rowIdx = 0;
@@ -424,8 +448,8 @@ export async function buildInvoicePdfBytes(opts: {
   }
 
   const footerLine1 =
-    "This is a digitally generated invoice. It is valid without a physical signature.";
-  const footerLine2 = "Computer-generated document — subject to clinic terms and applicable law.";
+    "Thank you for your trust. This invoice was generated electronically and is valid without a handwritten signature.";
+  const footerLine2 = "Retain for your records. For queries, contact the clinic using the details above.";
   const pages = doc.getPages();
   for (const p of pages) {
     const bandH = 36;
@@ -478,6 +502,7 @@ export async function buildPrescriptionPdfBytes(opts: {
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   let page = doc.addPage([PAGE_W, PAGE_H]);
+  drawPrintPageFrame(page);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   let logoImage: PDFImage | null = null;
@@ -494,18 +519,19 @@ export async function buildPrescriptionPdfBytes(opts: {
   }
   let y = PAGE_H - MARGIN;
 
-  const spacerBlock = (n: number) => {
-    y -= LINE_H * n;
+  const newRxPage = () => {
+    page = doc.addPage([PAGE_W, PAGE_H]);
+    drawPrintPageFrame(page);
+    y = PAGE_H - MARGIN;
   };
 
-  const draw = (text: string, size = 11, bold = false) => {
+  const draw = (text: string, size = 11, bold = false, x = MARGIN) => {
     for (const line of wrapLines(sanitizePdfText(text), MAX_LINE_CHARS)) {
-      if (y < MARGIN + 40) {
-        page = doc.addPage([PAGE_W, PAGE_H]);
-        y = PAGE_H - MARGIN;
+      if (y < MARGIN + 52) {
+        newRxPage();
       }
       page.drawText(line, {
-        x: MARGIN,
+        x,
         y,
         size,
         font: bold ? fontBold : font,
@@ -515,23 +541,37 @@ export async function buildPrescriptionPdfBytes(opts: {
     }
   };
 
-  const bannerH = 84;
+  const innerW = PAGE_W - 2 * OUT_MARGIN;
+  const ACCENT_H = 6;
+  const bannerH = 80;
+  const topBandBottom = PAGE_H - OUT_MARGIN - ACCENT_H - bannerH;
+
   page.drawRectangle({
-    x: 0,
-    y: PAGE_H - bannerH,
-    width: PAGE_W,
+    x: OUT_MARGIN,
+    y: PAGE_H - OUT_MARGIN - ACCENT_H,
+    width: innerW,
+    height: ACCENT_H,
+    color: BRAND_PRIMARY_DEEP,
+    borderWidth: 0,
+  });
+
+  page.drawRectangle({
+    x: OUT_MARGIN,
+    y: topBandBottom,
+    width: innerW,
     height: bannerH,
     color: VET_TEAL,
   });
+
   let bannerLeft = MARGIN;
   if (logoImage) {
-    const maxLogo = 46;
+    const maxLogo = 48;
     const scale = Math.min(maxLogo / logoImage.width, maxLogo / logoImage.height, 1);
     const lw = logoImage.width * scale;
     const lh = logoImage.height * scale;
     page.drawImage(logoImage, {
       x: MARGIN,
-      y: PAGE_H - bannerH + (bannerH - lh) / 2,
+      y: topBandBottom + (bannerH - lh) / 2,
       width: lw,
       height: lh,
     });
@@ -539,46 +579,107 @@ export async function buildPrescriptionPdfBytes(opts: {
   }
   page.drawText(sanitizePdfText(opts.clinicName), {
     x: bannerLeft,
-    y: PAGE_H - 34,
-    size: 16,
+    y: topBandBottom + bannerH - 28,
+    size: 17,
     font: fontBold,
     color: rgb(1, 1, 1),
     maxWidth: PAGE_W - bannerLeft - MARGIN,
   });
-  page.drawText("PRESCRIPTION", {
+  page.drawText("Veterinary prescription", {
     x: bannerLeft,
-    y: PAGE_H - 54,
+    y: topBandBottom + bannerH - 48,
     size: 10,
     font: fontBold,
-    color: rgb(0.88, 0.96, 0.94),
+    color: rgb(0.9, 0.98, 0.95),
   });
-  drawRight(page, opts.issuedAt.toLocaleString(), PAGE_W - MARGIN, PAGE_H - 56, 9, font, rgb(0.9, 0.97, 0.95));
-  y = PAGE_H - bannerH - 18;
+  drawRight(page, opts.issuedAt.toLocaleString(), PAGE_W - MARGIN, topBandBottom + bannerH - 30, 9, font, rgb(0.92, 0.98, 0.96));
 
-  spacerBlock(1);
+  y = topBandBottom - 22;
 
-  draw(`Patient: ${opts.petName}`, 11, true);
-  draw(`Owner: ${opts.ownerName}`, 11);
-  draw(`Veterinarian: ${opts.doctorName}`, 11);
-  spacerBlock(1);
+  const midX = MARGIN + (PAGE_W - 2 * MARGIN) * 0.52;
+  const col2 = midX + 8;
+  const leftBlock = `Owner: ${opts.ownerName}\nPatient: ${opts.petName}`;
+  const rightBlock = `Veterinarian: ${opts.doctorName}\nIssued: ${opts.issuedAt.toLocaleString()}`;
+  let yL = y;
+  let yR = y;
+  for (const line of wrapLines(sanitizePdfText(leftBlock), 42)) {
+    page.drawText(line, { x: MARGIN, y: yL, size: 10, font: fontBold, color: TEXT_MAIN });
+    yL -= LINE_H;
+  }
+  for (const line of wrapLines(sanitizePdfText(rightBlock), 42)) {
+    page.drawText(line, { x: col2, y: yR, size: 10, font, color: TEXT_MAIN });
+    yR -= LINE_H;
+  }
+  y = Math.min(yL, yR) - 14;
 
-  let n = 1;
-  draw("Medicines", 11, true);
-  spacerBlock(0.3);
-  for (const it of opts.items) {
-    draw(`${n}. ${it.medicine_name}`, 11, true);
-    draw(`Dosage: ${it.dosage}`, 10);
-    if (it.frequency) draw(`Frequency: ${it.frequency}`, 10);
-    if (it.duration) draw(`Duration: ${it.duration}`, 10);
-    if (it.instructions) draw(`Instructions: ${it.instructions}`, 9);
-    spacerBlock(0.6);
-    n += 1;
+  const drawSectionTitle = (title: string) => {
+    if (y < MARGIN + 60) newRxPage();
+    const titleY = y - 14;
+    page.drawRectangle({
+      x: MARGIN,
+      y: titleY - 1,
+      width: 3,
+      height: 14,
+      color: BRAND_PRIMARY,
+      borderWidth: 0,
+    });
+    page.drawText(sanitizePdfText(title), {
+      x: MARGIN + 10,
+      y: titleY,
+      size: 11,
+      font: fontBold,
+      color: BRAND_PRIMARY_DEEP,
+    });
+    y = titleY - 22;
+  };
+
+  drawSectionTitle("\u211e Medications");
+
+  for (let i = 0; i < opts.items.length; i++) {
+    const it = opts.items[i];
+    if (y < MARGIN + 72) newRxPage();
+    page.drawText(`${i + 1}. ${sanitizePdfText(it.medicine_name)}`, {
+      x: MARGIN,
+      y,
+      size: 10,
+      font: fontBold,
+      color: TEXT_MAIN,
+      maxWidth: PAGE_W - 2 * MARGIN,
+    });
+    y -= LINE_H + 2;
+    draw(`   Dosage: ${it.dosage}`, 9, false, MARGIN + 6);
+    if (it.frequency) draw(`   Frequency: ${it.frequency}`, 9, false, MARGIN + 6);
+    if (it.duration) draw(`   Duration: ${it.duration}`, 9, false, MARGIN + 6);
+    if (it.instructions) draw(`   Instructions: ${it.instructions}`, 8, false, MARGIN + 6);
+    if (i < opts.items.length - 1) {
+      page.drawRectangle({
+        x: MARGIN,
+        y: y - 2,
+        width: PAGE_W - 2 * MARGIN,
+        height: 1,
+        color: rgb(0.85, 0.87, 0.88),
+        borderWidth: 0,
+      });
+      y -= 12;
+    }
   }
 
   if (opts.notes?.trim()) {
-    draw("Notes", 10, true);
+    drawSectionTitle("Clinical notes");
     draw(opts.notes.trim(), 9);
   }
+
+  if (y < MARGIN + 80) newRxPage();
+  y -= 24;
+  page.drawText("Follow-up: as directed by your veterinarian.", {
+    x: MARGIN,
+    y,
+    size: 9,
+    font,
+    color: TEXT_MUTED,
+  });
+  y -= 36;
+  drawRight(page, "Authorised prescriber (electronic)", PAGE_W - MARGIN, y, 9, font, TEXT_MUTED);
 
   const pages = doc.getPages();
   for (const p of pages) {
@@ -586,14 +687,14 @@ export async function buildPrescriptionPdfBytes(opts: {
       x: 0,
       y: 0,
       width: PAGE_W,
-      height: 28,
+      height: 30,
       color: rgb(0.93, 0.96, 0.95),
       borderColor: rgb(0.78, 0.9, 0.86),
-      borderWidth: 0.4,
+      borderWidth: 0.35,
     });
-    p.drawText("Veterinary clinical prescription (digitally generated)", {
+    p.drawText(sanitizePdfText("Digitally generated prescription — use only as directed. Not for human use."), {
       x: MARGIN,
-      y: 10,
+      y: 11,
       size: 7,
       font,
       color: TEXT_MUTED,

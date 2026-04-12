@@ -162,22 +162,22 @@ export default async function Home() {
                 <span className="material-symbols-outlined text-base">pets</span>
                 {branding.product_name}
               </div>
-              <h1 className="font-headline text-4xl font-extrabold leading-[1.08] tracking-tight text-on-background sm:text-5xl lg:text-6xl xl:text-7xl">
+              <h1 className="font-headline text-[clamp(1.75rem,4.2vw,2.75rem)] font-extrabold leading-[1.12] tracking-tight text-on-background sm:text-4xl md:text-[clamp(2rem,3.5vw,2.75rem)] lg:text-5xl">
                 {heroCopy.line1}
                 <br />
                 <span className="text-gradient">{heroCopy.gradient}</span>
               </h1>
               <p className="max-w-lg text-lg leading-relaxed text-on-surface-variant">{heroCopy.tagline}</p>
-              <div className="flex flex-wrap gap-4 pt-2">
+              <div className="grid grid-cols-2 gap-3 pt-2 sm:flex sm:flex-wrap sm:gap-4">
                 <Link
                   href="/about"
-                  className="rounded-xl bg-surface-container-low px-6 py-3 font-headline text-base font-bold text-on-surface transition-colors hover:bg-surface-container-high sm:px-8 sm:py-4 sm:text-lg"
+                  className="min-w-0 rounded-xl bg-surface-container-low px-4 py-3 text-center font-headline text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high sm:px-8 sm:py-4 sm:text-lg"
                 >
                   Learn more
                 </Link>
                 <Link
                   href="/book"
-                  className="gradient-primary rounded-xl px-6 py-3 font-headline text-base font-bold text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:px-8 sm:py-4 sm:text-lg"
+                  className="gradient-primary min-w-0 rounded-xl px-4 py-3 text-center font-headline text-sm font-bold text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:px-8 sm:py-4 sm:text-lg"
                 >
                   Book an appointment
                 </Link>
