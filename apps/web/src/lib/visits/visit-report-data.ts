@@ -25,6 +25,7 @@ export type VisitReportPayload = {
   diagnosis: string;
   treatmentPlan: string;
   followUp: string;
+  patientComplaint: string;
   ccHp: string;
   physicalExam: string;
   deworming: string;
@@ -130,6 +131,7 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
     diagnosis: String(visit.diagnosis ?? "").trim(),
     treatmentPlan: String(visit.treatment_plan ?? "").trim(),
     followUp: fu,
+    patientComplaint: p("patient_complaint"),
     ccHp: p("cc_hp"),
     physicalExam: p("physical_examination"),
     deworming: p("section_deworming"),

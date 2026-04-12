@@ -166,6 +166,7 @@ async function persistVisitClinicalEvaluation(
     patient_age: String(formData.get("patient_age") ?? "").trim() || null,
     patient_name: String(formData.get("patient_name") ?? "").trim() || null,
     owner_name: String(formData.get("owner_name") ?? "").trim() || null,
+    patient_complaint: String(formData.get("patient_complaint") ?? "").trim() || null,
     cc_hp: String(formData.get("cc_hp") ?? "").trim() || null,
     section_deworming: String(formData.get("section_deworming") ?? "").trim() || null,
     section_vaccination: String(formData.get("section_vaccination") ?? "").trim() || null,

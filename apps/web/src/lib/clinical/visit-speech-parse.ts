@@ -7,6 +7,7 @@ export type ParsedVisitFields = Partial<{
   symptoms: string;
   diagnosis: string;
   treatment_plan: string;
+  patient_complaint: string;
   cc_hp: string;
   physical_examination: string;
   section_deworming: string;
@@ -14,6 +15,10 @@ export type ParsedVisitFields = Partial<{
 }>;
 
 const LABELS: { re: RegExp; key: keyof ParsedVisitFields }[] = [
+  {
+    re: /^(?:patient\s+complaint|presenting\s+complaint|reason\s+for\s+visit|complaint)\s*[:\-–—]\s*/i,
+    key: "patient_complaint",
+  },
   { re: /^(?:chief\s+complaint|cc\s*\/\s*hpi|hpi|history\s+of\s+present)\s*[:\-–—]\s*/i, key: "cc_hp" },
   { re: /^(?:symptoms?|subjective)\s*[:\-–—]\s*/i, key: "symptoms" },
   { re: /^(?:diagnosis|assessment)\s*[:\-–—]\s*/i, key: "diagnosis" },

@@ -182,6 +182,7 @@ export async function buildVisitReportPdfBytes(
   y -= 4;
 
   heading("Clinical evaluation");
+  kv("Patient complaint", payload.patientComplaint);
   kv("CC / HPI", payload.ccHp);
   kv("Physical examination", payload.physicalExam);
   kv("Deworming", payload.deworming);

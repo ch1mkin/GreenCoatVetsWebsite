@@ -10,6 +10,7 @@ const FORM_VISIT_RECORD = "#form-visit-record";
 type Target = { name: string; label: string };
 
 const FIELD_TARGETS: Target[] = [
+  { name: "patient_complaint", label: "Patient complaint" },
   { name: "cc_hp", label: "CC / HPI" },
   { name: "physical_examination", label: "Physical examination" },
   { name: "section_deworming", label: "Deworming" },

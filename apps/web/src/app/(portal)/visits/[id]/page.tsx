@@ -391,6 +391,24 @@ export default async function VisitDetailsPage({
               </label>
             </div>
 
+            <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low/40 p-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">
+                Presenting complaint
+              </p>
+              <label className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-semibold text-on-surface-variant">Patient complaint</span>
+                <span className="text-[10px] leading-snug text-on-surface-variant">
+                  What the owner or patient gives as the reason for today&apos;s visit (you can dictate into this field).
+                </span>
+                <textarea
+                  className="input-soft mt-1 min-h-[56px] py-2 text-[13px]"
+                  name="patient_complaint"
+                  placeholder="e.g. not eating, cough, limping on the left hind"
+                  defaultValue={evaluation?.patient_complaint ?? ic("chief_complaint")}
+                />
+              </label>
+            </div>
+
             <label className="flex flex-col gap-0.5">
               <span className="text-[11px] font-semibold text-on-surface-variant">CC / HP (HPI)</span>
               <textarea
