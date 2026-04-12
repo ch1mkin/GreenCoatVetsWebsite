@@ -22,6 +22,7 @@ import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
+import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
 
 function ownerDisplayName(owner: {
   first_name?: string | null;
@@ -78,7 +79,7 @@ export default async function VisitDetailsPage({
   const { data: visit, error } = await supabase
     .from("visits")
     .select(
-      "id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake)"
+      "id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake)"
     )
     .eq("id", params.id)
     .eq("clinic_id", clinic_id)
@@ -147,6 +148,20 @@ export default async function VisitDetailsPage({
   const petId = String(pet?.id ?? "");
   const branchId = String(branch?.id ?? "");
 
+  const { data: previousVisitsRaw } = await supabase
+    .from("visits")
+    .select("id, started_at, completed_at, created_at")
+    .eq("clinic_id", clinic_id)
+    .eq("pet_id", petId)
+    .neq("id", visit.id)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  const previousVisits = (previousVisitsRaw ?? []).map((v) => ({
+    id: v.id as string,
+    when: new Date((v.completed_at ?? v.started_at ?? v.created_at) as string).toLocaleString(),
+  }));
+
   const visitMainClass = embed
     ? "space-y-2 text-[13px] leading-snug"
     : "workspace-form mx-auto max-w-5xl space-y-4 text-sm";
@@ -156,6 +171,59 @@ export default async function VisitDetailsPage({
   const body = (
     <>
       {!embed ? <VisitAnchorNav showIntake={hasOwnerIntake} /> : null}
+      {!embed ? (
+        <>
+          {petId ? (
+            <VisitReportToolbar
+              visitId={visit.id}
+              petId={petId}
+              storedAt={(visit.visit_report_pdf_generated_at as string | null) ?? null}
+            />
+          ) : null}
+          {previousVisits.length > 0 ? (
+            <div className="mx-auto max-w-5xl rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
+              <p className="font-headline font-bold">Earlier visits for this patient ({previousVisits.length})</p>
+              <p className="mt-1 text-[11px] opacity-90">
+                Open a prior visit in the side panel or its PDF in a new tab to compare clinical context.
+              </p>
+              <ul className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
+                {previousVisits.map((pv) => (
+                  <li key={pv.id} className="flex flex-wrap items-center gap-2">
+                    <span className="text-on-surface-variant">{pv.when}</span>
+                    <a
+                      href={`/visits/${pv.id}?embed=1`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-primary underline"
+                    >
+                      Side panel
+                    </a>
+                    <a
+                      href={`/visits/${pv.id}/report`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-primary underline"
+                    >
+                      PDF report
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="mb-2 flex flex-wrap gap-2">
+          <a
+            className="btn-secondary btn-compact text-[11px]"
+            href={`/visits/${visit.id}/report`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            PDF report
+          </a>
+        </div>
+      )}
       {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
       <div className={visitMainClass}>
         {hasOwnerIntake ? (

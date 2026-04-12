@@ -13,6 +13,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 const PATIENT_VIEWS = [
   { id: "details", label: "Details" },
+  { id: "visit_reports", label: "Visit reports" },
   { id: "clinical", label: "Clinical records" },
   { id: "soc", label: "S.O.C." },
   { id: "financial", label: "Financial" },
@@ -45,12 +46,9 @@ export default async function PetRecordPage({
   const role = (access.membership?.role ?? (access.isSuperAdmin ? "super_admin" : "pet_owner")) as Parameters<
     typeof getRoleNavGroups
   >[0];
-  if (
-    !access.isSuperAdmin &&
-    !["clinic_admin", "receptionist", "doctor", "branch_admin", "lab_technician"].includes(role)
-  ) {
-    redirect("/dashboard");
-  }
+  const staffOk =
+    access.isSuperAdmin ||
+    ["clinic_admin", "receptionist", "doctor", "branch_admin", "lab_technician", "pharmacist"].includes(role);
 
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
@@ -59,7 +57,7 @@ export default async function PetRecordPage({
   const { data: pet, error } = await supabase
     .from("pets")
     .select(
-      "id, name, species, breed, gender, date_of_birth, color, microchip_id, weight_kg, photo_url, is_active, owners(id, full_name, phone, email)"
+      "id, owner_id, name, species, breed, gender, date_of_birth, color, microchip_id, weight_kg, photo_url, is_active, owners(id, full_name, phone, email)"
     )
     .eq("id", params.petId)
     .eq("clinic_id", clinic_id)
@@ -67,6 +65,16 @@ export default async function PetRecordPage({
 
   if (error) throw new Error(error.message);
   if (!pet) notFound();
+
+  let petOwnerOk = false;
+  if (role === "pet_owner") {
+    const { data: ownerRow } = await supabase.from("owners").select("user_id").eq("id", pet.owner_id as string).maybeSingle();
+    petOwnerOk = ownerRow?.user_id === access.userId;
+  }
+
+  if (!staffOk && !petOwnerOk) {
+    redirect("/dashboard");
+  }
 
   const view = (searchParams.view ?? "details") as ViewId;
   const safeView = PATIENT_VIEWS.some((v) => v.id === view) ? view : "details";
@@ -85,6 +93,22 @@ export default async function PetRecordPage({
     .eq("pet_id", pet.id)
     .order("starts_at", { ascending: false })
     .limit(8);
+
+  let visitReportsQuery = supabase
+    .from("visits")
+    .select("id, started_at, completed_at, created_at, visit_report_pdf_generated_at")
+    .eq("clinic_id", clinic_id)
+    .eq("pet_id", pet.id)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  if (role === "pet_owner") {
+    visitReportsQuery = visitReportsQuery.eq("owner_id", pet.owner_id as string);
+  }
+
+  const { data: visitReportRows, error: visitReportsError } = await visitReportsQuery;
+
+  if (visitReportsError) throw new Error(visitReportsError.message);
 
   const rxRes = await supabase
     .from("prescriptions")
@@ -251,6 +275,58 @@ export default async function PetRecordPage({
                 <Field label="Date of birth" value={pet.date_of_birth ?? "—"} />
                 <Field label="Weight (kg)" value={pet.weight_kg != null ? String(pet.weight_kg) : "—"} />
                 <Field label="Demeanor" value="—" />
+              </div>
+            ) : null}
+
+            {safeView === "visit_reports" ? (
+              <div className="card-soft space-y-4 text-sm">
+                <p className="text-on-surface-variant">
+                  Download a PDF summary for each visit (clinical notes, SOAP, prescription lines). Staff can attach a copy from the visit
+                  screen; timestamps below reflect the last save to the patient record.
+                </p>
+                {!visitReportRows?.length ? (
+                  <p className="text-on-surface-variant">No visits recorded yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {visitReportRows.map((v) => {
+                      const when = new Date(
+                        (v.completed_at ?? v.started_at ?? v.created_at) as string
+                      ).toLocaleString();
+                      return (
+                        <li
+                          key={v.id}
+                          className="flex flex-col gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <p className="font-semibold text-on-background">{when}</p>
+                            {v.visit_report_pdf_generated_at ? (
+                              <p className="text-[11px] text-on-surface-variant">
+                                PDF on file: {new Date(v.visit_report_pdf_generated_at as string).toLocaleString()}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-on-surface-variant">PDF not saved to record yet — use Open to generate.</p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <a
+                              className="btn-primary btn-compact text-xs"
+                              href={`/visits/${v.id}/report`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open PDF
+                            </a>
+                            {staffOk ? (
+                              <Link className="btn-secondary btn-compact text-xs" href={`/visits/${v.id}`}>
+                                Open visit
+                              </Link>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
             ) : null}
 
