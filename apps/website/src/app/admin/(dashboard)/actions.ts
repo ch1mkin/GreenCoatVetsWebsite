@@ -6,6 +6,7 @@ import { requireSuperAdmin as assertSuperAdmin } from "@/lib/admin/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { HomepageCopy, SocialLinks } from "@/lib/marketing/defaults";
 import { DEFAULT_HOMEPAGE_IMAGES, type HomepageImageKey } from "@/lib/marketing/defaults";
+import { parseInstagramEmbedUrlsBlock } from "@/lib/marketing/instagram-embed-url";
 
 async function requireSuperAdmin() {
   await assertSuperAdmin();
@@ -82,6 +83,10 @@ export async function updateMarketingSettings(formData: FormData) {
     else delete social_links[jsonKey];
   }
 
+  const instagram_embed_urls = parseInstagramEmbedUrlsBlock(
+    String(formData.get("instagram_embed_urls") ?? ""),
+  );
+
   const { error } = await supabase.from("marketing_site_settings").upsert(
     {
       id: "default",
@@ -91,6 +96,7 @@ export async function updateMarketingSettings(formData: FormData) {
       homepage_images,
       social_links,
       homepage_copy,
+      instagram_embed_urls,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "id" },

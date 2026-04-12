@@ -266,6 +266,28 @@ export default async function AdminSettingsPage({
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="font-headline text-lg font-bold text-primary">Instagram — homepage reels &amp; posts</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Paste one <strong>public</strong> Instagram post or reel URL per line (copy from the browser or Share → Copy link). After you save, the
+            marketing home page shows embedded players — no Instagram login needed for visitors. Invalid lines are skipped. Use Chrome or Safari for
+            best results when embedding.
+          </p>
+          <div className="mt-4 max-w-3xl">
+            <label className="block text-xs font-bold uppercase text-slate-500" htmlFor="instagram_embed_urls">
+              Post / reel URLs
+            </label>
+            <textarea
+              id="instagram_embed_urls"
+              name="instagram_embed_urls"
+              rows={8}
+              defaultValue={settings.instagram_embed_urls.join("\n")}
+              placeholder="https://www.instagram.com/reel/AbCdEfGh123/&#10;https://www.instagram.com/p/XyZaBcDe456/"
+              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 font-mono text-sm text-slate-900"
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-headline text-lg font-bold text-primary">Footer social links</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {(

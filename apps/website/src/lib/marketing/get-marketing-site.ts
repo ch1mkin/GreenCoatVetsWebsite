@@ -19,6 +19,8 @@ export type MarketingSiteSettingsRow = {
   homepage_images: Record<string, string>;
   social_links: SocialLinks;
   homepage_copy: HomepageCopy;
+  /** Canonical Instagram post/reel permalinks for homepage embeds. */
+  instagram_embed_urls: string[];
 };
 
 const EMPTY: MarketingSiteSettingsRow = {
@@ -28,6 +30,7 @@ const EMPTY: MarketingSiteSettingsRow = {
   homepage_images: {},
   social_links: {},
   homepage_copy: {},
+  instagram_embed_urls: [],
 };
 
 export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsRow> {
@@ -35,7 +38,7 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
   const { data, error } = await supabase
     .from("marketing_site_settings")
     .select(
-      "default_clinic_id, website_branded_for_clinic_id, contact_form_recipient_email, homepage_images, social_links, homepage_copy",
+      "default_clinic_id, website_branded_for_clinic_id, contact_form_recipient_email, homepage_images, social_links, homepage_copy, instagram_embed_urls",
     )
     .eq("id", "default")
     .maybeSingle();
@@ -43,6 +46,11 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
   if (error || !data) {
     return { ...EMPTY };
   }
+
+  const rawEmbeds = (data as { instagram_embed_urls?: unknown }).instagram_embed_urls;
+  const instagram_embed_urls = Array.isArray(rawEmbeds)
+    ? rawEmbeds.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+    : [];
 
   return {
     default_clinic_id: data.default_clinic_id as string | null,
@@ -54,6 +62,7 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
     homepage_images: (data.homepage_images as Record<string, string>) ?? {},
     social_links: (data.social_links as SocialLinks) ?? {},
     homepage_copy: ((data as { homepage_copy?: HomepageCopy | null }).homepage_copy as HomepageCopy) ?? {},
+    instagram_embed_urls,
   };
 }
 

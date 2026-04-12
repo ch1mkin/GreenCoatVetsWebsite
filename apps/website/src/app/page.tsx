@@ -8,6 +8,7 @@ import {
   mergeHomepageImages,
 } from "@/lib/marketing/get-marketing-site";
 import { HeroImageSlider } from "@/components/site/hero-image-slider";
+import { InstagramHomeEmbeds } from "@/components/site/instagram-home-embeds";
 import { clinicMetadata } from "@/lib/seo/clinic-metadata";
 import { createClient } from "@/lib/supabase/server";
 import { getPlatformBranding } from "@/lib/platform-branding";
@@ -177,9 +178,10 @@ export default async function Home() {
                 </Link>
                 <Link
                   href="/book"
-                  className="gradient-primary flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-xl px-2 py-2.5 text-center font-headline text-[11px] font-bold leading-tight text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
+                  className="gradient-primary flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-xl px-3 py-2.5 text-center font-headline text-sm font-bold leading-snug text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
                 >
-                  Book an appointment
+                  <span className="sm:hidden">Book now</span>
+                  <span className="hidden sm:inline">Book an appointment</span>
                 </Link>
               </div>
             </div>
@@ -272,6 +274,10 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        {marketing.instagram_embed_urls.length ? (
+          <InstagramHomeEmbeds urls={marketing.instagram_embed_urls} />
+        ) : null}
 
         {/* Ratings */}
         <section className="bg-surface py-16 sm:py-20">
