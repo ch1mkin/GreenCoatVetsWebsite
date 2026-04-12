@@ -1,0 +1,25 @@
+# Optional fallback when Vercel "Git" integration does not start a production deploy after push.
+#
+# Setup (Vercel Dashboard → your Project → Settings → Git → Deploy Hooks):
+#   1. Create a hook for branch "main" (name: e.g. "GitHub push").
+#   2. In GitHub: repo → Settings → Secrets and variables → Actions → New repository secret:
+#      Name: VERCEL_DEPLOY_HOOK   Value: the full hook URL Vercel shows.
+#
+# Once native Git deploys work again, remove VERCEL_DEPLOY_HOOK to avoid double builds.
+name: Trigger Vercel production deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-hook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST deploy hook
+        if: ${{ secrets.VERCEL_DEPLOY_HOOK != '' }}
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          set -e
+          echo "Calling Vercel deploy hook…"
+          curl -fsS -X POST "$HOOK" -o /dev/null -w "HTTP %{http_code}\n"
