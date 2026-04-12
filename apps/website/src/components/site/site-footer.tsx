@@ -34,11 +34,13 @@ function FooterNavItem({
 }
 
 export function SiteFooter({
+  className,
   clinicName,
   productName,
   socialLinks = {},
   footerNav = [],
 }: {
+  className?: string;
   clinicName: string;
   productName: string;
   socialLinks?: SocialLinks;
@@ -54,7 +56,7 @@ export function SiteFooter({
   } = socialLinks;
 
   return (
-    <footer className="w-full bg-slate-100 pb-8 pt-16 dark:bg-slate-950">
+    <footer className={`w-full bg-slate-100 pb-8 pt-16 dark:bg-slate-950 ${className ?? ""}`}>
       <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-sm shrink-0 lg:max-w-xs">
           <span className="mb-4 block font-headline text-xl font-bold text-slate-900 dark:text-slate-100">{productName}</span>

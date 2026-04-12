@@ -55,10 +55,16 @@ export function MarketingShell({
         callTelHref={navbarCallTelHref}
         websiteStoreEnabled={websiteStoreEnabled}
       />
-      <div className="marketing-atmosphere relative min-h-screen pt-16 sm:pt-20">
+      <div className="marketing-atmosphere relative pt-16 sm:pt-20">
         <div className="relative z-[1]">{children}</div>
       </div>
-      <SiteFooter clinicName={clinicName} productName={productName} socialLinks={socialLinks} footerNav={footerNav} />
+      <SiteFooter
+        className="relative z-10"
+        clinicName={clinicName}
+        productName={productName}
+        socialLinks={socialLinks}
+        footerNav={footerNav}
+      />
       <BookingFab />
       {!hideNudges ? <BookingReminderBar /> : null}
     </>
