@@ -1,0 +1,312 @@
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-inter), Arial, sans-serif;
+  color: #171c1f;
+  background: #d8e0ea;
+}
+
+/** Dense practice-management UI shell (not marketing-site layout) */
+.pms-shell {
+  letter-spacing: 0.01em;
+}
+
+/* Clinical portal: denser, readable UI (practice software) */
+.portal-workspace {
+  font-size: 12px;
+  line-height: 1.4;
+  font-feature-settings: "kern" 1, "liga" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+.portal-workspace h1 {
+  letter-spacing: -0.02em;
+}
+
+/** Main document area: form density like desktop PMS (ezyVet-style) */
+.pms-workspace-scroll {
+  font-size: 12px;
+  line-height: 1.38;
+}
+
+/** Tighter default cards inside the framed workspace */
+.pms-shell .card-soft {
+  @apply rounded-md border border-slate-200/90 bg-white p-3 shadow-sm;
+}
+
+.workspace-form label span {
+  font-size: 0.8125rem;
+}
+
+.workspace-search-input {
+  @apply w-full rounded-lg border border-outline-variant/35 bg-surface-container-lowest py-2.5 pl-10 pr-3 text-sm text-on-background shadow-sm transition-shadow placeholder:text-on-surface-variant/70;
+  @apply focus:border-primary/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20;
+}
+
+.pms-shell aside .workspace-search-input {
+  @apply py-1.5 pl-8 text-[11px];
+}
+
+.pms-header-search .workspace-search-input {
+  @apply border-white/25 bg-white/95 py-2 text-[12px] text-slate-900 placeholder:text-slate-500;
+  @apply focus:border-primary/50 focus:ring-primary/25;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .card-soft {
+    @apply rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-4 shadow-sm;
+  }
+
+  /** Denser cards / forms (practice software density) */
+  .card-compact {
+    @apply p-3.5;
+  }
+
+  .btn-compact {
+    @apply rounded-md px-3 py-1.5 text-xs;
+  }
+
+  /** Wins over standalone .btn-primary / .btn-secondary padding when combined */
+  .btn-primary.btn-compact {
+    @apply py-1.5 px-3 text-[12px] font-semibold;
+  }
+  .btn-secondary.btn-compact {
+    @apply py-1.5 px-3 text-[12px] font-semibold;
+  }
+
+  .input-compact {
+    @apply py-1.5 text-sm;
+  }
+
+  .btn-primary {
+    @apply rounded-md border border-primary/25 bg-gradient-to-br from-primary-container to-primary px-3 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-[0.97];
+  }
+
+  .btn-secondary {
+    @apply rounded-md border border-outline-variant/35 bg-secondary-container px-3 py-2 text-sm font-semibold text-on-secondary-container shadow-sm hover:bg-surface-container-high/80;
+  }
+
+  .input-soft {
+    @apply rounded-md border border-outline-variant/35 bg-surface-container-low px-2.5 py-2 text-sm outline-none transition-colors focus:border-primary/45 focus:bg-white focus:ring-1 focus:ring-primary/30;
+  }
+
+  /** Dense data tables (invoices, lists) — practice-software density */
+  .pms-table {
+    @apply w-full border-collapse text-left text-[11px];
+  }
+  .pms-table thead tr {
+    @apply border-b border-outline-variant/30 bg-surface-container-high/40 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant;
+  }
+  .pms-table th,
+  .pms-table td {
+    @apply border-b border-outline-variant/10 py-1.5 px-2 align-top;
+  }
+
+  /** File inputs — match primary tint (platform + clinic uploads) */
+  .input-file-soft {
+    @apply input-soft w-full cursor-pointer text-sm text-on-surface-variant file:mr-3 file:rounded-md file:border file:border-primary/20 file:bg-primary/5 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-primary file:transition-colors hover:file:bg-primary/10;
+  }
+
+  .input-file-compact {
+    @apply max-w-[min(100%,220px)] cursor-pointer text-xs text-on-surface-variant file:mr-2 file:rounded-md file:border file:border-outline-variant/30 file:bg-surface-container-lowest file:px-2.5 file:py-1.5 file:text-[10px] file:font-bold file:uppercase file:tracking-wide file:text-primary hover:file:border-primary/30 hover:file:bg-primary/5;
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+  }
+
+  /** Invite QR studio — gradient frame (matches onboarding reference) */
+  .qr-gradient-border {
+    background: linear-gradient(135deg, #36c497 0%, #006c50 100%);
+    padding: 3px;
+    border-radius: 1.5rem;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  /* App shell: clean scroll for long nav lists */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 108, 80, 0.35) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 108, 80, 0.28);
+    border-radius: 9999px;
+  }
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 108, 80, 0.45);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+  }
+
+  /* Login / auth: animated backdrop */
+  .login-bg-gradient {
+    background: linear-gradient(
+      125deg,
+      #d8f0e8 0%,
+      #e8f4fb 25%,
+      #f6fafe 50%,
+      #e0ecf8 75%,
+      #c8eadc 100%
+    );
+    background-size: 400% 400%;
+    animation: login-gradient-shift 22s ease infinite;
+  }
+
+  .login-blob {
+    will-change: transform;
+    filter: blur(64px);
+  }
+
+  .login-blob-1 {
+    animation: login-float-1 28s ease-in-out infinite;
+  }
+  .login-blob-2 {
+    animation: login-float-2 32s ease-in-out infinite;
+  }
+  .login-blob-3 {
+    animation: login-float-3 24s ease-in-out infinite;
+  }
+  .login-blob-4 {
+    animation: login-float-4 36s ease-in-out infinite;
+  }
+
+  .login-orbit {
+    animation: login-orbit 48s linear infinite;
+  }
+  .login-orbit-reverse {
+    animation: login-orbit-reverse 56s linear infinite;
+  }
+
+  .login-dots {
+    background-image: radial-gradient(circle at 1px 1px, rgba(0, 108, 80, 0.12) 1px, transparent 0);
+    background-size: 28px 28px;
+    animation: login-dots-drift 80s linear infinite;
+  }
+}
+
+@keyframes login-gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 40%;
+  }
+  50% {
+    background-position: 100% 60%;
+  }
+}
+
+@keyframes login-float-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(12%, -8%) scale(1.12);
+  }
+}
+
+@keyframes login-float-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate(-10%, 14%) scale(0.92);
+  }
+}
+
+@keyframes login-float-3 {
+  0%,
+  100% {
+    transform: translate(5%, 5%) scale(1);
+  }
+  33% {
+    transform: translate(-8%, -12%) scale(1.08);
+  }
+  66% {
+    transform: translate(14%, 6%) scale(0.95);
+  }
+}
+
+@keyframes login-float-4 {
+  0%,
+  100% {
+    transform: translate(-5%, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(8%, -18%) rotate(8deg);
+  }
+}
+
+@keyframes login-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes login-orbit-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes login-dots-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 280px 280px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg-gradient,
+  .login-blob-1,
+  .login-blob-2,
+  .login-blob-3,
+  .login-blob-4,
+  .login-orbit,
+  .login-orbit-reverse,
+  .login-dots {
+    animation: none !important;
+  }
+}

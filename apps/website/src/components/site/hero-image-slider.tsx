@@ -1,0 +1,60 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useState } from "react";
+
+export function HeroImageSlider({
+  urls,
+  alt,
+}: {
+  urls: string[];
+  alt: string;
+}) {
+  const list = urls.filter(Boolean);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (list.length <= 1) return;
+    const id = window.setInterval(() => {
+      setIndex((i) => (i + 1) % list.length);
+    }, 5500);
+    return () => window.clearInterval(id);
+  }, [list.length]);
+
+  if (!list.length) return null;
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-[2rem] shadow-2xl shadow-on-surface/10 transition-transform duration-700 lg:rotate-2">
+      <div className="relative h-[min(70vh,600px)] w-full">
+        {list.map((src, i) => (
+          <div
+            key={`${src}-${i}`}
+            className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${i === index ? "z-10 opacity-100" : "z-0 opacity-0"}`}
+          >
+            <Image
+              src={src}
+              alt={i === 0 ? alt : ""}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              priority={i === 0}
+            />
+          </div>
+        ))}
+      </div>
+      {list.length > 1 ? (
+        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+          {list.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Slide ${i + 1}`}
+              className={`h-2 rounded-full transition-all ${i === index ? "w-8 bg-white" : "w-2 bg-white/50"}`}
+              onClick={() => setIndex(i)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}

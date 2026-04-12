@@ -1,0 +1,88 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getActiveMembership } from "@/lib/auth/get-active-membership";
+import { getUserAccess } from "@/lib/auth/get-user-access";
+import { createClient } from "@/lib/supabase/server";
+
+export type TeamMemberRow = {
+  user_id: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  updated_at: string | null;
+};
+
+export async function getClinicTeamMembers(): Promise<TeamMemberRow[]> {
+  const access = await getUserAccess();
+  if (access.membership?.role !== "clinic_admin") {
+    throw new Error("Only clinic administrators can view this page.");
+  }
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("list_clinic_team_members", { p_clinic_id: clinic_id });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TeamMemberRow[];
+}
+
+export async function assignUserToClinicAction(formData: FormData) {
+  const access = await getUserAccess();
+  if (access.membership?.role !== "clinic_admin") {
+    throw new Error("Not allowed.");
+  }
+  const { clinic_id } = await getActiveMembership();
+  const email = String(formData.get("email") ?? "").trim();
+  const role = String(formData.get("role") ?? "").trim() as
+    | "branch_admin"
+    | "doctor"
+    | "receptionist"
+    | "lab_technician"
+    | "pharmacist"
+    | "pet_owner";
+  const fullName = String(formData.get("full_name") ?? "").trim() || null;
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const workingHours = String(formData.get("working_hours") ?? "").trim() || null;
+  const confirm = String(formData.get("confirm_assign") ?? "") === "on";
+  if (!email || !role) throw new Error("Email and role are required.");
+  if (!confirm) throw new Error("Confirm assigning this role.");
+
+  const supabase = createClient();
+  const { data: userId, error: lookErr } = await supabase.rpc("lookup_user_id_for_clinic_assignment", {
+    p_clinic_id: clinic_id,
+    p_email: email,
+  });
+  if (lookErr) throw new Error(lookErr.message);
+  const uid = userId as string | null;
+  if (!uid) throw new Error("No account found with that email. They must sign up first.");
+
+  const { error } = await supabase.rpc("assign_user_to_clinic_by_admin", {
+    p_target_user_id: uid,
+    p_clinic_id: clinic_id,
+    p_role: role,
+    p_staff_full_name: fullName,
+    p_staff_phone: phone,
+    p_working_hours: role === "doctor" ? workingHours : null,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+}
+
+export async function removeUserFromClinicAction(formData: FormData) {
+  const access = await getUserAccess();
+  if (access.membership?.role !== "clinic_admin") {
+    throw new Error("Not allowed.");
+  }
+  const { clinic_id } = await getActiveMembership();
+  const targetId = String(formData.get("target_user_id") ?? "").trim();
+  const confirm = String(formData.get("confirm_remove") ?? "") === "on";
+  if (!targetId) throw new Error("User is required.");
+  if (!confirm) throw new Error("Confirm removing access.");
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc("deactivate_user_clinic_membership_by_admin", {
+    p_target_user_id: targetId,
+    p_clinic_id: clinic_id,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/team");
+}

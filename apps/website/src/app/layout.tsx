@@ -1,0 +1,88 @@
+import type { Metadata } from "next";
+import { Inter, Manrope } from "next/font/google";
+import "./globals.css";
+import { MarketingShell } from "@/components/site/marketing-shell";
+import { resolveClinic } from "@/lib/clinic/resolve-clinic";
+import { getMarketingFooterNav } from "@/lib/marketing/footer-nav";
+import { getMarketingSiteSettings, mergeHomepageCopy } from "@/lib/marketing/get-marketing-site";
+import { getActiveMarketingPopups } from "@/lib/marketing/popups";
+import { StoreProviders } from "@/components/store/store-providers";
+import { getFaviconHref, getPlatformBranding } from "@/lib/platform-branding";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+});
+
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getPlatformBranding();
+  const icon = getFaviconHref(branding);
+  return {
+    title: { default: `${branding.product_name} — Clinical Sanctuary`, template: `%s · ${branding.product_name}` },
+    description: "Veterinary care, appointments, store, and wellness — GreenCoatVets experience.",
+    ...(icon
+      ? {
+          icons: {
+            icon: [{ url: icon, type: "image/png" }],
+            apple: [{ url: icon }],
+          },
+        }
+      : {}),
+  };
+}
+
+export default async function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  const [branding, clinic, marketing, footerNav, marketingPopups] = await Promise.all([
+    getPlatformBranding(),
+    resolveClinic(),
+    getMarketingSiteSettings(),
+    getMarketingFooterNav(),
+    getActiveMarketingPopups(),
+  ]);
+  const navCopy = mergeHomepageCopy(marketing.homepage_copy);
+  const effectiveFooterNav = branding.website_store_enabled
+    ? footerNav
+    : footerNav.map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.href !== "/store"),
+      }));
+
+  return (
+    <html lang="en" className={`scroll-smooth ${inter.variable} ${manrope.variable}`}>
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+        />
+      </head>
+      <body className={`${inter.className} min-h-screen`}>
+        <StoreProviders storeEnabled={branding.website_store_enabled}>
+          <MarketingShell
+            productName={branding.product_name}
+            logoUrl={branding.logo_url}
+            clinicName={clinic.name}
+            socialLinks={marketing.social_links}
+            footerNav={effectiveFooterNav}
+            navbarCallDisplay={navCopy.callDisplay || undefined}
+            navbarCallTelHref={navCopy.callTelHref || undefined}
+            marketingPopups={marketingPopups}
+            websiteStoreEnabled={branding.website_store_enabled}
+          >
+            {children}
+          </MarketingShell>
+        </StoreProviders>
+      </body>
+    </html>
+  );
+}

@@ -1,0 +1,31 @@
+{
+  "name": "saasclinics",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@saasclinics/web",
+    "dev:website": "npm run dev --workspace=@saasclinics/website",
+    "dev:mobile": "cd apps/mobile && npx expo start",
+    "build:web": "npm run build --workspace=@saasclinics/web",
+    "build:website": "npm run build --workspace=@saasclinics/website",
+    "lint:web": "npm run lint --workspace=@saasclinics/web",
+    "lint:website": "npm run lint --workspace=@saasclinics/website"
+  },
+  "engines": {
+    "node": ">=20.19.4"
+  },
+  "overrides": {
+    "@saasclinics/web": {
+      "react": "18.3.1",
+      "react-dom": "18.3.1"
+    }
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "~5.9.2"
+  }
+}

@@ -1,0 +1,177 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import {
+  listAppUsersForSuperAdmin,
+  listClinicsMinimalForSuperAdmin,
+  superAdminAssignUserToClinicAction,
+  superAdminDeactivateUserEverywhereAction,
+  superAdminDeleteUserFromDatabaseAction,
+} from "../actions";
+import { AppShell } from "@/components/web/app-shell";
+import { getUserAccess } from "@/lib/auth/get-user-access";
+import { getRoleNavGroups } from "@/lib/auth/permissions";
+import { SubmitButton } from "@/components/web/submit-button";
+
+const ASSIGN_ROLES = [
+  { value: "clinic_admin", label: "Clinic admin" },
+  { value: "branch_admin", label: "Branch admin" },
+  { value: "doctor", label: "Doctor" },
+  { value: "receptionist", label: "Receptionist" },
+  { value: "lab_technician", label: "Lab technician" },
+  { value: "pharmacist", label: "Pharmacist" },
+  { value: "pet_owner", label: "Pet owner" },
+] as const;
+
+export default async function SuperAdminUsersPage() {
+  const access = await getUserAccess();
+  if (!access.isSuperAdmin) {
+    redirect("/dashboard");
+  }
+
+  const navGroups = getRoleNavGroups("clinic_admin", true);
+  const [users, clinics] = await Promise.all([listAppUsersForSuperAdmin(), listClinicsMinimalForSuperAdmin()]);
+
+  return (
+    <AppShell
+      title="Users & roles"
+      subtitle="Look up accounts by email, assign roles to any clinic, or deactivate all clinic access for a user."
+      activeHref="/super-admin/users"
+      navGroups={navGroups}
+      topRight={
+        <Link className="btn-secondary btn-compact" href="/super-admin">
+          Platform control
+        </Link>
+      }
+    >
+      <section className="card-soft mb-3">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign role (any clinic)</h2>
+        <p className="mt-1 text-[11px] text-slate-600">
+          The person must already have signed up. Doctors require working hours in the field below.
+        </p>
+        <form action={superAdminAssignUserToClinicAction} className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2 lg:col-span-3">
+            <span className="font-semibold text-slate-700">Clinic</span>
+            <select
+              name="clinic_id"
+              required
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]"
+              defaultValue={clinics[0]?.id ?? ""}
+            >
+              {clinics.length ? (
+              clinics.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))
+            ) : (
+              <option value="">No active clinics</option>
+            )}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2">
+            <span className="font-semibold text-slate-700">Account email</span>
+            <input
+              name="email"
+              type="email"
+              required
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]"
+              placeholder="user@example.com"
+              autoComplete="off"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px]">
+            <span className="font-semibold text-slate-700">Role</span>
+            <select name="role" required className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]">
+              {ASSIGN_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px]">
+            <span className="font-semibold text-slate-700">Display name</span>
+            <input name="full_name" className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]" placeholder="Optional" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px]">
+            <span className="font-semibold text-slate-700">Phone</span>
+            <input name="phone" className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px]">
+            <span className="font-semibold text-slate-700">Doctor working hours</span>
+            <input name="working_hours" className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]" placeholder="If role is Doctor" />
+          </label>
+          <label className="flex items-center gap-2 text-[11px] md:col-span-2 lg:col-span-3">
+            <input type="checkbox" name="confirm_assign" required className="rounded border-slate-300" />
+            <span>I confirm assigning this role for the selected clinic.</span>
+          </label>
+          <SubmitButton className="btn-primary btn-compact w-fit md:col-span-2 lg:col-span-3" pendingLabel="Saving…">
+            Assign
+          </SubmitButton>
+        </form>
+      </section>
+
+      <section className="card-soft overflow-x-auto">
+        <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Registered accounts</h2>
+        <p className="mt-1 text-[11px] text-slate-600">
+          Type <span className="rounded bg-slate-100 px-1 font-mono">confirm</span> before destructive actions.
+          Deactivate removes memberships and access. Delete removes the user from platform tables and user registry.
+        </p>
+        <table className="mt-2 w-full min-w-[640px] border-collapse text-left text-[11px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+              <th className="py-2 pl-2 pr-2">Email</th>
+              <th className="py-2 pr-2">User id</th>
+              <th className="py-2 pr-2">Created</th>
+              <th className="py-2 pr-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/80">
+                <td className="py-1.5 pl-2 pr-2 font-mono text-[11px]">{u.email ?? "—"}</td>
+                <td className="py-1.5 pr-2 font-mono text-[10px] text-slate-600">{u.id}</td>
+                <td className="py-1.5 pr-2 text-slate-600">{new Date(u.created_at).toLocaleString()}</td>
+                <td className="py-1.5 pr-2 text-right">
+                  <div className="inline-flex flex-col items-end gap-2">
+                    <form action={superAdminDeactivateUserEverywhereAction} className="inline-flex flex-col items-end gap-1">
+                      <input type="hidden" name="target_user_id" value={u.id} />
+                      <label className="flex flex-col items-end gap-1 text-[10px] text-slate-600">
+                        <span>Type "confirm" to deactivate</span>
+                        <input
+                          name="confirm_deactivate_text"
+                          required
+                          className="w-36 rounded border border-slate-300 bg-white px-2 py-1 text-[11px]"
+                          placeholder="confirm"
+                        />
+                      </label>
+                      <SubmitButton className="btn-secondary btn-compact border-red-200 text-[10px] text-red-800" pendingLabel="…">
+                        Deactivate everywhere
+                      </SubmitButton>
+                    </form>
+                    <form action={superAdminDeleteUserFromDatabaseAction} className="inline-flex flex-col items-end gap-1">
+                      <input type="hidden" name="target_user_id" value={u.id} />
+                      <label className="flex flex-col items-end gap-1 text-[10px] text-slate-600">
+                        <span>Type "confirm" to delete user</span>
+                        <input
+                          name="confirm_delete_text"
+                          required
+                          className="w-36 rounded border border-red-300 bg-white px-2 py-1 text-[11px]"
+                          placeholder="confirm"
+                        />
+                      </label>
+                      <SubmitButton className="btn-secondary btn-compact border-red-300 bg-red-50 text-[10px] text-red-900" pendingLabel="…">
+                        Delete from database
+                      </SubmitButton>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!users.length ? <p className="mt-2 text-[12px] text-slate-600">No rows in app_users.</p> : null}
+      </section>
+    </AppShell>
+  );
+}
