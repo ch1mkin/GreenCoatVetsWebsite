@@ -21,6 +21,7 @@ import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
+import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 
 function ownerDisplayName(owner: {
   first_name?: string | null;
@@ -150,9 +151,12 @@ export default async function VisitDetailsPage({
     ? "space-y-2 text-[13px] leading-snug"
     : "workspace-form mx-auto max-w-5xl space-y-4 text-sm";
 
+  const showVoiceDictation = access.isSuperAdmin || role === "doctor";
+
   const body = (
     <>
       {!embed ? <VisitAnchorNav showIntake={hasOwnerIntake} /> : null}
+      {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
       <div className={visitMainClass}>
         {hasOwnerIntake ? (
           <VisitSection
@@ -239,7 +243,11 @@ export default async function VisitDetailsPage({
             )
           }
         >
-          <form action={saveVisitClinicalEvaluation} className={embed ? "space-y-2" : "space-y-3"}>
+          <form
+            id="form-visit-clinical"
+            action={saveVisitClinicalEvaluation}
+            className={embed ? "space-y-2" : "space-y-3"}
+          >
             <input type="hidden" name="visit_id" value={visit.id} />
             <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
               <label className="flex flex-col gap-0.5">
@@ -386,7 +394,7 @@ export default async function VisitDetailsPage({
         </VisitSection>
 
         <VisitSection embed={embed} id="section-soap" title="Consultation (SOAP)" defaultOpen={!embed}>
-          <form action={saveVisitConsultation} className="space-y-2">
+          <form id="form-visit-consultation" action={saveVisitConsultation} className="space-y-2">
             <input type="hidden" name="visit_id" value={visit.id} />
             <textarea
               className="input-soft min-h-[64px] w-full py-2 text-[13px]"
