@@ -58,10 +58,17 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
 
   const { data: evaluation } = await supabase.from("visit_clinical_evaluations").select("*").eq("visit_id", visitId).maybeSingle();
 
-  const { data: prescList, error: prescErr } = await supabase.from("prescriptions").select("id").eq("visit_id", visitId);
+  /** One canonical Rx per visit (matches ensurePrescriptionForVisit). Multiple legacy rows would duplicate every line in the PDF. */
+  const { data: prescRow, error: prescErr } = await supabase
+    .from("prescriptions")
+    .select("id")
+    .eq("visit_id", visitId)
+    .eq("clinic_id", visit.clinic_id as string)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (prescErr) throw new Error(prescErr.message);
-  const prescIds = (prescList ?? []).map((p) => p.id as string).filter(Boolean);
 
   const petRaw = visit.pets as { name?: string; species?: string; breed?: string } | { name?: string }[] | null;
   const pet = (Array.isArray(petRaw) ? petRaw[0] ?? null : petRaw) as {
@@ -103,21 +110,30 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
       : "";
 
   let rxLines: VisitReportPayload["rxLines"] = [];
-  if (prescIds.length) {
+  if (prescRow?.id) {
     const { data: itemRows, error: itemsErr } = await supabase
       .from("prescription_items")
       .select("medicine_name, dosage, frequency, duration, instructions")
-      .in("prescription_id", prescIds)
+      .eq("prescription_id", prescRow.id as string)
       .order("created_at", { ascending: true });
 
     if (itemsErr) throw new Error(itemsErr.message);
-    rxLines = (itemRows ?? []).map((row) => ({
+    const mapped = (itemRows ?? []).map((row) => ({
       medicine_name: String(row.medicine_name ?? ""),
       dosage: String(row.dosage ?? ""),
       frequency: String(row.frequency ?? ""),
       duration: String(row.duration ?? ""),
       instructions: String(row.instructions ?? ""),
     }));
+    const seen = new Set<string>();
+    for (const row of mapped) {
+      const key = [row.medicine_name, row.dosage, row.frequency, row.duration, row.instructions]
+        .map((s) => s.trim().toLowerCase())
+        .join("\u0001");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rxLines.push(row);
+    }
   }
 
   const t0 = visit.completed_at ?? visit.started_at ?? visit.created_at;

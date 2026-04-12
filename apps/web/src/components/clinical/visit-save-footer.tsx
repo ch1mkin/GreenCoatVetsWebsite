@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 const FORM_ID = "form-visit-record";
 
 export function VisitSaveFooter({
@@ -14,6 +16,28 @@ export function VisitSaveFooter({
   defaultCompleted: boolean;
   showSavedSuccess: boolean;
 }) {
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const form = document.getElementById(FORM_ID);
+    if (!form) return;
+    let safety: number | undefined;
+    const onSubmit = () => {
+      setSaving(true);
+      if (safety !== undefined) window.clearTimeout(safety);
+      safety = window.setTimeout(() => setSaving(false), 90_000);
+    };
+    form.addEventListener("submit", onSubmit);
+    return () => {
+      form.removeEventListener("submit", onSubmit);
+      if (safety !== undefined) window.clearTimeout(safety);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showSavedSuccess) setSaving(false);
+  }, [showSavedSuccess]);
+
   return (
     <div
       className={
@@ -66,12 +90,24 @@ export function VisitSaveFooter({
         Saves clinical evaluation, SOAP fields, follow-up, and completion. Prescription lines are saved when you add them above.
       </p>
 
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" form={FORM_ID} className="btn-primary btn-compact">
-          Save entire visit
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn-primary btn-compact"
+          disabled={saving}
+          aria-busy={saving}
+          onClick={() => document.getElementById("visit-submit-save")?.click()}
+        >
+          {saving ? "Saving…" : "Save entire visit"}
         </button>
-        <button type="submit" form={FORM_ID} name="complete_visit" value="true" className="btn-secondary btn-compact">
-          Complete visit
+        <button
+          type="button"
+          className="btn-secondary btn-compact"
+          disabled={saving}
+          aria-busy={saving}
+          onClick={() => document.getElementById("visit-submit-complete")?.click()}
+        >
+          {saving ? "Saving…" : "Complete visit"}
         </button>
       </div>
     </div>

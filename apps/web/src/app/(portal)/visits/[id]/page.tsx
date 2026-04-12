@@ -565,6 +565,18 @@ export default async function VisitDetailsPage({
           />
           </div>
         </VisitSection>
+          {/*
+            Submit controls live in VisitSaveFooter (after attachments). These hidden submitters stay inside the form
+            so useFormStatus sees a descendant submit button and Save shows a pending state during the server action.
+          */}
+          <div className="sr-only" aria-hidden="true">
+            <button type="submit" id="visit-submit-save" tabIndex={-1}>
+              Save entire visit
+            </button>
+            <button type="submit" id="visit-submit-complete" name="complete_visit" value="true" tabIndex={-1}>
+              Complete visit
+            </button>
+          </div>
         </form>
 
         <VisitSection

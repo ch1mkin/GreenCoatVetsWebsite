@@ -292,6 +292,8 @@ export async function ensurePrescriptionForVisit(visitId: string): Promise<strin
     .select("id")
     .eq("visit_id", visitId)
     .eq("clinic_id", clinic_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (existing?.id) return existing.id;
