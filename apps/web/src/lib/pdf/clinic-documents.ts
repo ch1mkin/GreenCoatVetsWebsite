@@ -4,9 +4,18 @@ import { normalizeInvoiceTemplateLayout } from "@/lib/invoicing/invoice-template
 
 const PAGE_W = 595;
 const PAGE_H = 842;
-/** ~20px outer margin (reference body padding), then ~35px inner (reference .invoice padding). */
-const OUT_MARGIN = 15;
-const MARGIN = 48;
+/** White margin outside the bordered document box (full page is white). */
+const BOX_INSET = 24;
+/** Padding from box inner edge to content (replaces legacy full-page MARGIN). */
+const INNER_PAD = 26;
+const L = BOX_INSET + INNER_PAD;
+const R = PAGE_W - BOX_INSET - INNER_PAD;
+/** @deprecated use L — kept for prescription/footer math where unchanged */
+const MARGIN = L;
+/** Same as box inset; prescription layout uses this name. */
+const OUT_MARGIN = BOX_INSET;
+const CONTENT_W = R - L;
+const SECTION_GAP_AFTER_BANNER = 22;
 const LINE_H = 13;
 const MAX_LINE_CHARS = 85;
 /** Reserve space at bottom of every page for footer band + disclaimer (prevents overlap). */
@@ -15,8 +24,8 @@ const FOOTER_H = 44;
 /** Website primary #006c50 + companions (marketing tailwind theme). */
 const BRAND_PRIMARY = rgb(0, 108 / 255, 80 / 255);
 const BRAND_PRIMARY_DEEP = rgb(0, 76 / 255, 56 / 255);
-const PAGE_BG = rgb(244 / 255, 246 / 255, 248 / 255);
 const CARD_WHITE = rgb(1, 1, 1);
+const BOX_BORDER = rgb(0.86, 0.88, 0.9);
 
 const VET_TEAL = BRAND_PRIMARY;
 const VET_TEAL_DEEP = BRAND_PRIMARY_DEEP;
@@ -46,16 +55,17 @@ function currencyLabel(c: string): string {
   return sanitizePdfText(c);
 }
 
-/** Reference-style page: soft gray surround, white document card. */
+/** White page with a single bordered document card (invoice sits inside the box). */
 function drawPrintPageFrame(page: { drawRectangle: (o: Record<string, unknown>) => void }) {
-  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: PAGE_BG, borderWidth: 0 });
+  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: CARD_WHITE, borderWidth: 0 });
   page.drawRectangle({
-    x: OUT_MARGIN,
-    y: OUT_MARGIN,
-    width: PAGE_W - 2 * OUT_MARGIN,
-    height: PAGE_H - 2 * OUT_MARGIN,
+    x: BOX_INSET,
+    y: BOX_INSET,
+    width: PAGE_W - 2 * BOX_INSET,
+    height: PAGE_H - 2 * BOX_INSET,
     color: CARD_WHITE,
-    borderWidth: 0,
+    borderColor: BOX_BORDER,
+    borderWidth: 0.85,
   });
 }
 
@@ -162,7 +172,7 @@ export async function buildInvoicePdfBytes(opts: {
         size,
         font: bold ? fontBold : font,
         color,
-        maxWidth: PAGE_W - MARGIN * 2,
+        maxWidth: CONTENT_W,
       });
       y -= LINE_H * (size / 10);
     }
@@ -174,79 +184,88 @@ export async function buildInvoicePdfBytes(opts: {
   let metaMergedInBanner = false;
 
   const drawVeterinaryBanner = () => {
-    const bandH = 88;
+    const boxTop = PAGE_H - BOX_INSET;
+    const addrRaw = opts.branchLines.map((s) => s.trim()).filter(Boolean);
+    const addrLines: string[] = [];
+    for (const line of addrRaw) {
+      addrLines.push(...wrapLines(line, 54));
+    }
+    const addrShow = addrLines.slice(0, 5);
+
+    const name = sanitizePdfText(opts.clinicName);
+    const nameLines = wrapLines(name, 34).slice(0, 3);
+    const nameLineStep = nameLines.length > 1 ? 15 : 18;
+    const nameSize = nameLines.length > 1 ? 14 : 17;
+
+    let leftX = L;
+    let logoW = 0;
+    let logoH = 0;
+    if (logoImage) {
+      const maxLogo = 50;
+      const iw = logoImage.width;
+      const ih = logoImage.height;
+      const scale = Math.min(maxLogo / iw, maxLogo / ih, 1);
+      logoW = iw * scale;
+      logoH = ih * scale;
+      leftX = L + logoW + 12;
+    }
+
+    const nameBlockH = nameLines.length * nameLineStep;
+    const addrBlockH = addrShow.length ? 6 + addrShow.length * 11 : 0;
+    const bandH = Math.max(logoH > 0 ? logoH + 28 : 0, 16 + nameBlockH + addrBlockH + 18);
+
+    const bannerBottomY = boxTop - bandH;
     page.drawRectangle({
-      x: 0,
-      y: PAGE_H - bandH,
-      width: PAGE_W,
+      x: BOX_INSET,
+      y: bannerBottomY,
+      width: PAGE_W - 2 * BOX_INSET,
       height: bandH,
       color: VET_TEAL,
       borderWidth: 0,
     });
-    const top = PAGE_H - 28;
-    let leftX = MARGIN;
+
     if (logoImage) {
-      const maxLogo = 52;
-      const iw = logoImage.width;
-      const ih = logoImage.height;
-      const scale = Math.min(maxLogo / iw, maxLogo / ih, 1);
-      const lw = iw * scale;
-      const lh = ih * scale;
       page.drawImage(logoImage, {
-        x: MARGIN,
-        y: PAGE_H - bandH + (bandH - lh) / 2,
-        width: lw,
-        height: lh,
+        x: L,
+        y: bannerBottomY + (bandH - logoH) / 2,
+        width: logoW,
+        height: logoH,
       });
-      leftX = MARGIN + lw + 14;
     }
 
-    const name = sanitizePdfText(opts.clinicName);
-    const nameLines = wrapLines(name, 36).slice(0, 3);
-    let nameY = top;
-    const nameSize = nameLines.length > 1 ? 15 : 18;
+    let cursorY = boxTop - 18;
     for (const nl of nameLines) {
       page.drawText(nl, {
         x: leftX,
-        y: nameY,
+        y: cursorY,
         size: nameSize,
         font: fontBold,
         color: rgb(1, 1, 1),
-        maxWidth: PAGE_W - leftX - MARGIN - 8,
+        maxWidth: R - leftX - 130,
       });
-      nameY -= nameLines.length > 1 ? 16 : 20;
+      cursorY -= nameLineStep;
     }
 
-    const invLabel = "TAX INVOICE";
-    const metaTop = nameLines.length > 1 ? top - 6 : top;
-    drawRight(page, invLabel, PAGE_W - MARGIN, metaTop, 9, fontBold, rgb(0.85, 0.95, 0.93));
-    drawRight(page, `# ${sanitizePdfText(opts.invoiceNumber)}`, PAGE_W - MARGIN, metaTop - 14, 10, fontBold, rgb(1, 1, 1));
-    drawRight(
-      page,
-      opts.issuedAt.toLocaleString(),
-      PAGE_W - MARGIN,
-      metaTop - 28,
-      8,
-      font,
-      rgb(0.88, 0.96, 0.94)
-    );
-
-    y = PAGE_H - bandH - 18;
-    metaMergedInBanner = true;
-
-    for (const line of opts.branchLines) {
-      if (!line.trim()) continue;
-      page.drawText(sanitizePdfText(line.trim()), {
-        x: MARGIN,
-        y,
-        size: 9,
+    let addrY = cursorY - 6;
+    for (const al of addrShow) {
+      page.drawText(sanitizePdfText(al), {
+        x: leftX,
+        y: addrY,
+        size: 8.5,
         font,
-        color: TEXT_MUTED,
-        maxWidth: PAGE_W - MARGIN * 2,
+        color: rgb(1, 1, 1),
+        maxWidth: R - leftX - 130,
       });
-      y -= LINE_H * 0.95;
+      addrY -= 11;
     }
-    y -= 10;
+
+    const metaTop = boxTop - 18;
+    drawRight(page, "TAX INVOICE", R, metaTop, 9, fontBold, rgb(1, 1, 1));
+    drawRight(page, `# ${sanitizePdfText(opts.invoiceNumber)}`, R, metaTop - 13, 10, fontBold, rgb(1, 1, 1));
+    drawRight(page, opts.issuedAt.toLocaleString(), R, metaTop - 26, 8, font, rgb(0.96, 1, 0.98));
+
+    y = bannerBottomY - SECTION_GAP_AFTER_BANNER;
+    metaMergedInBanner = true;
   };
 
   const drawInvoiceMetaStandalone = () => {
@@ -261,62 +280,64 @@ export async function buildInvoicePdfBytes(opts: {
     const patientLines = wrapLines(`Patient: ${sanitizePdfText(opts.patientName)}`, 78);
     const innerLines = 1 + ownerLines.length + patientLines.length;
     const boxH = Math.max(52, 16 + innerLines * LINE_H + 12);
-    ensureSpace(boxH + 20);
+    ensureSpace(boxH + 28);
+    y -= 10;
 
     page.drawRectangle({
-      x: MARGIN - 4,
+      x: L - 4,
       y: y - boxH,
-      width: PAGE_W - (MARGIN - 4) * 2,
+      width: R - L + 8,
       height: boxH,
       color: ROW_ALT,
       borderColor: TABLE_HEAD,
       borderWidth: 0.8,
     });
     const blockTop = y - 14;
-    page.drawText("Bill to", { x: MARGIN + 6, y: blockTop, size: 8, font: fontBold, color: VET_TEAL_DEEP });
+    page.drawText("Bill to", { x: L + 6, y: blockTop, size: 8, font: fontBold, color: VET_TEAL_DEEP });
     let lineY = blockTop - 14;
     for (const ol of ownerLines) {
       page.drawText(sanitizePdfText(ol), {
-        x: MARGIN + 6,
+        x: L + 6,
         y: lineY,
         size: 10,
         font: fontBold,
         color: TEXT_MAIN,
-        maxWidth: PAGE_W - MARGIN * 2 - 8,
+        maxWidth: CONTENT_W - 12,
       });
       lineY -= LINE_H;
     }
     for (const pl of patientLines) {
       page.drawText(sanitizePdfText(pl), {
-        x: MARGIN + 6,
+        x: L + 6,
         y: lineY,
         size: 10,
         font,
         color: TEXT_MAIN,
-        maxWidth: PAGE_W - MARGIN * 2 - 8,
+        maxWidth: CONTENT_W - 12,
       });
       lineY -= LINE_H;
     }
-    y = y - boxH - 14;
+    y = y - boxH - 20;
   };
 
   const drawLineItemsTable = () => {
-    const colQty = PAGE_W - MARGIN - 160;
-    const colUnit = PAGE_W - MARGIN - 105;
-    const colAmt = PAGE_W - MARGIN;
+    const colQty = R - 160;
+    const colUnit = R - 105;
+    const colAmt = R;
 
-    ensureSpace(40);
+    ensureSpace(48);
+    y -= 6;
     page.drawRectangle({
-      x: MARGIN,
+      x: L,
       y: y - 22,
-      width: PAGE_W - MARGIN * 2,
+      width: CONTENT_W,
       height: 22,
       color: TABLE_HEAD,
       borderColor: BRAND_PRIMARY_DEEP,
       borderWidth: 0.6,
     });
     const th = rgb(1, 1, 1);
-    page.drawText("Description", { x: MARGIN + 6, y: y - 14, size: 9, font: fontBold, color: th });
+    page.drawText("Description", { x: L + 6, y: y - 14, size: 9, font: fontBold, color: th });
     drawRight(page, "Qty", colQty + 18, y - 14, 9, fontBold, th);
     drawRight(page, `Unit (${cur})`, colUnit + 28, y - 14, 8, fontBold, th);
     drawRight(page, `Amount (${cur})`, colAmt, y - 14, 8, fontBold, th);
@@ -330,9 +351,9 @@ export async function buildInvoicePdfBytes(opts: {
 
       const bg = rowIdx % 2 === 0 ? rgb(1, 1, 1) : ROW_ALT;
       page.drawRectangle({
-        x: MARGIN,
+        x: L,
         y: y - rowH + 4,
-        width: PAGE_W - MARGIN * 2,
+        width: CONTENT_W,
         height: rowH,
         color: bg,
         borderColor: rgb(0.9, 0.92, 0.92),
@@ -342,12 +363,12 @@ export async function buildInvoicePdfBytes(opts: {
       let lineY = y - 12;
       for (let i = 0; i < descLines.length; i++) {
         page.drawText(sanitizePdfText(descLines[i]), {
-          x: MARGIN + 6,
+          x: L + 6,
           y: lineY,
           size: 9,
           font,
           color: TEXT_MAIN,
-          maxWidth: PAGE_W - MARGIN * 2 - 220,
+          maxWidth: CONTENT_W - 220,
         });
         if (i === 0) {
           drawRight(page, String(row.qty), colQty + 18, lineY, 9, font, TEXT_MAIN);
@@ -363,40 +384,42 @@ export async function buildInvoicePdfBytes(opts: {
   };
 
   const drawTotals = () => {
-    const rightBlock = PAGE_W - MARGIN - 4;
-    const labelX = PAGE_W - 260;
-    ensureSpace(100);
-    y -= 4;
+    const rightBlock = R - 4;
+    const labelX = R - 256;
+    ensureSpace(110);
+    y -= 12;
     page.drawText("Subtotal", { x: labelX, y, size: 10, font, color: TEXT_MUTED });
     drawRight(page, `${cur} ${opts.subtotal.toFixed(2)}`, rightBlock, y, 10, font, TEXT_MAIN);
-    y -= 16;
+    y -= 18;
     if (opts.taxRate != null && opts.taxRate > 0) {
       page.drawText(`Tax (${opts.taxRate}%)`, { x: labelX, y, size: 10, font, color: TEXT_MUTED });
       drawRight(page, `${cur} ${opts.taxTotal.toFixed(2)}`, rightBlock, y, 10, font, TEXT_MAIN);
-      y -= 16;
+      y -= 18;
     } else if (opts.taxTotal > 0) {
       page.drawText("Tax", { x: labelX, y, size: 10, font, color: TEXT_MUTED });
       drawRight(page, `${cur} ${opts.taxTotal.toFixed(2)}`, rightBlock, y, 10, font, TEXT_MAIN);
-      y -= 16;
+      y -= 18;
     }
     if (opts.discountTotal > 0) {
       page.drawText("Discount", { x: labelX, y, size: 10, font, color: TEXT_MUTED });
       drawRight(page, `-${cur} ${opts.discountTotal.toFixed(2)}`, rightBlock, y, 10, font, TEXT_MAIN);
-      y -= 16;
+      y -= 18;
     }
-    y -= 4;
+    y -= 8;
+    const totalBarH = 26;
     page.drawRectangle({
-      x: labelX - 6,
-      y: y - 20,
-      width: PAGE_W - labelX + MARGIN + 2,
-      height: 24,
+      x: L - 2,
+      y: y - totalBarH,
+      width: R - L + 4,
+      height: totalBarH,
       color: TABLE_HEAD,
-      borderColor: VET_TEAL,
-      borderWidth: 0.8,
+      borderColor: BRAND_PRIMARY_DEEP,
+      borderWidth: 0.6,
     });
-    page.drawText("Total due", { x: labelX, y: y - 12, size: 11, font: fontBold, color: VET_TEAL_DEEP });
-    drawRight(page, `${cur} ${opts.grandTotal.toFixed(2)}`, rightBlock, y - 12, 12, fontBold, VET_TEAL_DEEP);
-    y -= 36;
+    const totalMidY = y - totalBarH / 2 - 4;
+    page.drawText("Total due", { x: L + 8, y: totalMidY, size: 11, font: fontBold, color: rgb(1, 1, 1) });
+    drawRight(page, `${cur} ${opts.grandTotal.toFixed(2)}`, rightBlock, totalMidY, 12, fontBold, rgb(1, 1, 1));
+    y = y - totalBarH - 18;
   };
 
   if (!hasClinicHeader && !invoiceMetaInLayout) {
@@ -442,7 +465,7 @@ export async function buildInvoicePdfBytes(opts: {
   }
 
   if (opts.notes?.trim()) {
-    y -= 8;
+    y -= 16;
     drawPlain("Notes", 10, true, VET_TEAL_DEEP);
     drawPlain(opts.notes.trim(), 9);
   }
@@ -452,31 +475,31 @@ export async function buildInvoicePdfBytes(opts: {
   const footerLine2 = "Retain for your records. For queries, contact the clinic using the details above.";
   const pages = doc.getPages();
   for (const p of pages) {
-    const bandH = 36;
+    const bandH = 34;
     p.drawRectangle({
-      x: 0,
-      y: 0,
-      width: PAGE_W,
+      x: BOX_INSET,
+      y: BOX_INSET,
+      width: PAGE_W - 2 * BOX_INSET,
       height: bandH,
       color: rgb(0.93, 0.96, 0.95),
       borderColor: rgb(0.78, 0.9, 0.86),
       borderWidth: 0.4,
     });
     p.drawText(sanitizePdfText(footerLine1), {
-      x: MARGIN,
-      y: 18,
+      x: L,
+      y: BOX_INSET + 20,
       size: 7,
       font,
       color: TEXT_MUTED,
-      maxWidth: PAGE_W - MARGIN * 2,
+      maxWidth: CONTENT_W,
     });
     p.drawText(sanitizePdfText(footerLine2), {
-      x: MARGIN,
-      y: 8,
+      x: L,
+      y: BOX_INSET + 9,
       size: 7,
       font,
       color: TEXT_MUTED,
-      maxWidth: PAGE_W - MARGIN * 2,
+      maxWidth: CONTENT_W,
     });
   }
 

@@ -168,16 +168,16 @@ export default async function Home() {
                 <span className="text-gradient">{heroCopy.gradient}</span>
               </h1>
               <p className="max-w-lg text-lg leading-relaxed text-on-surface-variant">{heroCopy.tagline}</p>
-              <div className="grid grid-cols-2 gap-3 pt-2 sm:flex sm:flex-wrap sm:gap-4">
+              <div className="grid grid-cols-2 items-stretch gap-3 pt-2 sm:flex sm:flex-wrap sm:gap-4">
                 <Link
                   href="/about"
-                  className="min-w-0 rounded-xl bg-surface-container-low px-4 py-3 text-center font-headline text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high sm:px-8 sm:py-4 sm:text-lg"
+                  className="flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-xl bg-surface-container-low px-3 py-2.5 text-center font-headline text-sm font-bold leading-snug text-on-surface transition-colors hover:bg-surface-container-high sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
                 >
                   Learn more
                 </Link>
                 <Link
                   href="/book"
-                  className="gradient-primary min-w-0 rounded-xl px-4 py-3 text-center font-headline text-sm font-bold text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:px-8 sm:py-4 sm:text-lg"
+                  className="gradient-primary flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-xl px-2 py-2.5 text-center font-headline text-[11px] font-bold leading-tight text-on-primary shadow-xl shadow-primary/25 transition-transform hover:scale-[0.98] sm:min-h-0 sm:px-8 sm:py-4 sm:text-lg"
                 >
                   Book an appointment
                 </Link>
