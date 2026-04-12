@@ -17,11 +17,10 @@ export default async function ProductDetailsPage({
   const clinic = await resolveClinic();
   const supabase = createClient();
 
-  // Base columns only — add `summary, image_urls` after migration `20260325220000_product_summary_image_urls.sql`
   const { data: product, error } = await supabase
     .from("products")
     .select(
-      "id, name, slug, description, price, compare_at_price, stock_quantity, requires_prescription, image_url",
+      "id, name, slug, description, price, compare_at_price, stock_quantity, requires_prescription, image_url, image_urls",
     )
     .eq("clinic_id", clinic.id)
     .eq("slug", params.slug)
