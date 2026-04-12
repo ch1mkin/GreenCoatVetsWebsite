@@ -73,7 +73,7 @@ export function InstagramHomeEmbeds({ urls }: { urls: string[] }) {
             From our Instagram
           </h2>
           <p className="max-w-2xl text-on-surface-variant">
-            Latest reels and posts from your curated list — update manually in admin or sync from Instagram when Graph API credentials are configured.
+            Recent highlights from our clinic — tips, patients, and news from our feed. Tap a post to open it on Instagram.
           </p>
         </div>
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
