@@ -43,8 +43,33 @@ export default async function AccountAppointmentsPage() {
     pets: { name: string } | null;
   };
 
-  const raw = (rows ?? []) as Raw[];
-  const doctorIds = [...new Set(raw.map((r) => r.doctor_id).filter(Boolean))] as string[];
+  function normalizePets(pets: unknown): { name: string } | null {
+    if (pets == null) return null;
+    if (Array.isArray(pets)) {
+      const first = pets[0];
+      if (first && typeof first === "object" && first !== null && "name" in first) {
+        return { name: String((first as { name: unknown }).name) };
+      }
+      return null;
+    }
+    if (typeof pets === "object" && pets !== null && "name" in pets) {
+      return { name: String((pets as { name: unknown }).name) };
+    }
+    return null;
+  }
+
+  const raw: Raw[] = (rows ?? []).map((r) => ({
+    id: r.id as string,
+    starts_at: r.starts_at as string,
+    status: r.status as string,
+    appointment_type: r.appointment_type as string,
+    doctor_id: (r.doctor_id as string | null) ?? null,
+    pets: normalizePets(r.pets),
+  }));
+
+  const doctorIds = Array.from(
+    new Set(raw.map((r) => r.doctor_id).filter((id): id is string => Boolean(id))),
+  );
   const { data: doctors } =
     doctorIds.length > 0
       ? await supabase.from("staff_profiles").select("id, full_name").in("id", doctorIds)

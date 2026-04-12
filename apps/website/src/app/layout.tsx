@@ -55,7 +55,7 @@ export default async function RootLayout({
     ? footerNav
     : footerNav.map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.href !== "/store"),
+        links: group.links.filter((item) => item.href !== "/store"),
       }));
 
   return (
@@ -66,7 +66,7 @@ export default async function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
         />
       </head>
-      <body className={`${inter.className} min-h-screen`}>
+      <body className={inter.className}>
         <StoreProviders storeEnabled={branding.website_store_enabled}>
           <MarketingShell
             productName={branding.product_name}
