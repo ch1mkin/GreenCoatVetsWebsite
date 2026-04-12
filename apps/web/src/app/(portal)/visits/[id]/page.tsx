@@ -48,12 +48,23 @@ function patientAgeLabel(pet: {
   return "";
 }
 
+function searchParamOne(
+  sp: Record<string, string | string[] | undefined> | undefined,
+  key: string,
+): string | undefined {
+  if (!sp) return undefined;
+  const v = sp[key];
+  if (typeof v === "string") return v;
+  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
+  return undefined;
+}
+
 export default async function VisitDetailsPage({
   params,
   searchParams,
 }: {
-  params: { id: string };
-  searchParams?: { embed?: string; saved?: string; rx_pdf?: string };
+  params: Promise<{ id: string }> | { id: string };
+  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
 }) {
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/login");
@@ -67,9 +78,12 @@ export default async function VisitDetailsPage({
     redirect("/dashboard");
   }
 
-  const embed = searchParams?.embed === "1";
-  const showVisitSavedBanner = searchParams?.saved === "1";
-  const showRxPdfBanner = searchParams?.rx_pdf === "1";
+  const resolvedParams = await Promise.resolve(params);
+  const sp = await Promise.resolve(searchParams ?? {});
+  const embed = searchParamOne(sp, "embed") === "1";
+  const showVisitSavedBanner = searchParamOne(sp, "saved") === "1";
+  const showRxPdfBanner = searchParamOne(sp, "rx_pdf") === "1";
+  const showRxItemBanner = searchParamOne(sp, "rx_item") === "1";
 
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
@@ -80,7 +94,7 @@ export default async function VisitDetailsPage({
     .select(
       "id, doctor_id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, updated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
     )
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .eq("clinic_id", clinic_id)
     .maybeSingle();
 
@@ -143,7 +157,7 @@ export default async function VisitDetailsPage({
   const canInvoice = canManageInvoices(access);
   const canRxPdf =
     access.isSuperAdmin ||
-    ["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist"].includes(role);
+    ["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist", "lab_technician"].includes(role);
 
   const { data: rxItems, error: rxItemsError } = await supabase
     .from("prescription_items")
@@ -185,34 +199,37 @@ export default async function VisitDetailsPage({
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
 
+  const bannerClass = embed
+    ? "rounded-lg border px-3 py-2 text-[12px]"
+    : "mx-auto max-w-5xl rounded-xl border px-4 py-3 text-[13px] shadow-sm";
+
   const body = (
     <>
-      {(showVisitSavedBanner || showRxPdfBanner) && (
-        <div
-          className={`pointer-events-none fixed left-1/2 z-[200] w-[min(100%,26rem)] -translate-x-1/2 px-3 ${embed ? "top-2" : "top-14"}`}
-        >
-          {showVisitSavedBanner ? (
-            <div
-              role="status"
-              className="pointer-events-auto mb-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-950 shadow-lg"
-            >
-              <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
-              <p className="mt-1 text-emerald-900/95">Clinical evaluation and consultation updates are stored for this visit.</p>
-            </div>
-          ) : null}
-          {showRxPdfBanner ? (
-            <div
-              role="status"
-              className="pointer-events-auto rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-950 shadow-lg"
-            >
-              <p className="font-headline font-bold text-emerald-900">Prescription PDF ready</p>
-              <p className="mt-1 text-emerald-900/95">
-                The file was generated. Use <strong>Open printable prescription (PDF)</strong> or <strong>Download PDF</strong> below.
-              </p>
-            </div>
-          ) : null}
+      {showVisitSavedBanner ? (
+        <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
+          <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
+          <p className={embed ? "mt-0.5 text-[11px] text-emerald-900/90" : "mt-1 text-emerald-800/95"}>
+            Clinical evaluation and consultation updates are stored for this visit.
+          </p>
         </div>
-      )}
+      ) : null}
+      {showRxPdfBanner ? (
+        <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
+          <p className="font-headline font-bold text-emerald-900">Prescription PDF ready</p>
+          <p className={embed ? "mt-0.5 text-[11px] text-emerald-900/90" : "mt-1 text-emerald-800/95"}>
+            The file was saved to storage. Use <strong>Open printable prescription (PDF)</strong> below or{" "}
+            <strong>Download PDF</strong> to view it.
+          </p>
+        </div>
+      ) : null}
+      {showRxItemBanner ? (
+        <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
+          <p className="font-headline font-bold text-sky-900">Medicine line added</p>
+          <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
+            Generate or refresh the prescription PDF when you are ready to print it for the owner.
+          </p>
+        </div>
+      ) : null}
       {!embed ? <VisitAnchorNav showIntake={hasOwnerIntake} /> : null}
       {!embed ? (
         <>
@@ -312,7 +329,7 @@ export default async function VisitDetailsPage({
                   <span className="font-medium">{ic("contact_email")}</span>
                 </p>
               ) : null}
-            </div>
+      </div>
           </VisitSection>
         ) : null}
 
@@ -324,17 +341,17 @@ export default async function VisitDetailsPage({
             </p>
             <p>
               <span className="text-on-surface-variant">Patient:</span> <strong>{String(pet?.name ?? "—")}</strong> ({species})
-            </p>
-            <p>
+        </p>
+        <p>
               <span className="text-on-surface-variant">Branch:</span> {branch?.name ?? "—"}
-            </p>
-            <p>
+        </p>
+        <p>
               <span className="text-on-surface-variant">Doctor:</span> {doctorDisplayName ?? "—"}
-            </p>
-            <p>
+        </p>
+        <p>
               <span className="text-on-surface-variant">Appointment:</span> {String(appt?.status ?? "—")}
-            </p>
-            <p>
+        </p>
+        <p>
               <span className="text-on-surface-variant">Reason:</span>{" "}
               {String(appt?.reason ?? "").trim() || ic("chief_complaint") || "—"}
             </p>
@@ -526,37 +543,37 @@ export default async function VisitDetailsPage({
 
         <VisitSection embed={embed} id="section-soap" title="Consultation (SOAP)" defaultOpen={!embed}>
           <div className="space-y-2">
-            <textarea
+          <textarea
               className="input-soft min-h-[64px] w-full py-2 text-[13px]"
-              name="symptoms"
+            name="symptoms"
               placeholder="Symptoms / subjective"
-              defaultValue={visit.symptoms ?? ""}
-            />
-            <textarea
+            defaultValue={visit.symptoms ?? ""}
+          />
+          <textarea
               className="input-soft min-h-[64px] w-full py-2 text-[13px]"
-              name="diagnosis"
+            name="diagnosis"
               placeholder="Diagnosis / assessment"
-              defaultValue={visit.diagnosis ?? ""}
-            />
-            <textarea
+            defaultValue={visit.diagnosis ?? ""}
+          />
+          <textarea
               className="input-soft min-h-[64px] w-full py-2 text-[13px]"
-              name="treatment_plan"
-              placeholder="Treatment plan"
-              defaultValue={visit.treatment_plan ?? ""}
-            />
-            <div>
+            name="treatment_plan"
+            placeholder="Treatment plan"
+            defaultValue={visit.treatment_plan ?? ""}
+          />
+          <div>
               <label className="mb-0.5 block text-[11px] font-semibold text-on-surface-variant">Follow-up</label>
-              <input
+            <input
                 className="input-soft input-compact"
-                type="datetime-local"
-                name="follow_up_at"
+              type="datetime-local"
+              name="follow_up_at"
                 defaultValue={visit.follow_up_at ? new Date(visit.follow_up_at).toISOString().slice(0, 16) : ""}
-              />
-            </div>
+            />
+          </div>
             <label className="flex items-center gap-2 text-[13px]">
-              <input type="checkbox" name="complete_visit" defaultChecked={Boolean(visit.completed_at)} />
-              Mark visit complete
-            </label>
+            <input type="checkbox" name="complete_visit" defaultChecked={Boolean(visit.completed_at)} />
+            Mark visit complete
+          </label>
             <div className="flex flex-wrap gap-2">
               <SubmitButton className="btn-primary btn-compact" pendingLabel="Saving visit…">
                 Save entire visit
@@ -568,7 +585,7 @@ export default async function VisitDetailsPage({
                 className="btn-secondary btn-compact"
               >
                 Complete visit
-              </button>
+          </button>
             </div>
           </div>
         </VisitSection>
@@ -576,27 +593,23 @@ export default async function VisitDetailsPage({
 
         <VisitSection embed={embed} id="section-rx" title="Prescription" defaultOpen={!embed}>
           <p className="text-[11px] text-on-surface-variant">
-            Add dispensed lines; PDF for owner; reception bills from Billing / invoice.
+            Add dispensed lines, then generate a PDF for the owner. Billing uses <strong>Billing / invoice</strong> on this visit.
           </p>
-          <div className="rounded-lg border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 text-[11px] leading-snug">
-            <p className="font-semibold text-on-surface">PDF status</p>
-            {!rxItems?.length ? (
-              <p className="mt-0.5 text-amber-900/95">Add at least one medicine line before generating a PDF.</p>
-            ) : prescriptionPdfUrl ? (
-              <p className="mt-0.5 text-emerald-900/95">
-                PDF generated — open it below. Regenerate after you change medicines (adding a line clears the old file until you save again).
-              </p>
-            ) : (
-              <p className="mt-0.5 text-amber-900/95">
-                Lines saved — click <strong>Save prescription PDF</strong> to create the file.
-              </p>
-            )}
+          <div
+            className={`rounded-lg border px-3 py-2 text-[11px] ${
+              prescriptionPdfUrl ? "border-emerald-200/80 bg-emerald-50/60 text-emerald-950" : "border-amber-200/90 bg-amber-50/80 text-amber-950"
+            }`}
+            role="status"
+          >
+            <p className="font-semibold">
+              PDF status: {prescriptionPdfUrl ? "Ready — opens in a new tab below." : "Not generated — add medicines, then click Save prescription PDF."}
+            </p>
           </div>
           {canRxPdf ? (
             <div className="flex flex-wrap items-center gap-2">
-              <form action={regeneratePrescriptionPdfForm} className="inline-flex flex-wrap items-center gap-2">
+              <form action={regeneratePrescriptionPdfForm}>
                 <input type="hidden" name="prescription_id" value={prescriptionId} />
-                <input type="hidden" name="redirect_after" value="visit" />
+                <input type="hidden" name="visit_id" value={visit.id} />
                 <input type="hidden" name="embed" value={embed ? "1" : ""} />
                 <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Generating PDF…">
                   Save prescription PDF
@@ -611,15 +624,15 @@ export default async function VisitDetailsPage({
                 >
                   Download PDF
                 </a>
-              ) : (
-                <span className="text-[11px] text-on-surface-variant">No PDF file yet.</span>
-              )}
+              ) : null}
             </div>
           ) : (
-            <p className="text-[11px] text-on-surface-variant">PDF generation is limited to clinical roles — ask reception if needed.</p>
+            <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
           )}
           <form action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
             <input type="hidden" name="prescription_id" value={prescriptionId} />
+            <input type="hidden" name="visit_id" value={visit.id} />
+            <input type="hidden" name="embed" value={embed ? "1" : ""} />
             <input className="input-soft input-compact md:col-span-2" name="medicine_name" placeholder="Medicine name *" required />
             <input className="input-soft input-compact" name="dosage" placeholder="Dosage *" required />
             <input className="input-soft input-compact" name="frequency" placeholder="Frequency" />
@@ -656,10 +669,10 @@ export default async function VisitDetailsPage({
             {!rxItems?.length ? <p className="py-2 text-on-surface-variant">No line items yet.</p> : null}
           </div>
 
-          <div className="space-y-2 border-t border-outline-variant/15 pt-3">
+          <div className="flex flex-col gap-2 border-t border-outline-variant/15 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
             {prescriptionPdfUrl ? (
               <a
-                className="btn-primary btn-compact inline-flex text-xs"
+                className="btn-primary btn-compact text-xs"
                 href={prescriptionPdfUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -667,29 +680,31 @@ export default async function VisitDetailsPage({
                 Open printable prescription (PDF)
               </a>
             ) : (
-              <p className="text-[11px] text-on-surface-variant">
-                Generate the PDF with the button above to open a printable file here.
-              </p>
+              <span className="text-[11px] text-on-surface-variant">
+                Printable PDF appears here after you save the prescription PDF above.
+              </span>
             )}
-            <p className="text-[10px] text-on-surface-variant">
-              <Link className="font-semibold text-primary underline" href={`/prescriptions/${prescriptionId}`}>
-                Full prescription page
-              </Link>{" "}
-              — edit lines or use Generate PDF there (same file as this visit).
-            </p>
+            <Link
+              className="btn-secondary btn-compact text-xs"
+              href={`/prescriptions/${prescriptionId}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Full prescription page
+            </Link>
           </div>
         </VisitSection>
 
         <VisitSection embed={embed} id="section-files" title="Attachments" defaultOpen={!embed}>
           <form action={uploadVisitAttachment} className="space-y-2" encType="multipart/form-data">
-            <input type="hidden" name="visit_id" value={visit.id} />
+          <input type="hidden" name="visit_id" value={visit.id} />
             <input type="hidden" name="pet_id" value={petId} />
             <input type="hidden" name="branch_id" value={branchId} />
             <input className="input-file-soft input-file-compact max-w-md" name="file" type="file" required />
             <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Uploading…">
               Upload file
             </SubmitButton>
-          </form>
+        </form>
           <ul className="space-y-1.5 text-[11px]">
             {attachments?.map((attachment) => (
               <li key={attachment.id} className="rounded-lg border border-outline-variant/15 px-2 py-1.5">
@@ -713,11 +728,11 @@ export default async function VisitDetailsPage({
           <div className="min-w-0">
             <p className="truncate text-[13px] font-bold">{String(pet?.name ?? "Patient")}</p>
             <p className="truncate text-[10px] text-slate-600">Side panel · {species}</p>
-          </div>
+              </div>
           <Link className="shrink-0 text-[11px] font-bold text-primary underline" href={`/visits/${visit.id}`}>
             Full page
-          </Link>
-        </div>
+              </Link>
+            </div>
         {body}
       </div>
     );

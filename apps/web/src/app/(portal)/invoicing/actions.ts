@@ -451,7 +451,7 @@ export async function regeneratePrescriptionPdf(prescriptionId: string) {
   const role = access.membership?.role;
   if (
     !access.isSuperAdmin &&
-    !["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist"].includes(role ?? "")
+    !["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist", "lab_technician"].includes(role ?? "")
   ) {
     throw new Error("You do not have permission to generate prescription PDFs.");
   }
@@ -511,25 +511,25 @@ export async function regeneratePrescriptionPdf(prescriptionId: string) {
   const { error: u2 } = await supabase.from("prescriptions").update({ pdf_url: pdfPath }).eq("id", prescriptionId);
   if (u2) throw new Error(u2.message);
 
-  const visitId = rx.visit_id as string;
+  const visitId = rx.visit_id;
   revalidatePath(`/visits/${visitId}`);
   revalidatePath(`/prescriptions/${prescriptionId}`);
-  return visitId;
+  return pdfPath;
 }
 
 export async function regeneratePrescriptionPdfForm(formData: FormData) {
   const prescriptionId = String(formData.get("prescription_id") ?? "").trim();
   if (!prescriptionId) throw new Error("Prescription id is required.");
-  const visitId = await regeneratePrescriptionPdf(prescriptionId);
-  const redirectAfter = String(formData.get("redirect_after") ?? "visit").trim();
-  if (redirectAfter === "prescription") {
-    redirect(`/prescriptions/${prescriptionId}?rx_pdf=1`);
-  }
+  await regeneratePrescriptionPdf(prescriptionId);
+
+  const visitId = String(formData.get("visit_id") ?? "").trim();
   const embed = String(formData.get("embed") ?? "").trim();
-  const q = new URLSearchParams();
-  q.set("rx_pdf", "1");
-  if (embed === "1") q.set("embed", "1");
-  redirect(`/visits/${visitId}?${q.toString()}`);
+  if (visitId) {
+    const q = new URLSearchParams();
+    q.set("rx_pdf", "1");
+    if (embed === "1") q.set("embed", "1");
+    redirect(`/visits/${visitId}?${q.toString()}`);
+  }
 }
 
 export type InvoiceTemplatePreviewSample = {

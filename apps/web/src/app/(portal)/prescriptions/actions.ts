@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
@@ -76,8 +77,15 @@ export async function addPrescriptionItem(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
-  await supabase.from("prescriptions").update({ pdf_url: null }).eq("id", prescriptionId);
-
   revalidatePath(`/visits/${prescription.visit_id}`);
   revalidatePath(`/prescriptions/${prescriptionId}`);
+
+  const returnVisitId = String(formData.get("visit_id") ?? "").trim();
+  const embed = String(formData.get("embed") ?? "").trim();
+  if (returnVisitId) {
+    const q = new URLSearchParams();
+    q.set("rx_item", "1");
+    if (embed === "1") q.set("embed", "1");
+    redirect(`/visits/${returnVisitId}?${q.toString()}`);
+  }
 }

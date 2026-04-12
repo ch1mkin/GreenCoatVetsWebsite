@@ -7,24 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/web/submit-button";
 import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 
-function ownerDisplayName(owner: {
-  first_name?: string | null;
-  last_name?: string | null;
-  full_name?: string | null;
-} | null): string {
-  if (!owner) return "—";
-  const f = owner.first_name?.trim();
-  const l = owner.last_name?.trim();
-  if (f && l) return `${f} ${l}`;
-  return owner.full_name?.trim() || "—";
-}
-
 export default async function PrescriptionDetailsPage({
   params,
-  searchParams,
 }: {
   params: { id: string };
-  searchParams?: { rx_pdf?: string };
 }) {
   const { clinic_id } = await getActiveMembership();
   const supabase = createClient();
@@ -33,9 +19,7 @@ export default async function PrescriptionDetailsPage({
     await Promise.all([
       supabase
         .from("prescriptions")
-        .select(
-          "id, issued_at, notes, pdf_url, visits(id, owners(first_name, last_name, full_name)), pets(name), staff_profiles(full_name)",
-        )
+        .select("id, issued_at, notes, pdf_url, visits(id), pets(name), staff_profiles(full_name)")
         .eq("id", params.id)
         .eq("clinic_id", clinic_id)
         .maybeSingle(),
@@ -54,20 +38,8 @@ export default async function PrescriptionDetailsPage({
     ? await resolveSignedImageUrl(supabase, prescription.pdf_url, { expiresIn: 3600 })
     : null;
 
-  const visitRaw = prescription.visits as
-    | { id?: string; owners?: { first_name?: string; last_name?: string; full_name?: string } }
-    | { id?: string; owners?: { first_name?: string; last_name?: string; full_name?: string } }[]
-    | null
-    | undefined;
-  const visitOne = Array.isArray(visitRaw) ? visitRaw[0] : visitRaw;
-  const visitIdForLink = visitOne?.id;
-  const ownerFromVisit = visitOne?.owners as
-    | { first_name?: string; last_name?: string; full_name?: string }
-    | { first_name?: string; last_name?: string; full_name?: string }[]
-    | null
-    | undefined;
-  const ownerRow = Array.isArray(ownerFromVisit) ? ownerFromVisit[0] : ownerFromVisit;
-  const ownerName = ownerDisplayName(ownerRow ?? null);
+  const visitRaw = prescription.visits as { id?: string } | { id?: string }[] | null | undefined;
+  const visitIdForLink = Array.isArray(visitRaw) ? visitRaw[0]?.id : visitRaw?.id;
   const petRaw = prescription.pets as { name?: string } | { name?: string }[] | null | undefined;
   const petName = Array.isArray(petRaw) ? petRaw[0]?.name : petRaw?.name;
   const docRaw = prescription.staff_profiles as
@@ -77,25 +49,14 @@ export default async function PrescriptionDetailsPage({
     | undefined;
   const doctorName = Array.isArray(docRaw) ? docRaw[0]?.full_name : docRaw?.full_name;
 
-  const showRxPdfBanner = searchParams?.rx_pdf === "1";
-
   return (
     <main className="mx-auto w-full max-w-4xl space-y-6 px-6 py-8">
-      {showRxPdfBanner ? (
-        <div
-          role="status"
-          className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 shadow-sm"
-        >
-          <p className="font-semibold text-emerald-900">Prescription PDF generated</p>
-          <p className="mt-1 text-emerald-900/95">Use Download PDF or open the link in a new tab to print.</p>
-        </div>
-      ) : null}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Prescription</h1>
         <div className="flex flex-wrap gap-2">
           <form action={regeneratePrescriptionPdfForm}>
             <input type="hidden" name="prescription_id" value={prescription.id} />
-            <input type="hidden" name="redirect_after" value="prescription" />
+            {visitIdForLink ? <input type="hidden" name="visit_id" value={visitIdForLink} /> : null}
             <SubmitButton className="rounded-md border border-primary bg-primary/10 px-3 py-2 text-sm font-semibold text-primary" pendingLabel="PDF…">
               Generate PDF
             </SubmitButton>
@@ -124,7 +85,7 @@ export default async function PrescriptionDetailsPage({
           <strong>Pet:</strong> {petName ?? "-"}
         </p>
         <p>
-          <strong>Owner:</strong> {ownerName}
+          <strong>Owner:</strong> -
         </p>
         <p>
           <strong>Doctor:</strong> {doctorName ?? "-"}
