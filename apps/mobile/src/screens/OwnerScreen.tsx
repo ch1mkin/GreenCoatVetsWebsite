@@ -1,5 +1,6 @@
 import { formatSpeciesLabel } from "@saasclinics/lib";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { formatPetAgeGenderSubtitle } from "../lib/petDemographics";
 import { Appointment, Order, Pet } from "../types/app";
 import { commonStyles } from "../theme/commonStyles";
 import { theme } from "../theme/theme";
@@ -32,7 +33,12 @@ export function OwnerScreen({
             style={[commonStyles.row, i === pets.length - 1 && commonStyles.rowLast]}
             key={pet.id}
           >
-            <Text style={styles.emphasis}>{pet.name}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.emphasis}>{pet.name}</Text>
+              {formatPetAgeGenderSubtitle(pet) ? (
+                <Text style={[commonStyles.muted, { marginTop: 2, fontSize: 12 }]}>{formatPetAgeGenderSubtitle(pet)}</Text>
+              ) : null}
+            </View>
             <View style={commonStyles.pill}>
               <Text style={commonStyles.pillText}>{formatSpeciesLabel(pet.species)}</Text>
             </View>

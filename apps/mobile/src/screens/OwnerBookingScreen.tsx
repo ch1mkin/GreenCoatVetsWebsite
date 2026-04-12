@@ -9,6 +9,7 @@ import { commonStyles } from "../theme/commonStyles";
 import { theme } from "../theme/theme";
 import { PetAvatar } from "../components/PetAvatar";
 import { handleDateTimePickerChange } from "../lib/dateTimePickerBridge";
+import { parseAgeYearsToMonths, PET_GENDER_OPTIONS, type PetGenderValue } from "../lib/petDemographics";
 
 export function OwnerBookingScreen({
   petOptions,
@@ -40,6 +41,8 @@ export function OwnerBookingScreen({
     newPetName?: string;
     newPetSpecies?: string;
     newPetBreed?: string;
+    newPetGender?: string | null;
+    newPetAgeMonths?: number | null;
   }) => Promise<void>;
   onCancelAppointment: (appointmentId: string) => Promise<void>;
   /** Sends a request to the clinic — staff must approve before the time changes. */
@@ -64,6 +67,8 @@ export function OwnerBookingScreen({
   const [newPetName, setNewPetName] = useState("");
   const [newPetSpecies, setNewPetSpecies] = useState(DEFAULT_PET_SPECIES_BOOKING_VALUE);
   const [newPetBreed, setNewPetBreed] = useState("");
+  const [newPetGender, setNewPetGender] = useState<PetGenderValue>("unknown");
+  const [newPetAgeYears, setNewPetAgeYears] = useState("");
 
   const [rescheduleId, setRescheduleId] = useState<string | null>(null);
   const [rescheduleAt, setRescheduleAt] = useState(new Date());
@@ -213,6 +218,29 @@ export function OwnerBookingScreen({
               onChangeText={setNewPetBreed}
               placeholder="Breed (optional)"
               placeholderTextColor={theme.outline}
+            />
+            <Text style={[commonStyles.sectionLabel, { marginTop: 12 }]}>Sex</Text>
+            <View style={styles.speciesChipWrap}>
+              {PET_GENDER_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.speciesChip, newPetGender === opt.value && styles.speciesChipOn]}
+                  onPress={() => setNewPetGender(opt.value)}
+                >
+                  <Text style={[styles.speciesChipText, newPetGender === opt.value && styles.speciesChipTextOn]}>
+                    {opt.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Approx. age (years)</Text>
+            <TextInput
+              style={commonStyles.input}
+              value={newPetAgeYears}
+              onChangeText={setNewPetAgeYears}
+              placeholder="e.g. 2 or 0.5 (optional)"
+              placeholderTextColor={theme.outline}
+              keyboardType="decimal-pad"
             />
           </View>
         )}
@@ -374,6 +402,8 @@ export function OwnerBookingScreen({
               newPetName: hasPets ? undefined : newPetName.trim(),
               newPetSpecies: hasPets ? undefined : newPetSpecies.trim(),
               newPetBreed: hasPets ? undefined : newPetBreed.trim() || undefined,
+              newPetGender: hasPets ? undefined : newPetGender,
+              newPetAgeMonths: hasPets ? undefined : parseAgeYearsToMonths(newPetAgeYears),
               branchId,
               appointmentType,
               startsAt: startsAt.toISOString(),

@@ -286,7 +286,7 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
         ] = await Promise.all([
           supabase
             .from("pets")
-            .select("id, name, species, breed, allergies, photo_url")
+            .select("id, name, species, breed, gender, age_months, date_of_birth, allergies, photo_url")
             .eq("clinic_id", membershipData.clinic_id)
             .eq("owner_id", resolvedOwnerId)
             .limit(20),
@@ -798,6 +798,8 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
     newPetName?: string;
     newPetSpecies?: string;
     newPetBreed?: string;
+    newPetGender?: string | null;
+    newPetAgeMonths?: number | null;
     branchId: string;
     appointmentType: string;
     startsAt: string;
@@ -867,6 +869,11 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
           name: newPetName!,
           species: newPetSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE,
           breed: input.newPetBreed?.trim() || null,
+          gender: input.newPetGender?.trim() || null,
+          age_months:
+            input.newPetAgeMonths != null && Number.isFinite(input.newPetAgeMonths)
+              ? Math.round(input.newPetAgeMonths)
+              : null,
           is_active: true,
         })
         .select("id")
@@ -1097,7 +1104,14 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
     await loadData();
   }
 
-  async function onAddPet(input: { name: string; species: string; breed?: string; allergies?: string }) {
+  async function onAddPet(input: {
+    name: string;
+    species: string;
+    breed?: string;
+    allergies?: string;
+    gender?: string | null;
+    ageMonths?: number | null;
+  }) {
     if (!membership?.clinic_id) return;
     if (!input.name.trim()) {
       Alert.alert("Name required", "Enter your pet’s name.");
@@ -1126,6 +1140,8 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
       name: input.name.trim(),
       species: (input.species || "unknown").trim(),
       breed: input.breed?.trim() || null,
+      gender: input.gender?.trim() || null,
+      age_months: input.ageMonths != null && Number.isFinite(input.ageMonths) ? Math.round(input.ageMonths) : null,
       allergies: input.allergies?.trim() || null,
     });
     if (error) {
@@ -1176,7 +1192,7 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
 
   async function onUpdatePet(
     petId: string,
-    patch: Partial<Pick<Pet, "name" | "species" | "breed" | "allergies">>
+    patch: Partial<Pick<Pet, "name" | "species" | "breed" | "gender" | "age_months" | "allergies">>
   ) {
     if (!membership?.clinic_id) return;
     const { error } = await supabase.from("pets").update(patch).eq("id", petId).eq("clinic_id", membership.clinic_id);

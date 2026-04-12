@@ -33,6 +33,10 @@ export type Pet = {
   name: string;
   species: string;
   breed?: string | null;
+  gender?: string | null;
+  /** Approximate age in months (from owner input or staff). */
+  age_months?: number | null;
+  date_of_birth?: string | null;
   allergies?: string | null;
   photo_url?: string | null;
 };

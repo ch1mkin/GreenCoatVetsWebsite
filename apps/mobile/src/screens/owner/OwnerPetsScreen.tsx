@@ -10,6 +10,13 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInp
 import { MaterialIcons } from "@expo/vector-icons";
 import { commonStyles } from "../../theme/commonStyles";
 import { theme } from "../../theme/theme";
+import {
+  formatPetAgeGenderSubtitle,
+  monthsToAgeYearsInput,
+  parseAgeYearsToMonths,
+  PET_GENDER_OPTIONS,
+  type PetGenderValue,
+} from "../../lib/petDemographics";
 import { Pet, VisitSummary } from "../../types/app";
 import { PetAvatar } from "../../components/PetAvatar";
 
@@ -26,8 +33,18 @@ export function OwnerPetsScreen({
   visitsByPet: Record<string, VisitSummary[]>;
   refreshing: boolean;
   onRefresh: () => void;
-  onAddPet: (input: { name: string; species: string; breed?: string; allergies?: string }) => Promise<void>;
-  onUpdatePet: (petId: string, patch: Partial<Pick<Pet, "name" | "species" | "breed" | "allergies">>) => Promise<void>;
+  onAddPet: (input: {
+    name: string;
+    species: string;
+    breed?: string;
+    allergies?: string;
+    gender?: string | null;
+    ageMonths?: number | null;
+  }) => Promise<void>;
+  onUpdatePet: (
+    petId: string,
+    patch: Partial<Pick<Pet, "name" | "species" | "breed" | "gender" | "age_months" | "allergies">>,
+  ) => Promise<void>;
   onUploadPetPhoto: (petId: string, uri: string, mimeType?: string, base64?: string | null) => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -35,11 +52,15 @@ export function OwnerPetsScreen({
   const [name, setName] = useState("");
   const [species, setSpecies] = useState(DEFAULT_PET_SPECIES_BOOKING_VALUE);
   const [breed, setBreed] = useState("");
+  const [gender, setGender] = useState<PetGenderValue>("unknown");
+  const [ageYears, setAgeYears] = useState("");
   const [allergies, setAllergies] = useState("");
 
   const [editName, setEditName] = useState("");
   const [editSpecies, setEditSpecies] = useState("");
   const [editBreed, setEditBreed] = useState("");
+  const [editGender, setEditGender] = useState<PetGenderValue>("unknown");
+  const [editAgeYears, setEditAgeYears] = useState("");
   const [editAllergies, setEditAllergies] = useState("");
 
   function openEdit(p: Pet) {
@@ -47,6 +68,9 @@ export function OwnerPetsScreen({
     setEditName(p.name);
     setEditSpecies(normalizeLegacySpeciesToCanonical(p.species));
     setEditBreed(p.breed ?? "");
+    const g = p.gender?.trim();
+    setEditGender(g === "male" || g === "female" || g === "unknown" ? g : "unknown");
+    setEditAgeYears(monthsToAgeYearsInput(p.age_months));
     setEditAllergies(p.allergies ?? "");
   }
 
@@ -89,6 +113,7 @@ export function OwnerPetsScreen({
                   <Text style={commonStyles.muted}>
                     {formatSpeciesLabel(pet.species)}
                     {pet.breed ? ` · ${pet.breed}` : ""}
+                    {formatPetAgeGenderSubtitle(pet) ? ` · ${formatPetAgeGenderSubtitle(pet)}` : ""}
                   </Text>
                 </View>
                 <MaterialIcons name={isOpen ? "expand-less" : "expand-more"} size={24} color={theme.outline} />
@@ -121,6 +146,29 @@ export function OwnerPetsScreen({
                     ))}
                   </View>
                   <TextInput style={[commonStyles.input, { marginTop: 8 }]} value={editBreed} onChangeText={setEditBreed} placeholder="Breed (optional)" placeholderTextColor={theme.outline} />
+                  <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Sex</Text>
+                  <View style={styles.speciesChipWrap}>
+                    {PET_GENDER_OPTIONS.map((opt) => (
+                      <Pressable
+                        key={opt.value}
+                        style={[styles.speciesChip, editGender === opt.value && styles.speciesChipOn]}
+                        onPress={() => setEditGender(opt.value)}
+                      >
+                        <Text style={[styles.speciesChipText, editGender === opt.value && styles.speciesChipTextOn]}>
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Approx. age (years)</Text>
+                  <TextInput
+                    style={commonStyles.input}
+                    value={editAgeYears}
+                    onChangeText={setEditAgeYears}
+                    placeholder="e.g. 2 or 0.5 (optional)"
+                    placeholderTextColor={theme.outline}
+                    keyboardType="decimal-pad"
+                  />
                   <TextInput
                     style={[commonStyles.input, { marginTop: 8, minHeight: 64, textAlignVertical: "top" }]}
                     value={editAllergies}
@@ -136,6 +184,8 @@ export function OwnerPetsScreen({
                         name: editName.trim(),
                         species: (editSpecies.trim() || DEFAULT_PET_SPECIES_BOOKING_VALUE).trim(),
                         breed: editBreed.trim() || null,
+                        gender: editGender,
+                        age_months: parseAgeYearsToMonths(editAgeYears),
                         allergies: editAllergies.trim() || null,
                       })
                     }
@@ -185,6 +235,27 @@ export function OwnerPetsScreen({
               ))}
             </View>
             <TextInput style={[commonStyles.input, { marginTop: 8 }]} value={breed} onChangeText={setBreed} placeholder="Breed (optional)" placeholderTextColor={theme.outline} />
+            <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Sex</Text>
+            <View style={styles.speciesChipWrap}>
+              {PET_GENDER_OPTIONS.map((opt) => (
+                <Pressable
+                  key={opt.value}
+                  style={[styles.speciesChip, gender === opt.value && styles.speciesChipOn]}
+                  onPress={() => setGender(opt.value)}
+                >
+                  <Text style={[styles.speciesChipText, gender === opt.value && styles.speciesChipTextOn]}>{opt.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Approx. age (years)</Text>
+            <TextInput
+              style={commonStyles.input}
+              value={ageYears}
+              onChangeText={setAgeYears}
+              placeholder="e.g. 2 or 0.5 (optional)"
+              placeholderTextColor={theme.outline}
+              keyboardType="decimal-pad"
+            />
             <TextInput
               style={[commonStyles.input, { marginTop: 8, minHeight: 56, textAlignVertical: "top" }]}
               value={allergies}
@@ -200,11 +271,15 @@ export function OwnerPetsScreen({
                   name: name.trim(),
                   species: species.trim() || DEFAULT_PET_SPECIES_BOOKING_VALUE,
                   breed: breed.trim() || undefined,
+                  gender,
+                  ageMonths: parseAgeYearsToMonths(ageYears),
                   allergies: allergies.trim() || undefined,
                 }).then(() => {
                   setName("");
                   setSpecies(DEFAULT_PET_SPECIES_BOOKING_VALUE);
                   setBreed("");
+                  setGender("unknown");
+                  setAgeYears("");
                   setAllergies("");
                   setAdding(false);
                 })
