@@ -65,7 +65,11 @@ export async function createVisitFromAppointment(formData: FormData) {
   return createdVisit.id;
 }
 
-export async function saveVisitConsultation(formData: FormData) {
+async function persistVisitConsultation(
+  supabase: ReturnType<typeof createClient>,
+  clinic_id: string,
+  formData: FormData,
+) {
   const visitId = String(formData.get("visit_id") ?? "").trim();
   const symptoms = String(formData.get("symptoms") ?? "").trim();
   const diagnosis = String(formData.get("diagnosis") ?? "").trim();
@@ -77,9 +81,6 @@ export async function saveVisitConsultation(formData: FormData) {
   const completeVisit = completeRaw === "on" || completeRaw === "true" || completeRaw === "1";
 
   if (!visitId) throw new Error("Visit id is required.");
-
-  const { clinic_id } = await getActiveMembership();
-  const supabase = createClient();
 
   const nowIso = new Date().toISOString();
   const updates: {
@@ -118,7 +119,8 @@ export async function saveVisitConsultation(formData: FormData) {
     if (apptUpdateError) throw new Error(apptUpdateError.message);
   }
 
-  // Keep medical records in sync with consultation notes so records page reflects completed/updated visits.
+  const notesCombined = [symptoms, treatmentPlan].filter(Boolean).join("\n\n") || null;
+
   const { error: medErr } = await supabase.from("medical_records").upsert(
     {
       clinic_id,
@@ -126,24 +128,21 @@ export async function saveVisitConsultation(formData: FormData) {
       pet_id: visit.pet_id,
       visit_id: visitId,
       diagnosis: diagnosis || null,
-      notes: treatmentPlan || symptoms || null,
+      notes: notesCombined,
       lab_tests: null,
     },
     { onConflict: "visit_id" },
   );
   if (medErr) throw new Error(medErr.message);
-
-  revalidatePath("/appointments");
-  revalidatePath(`/visits/${visitId}`);
-  revalidatePath("/medical-records");
 }
 
-export async function saveVisitClinicalEvaluation(formData: FormData) {
+async function persistVisitClinicalEvaluation(
+  supabase: ReturnType<typeof createClient>,
+  clinic_id: string,
+  formData: FormData,
+) {
   const visitId = String(formData.get("visit_id") ?? "").trim();
   if (!visitId) throw new Error("Visit id is required.");
-
-  const { clinic_id } = await getActiveMembership();
-  const supabase = createClient();
 
   const { data: visit, error: vErr } = await supabase
     .from("visits")
@@ -189,8 +188,89 @@ export async function saveVisitClinicalEvaluation(formData: FormData) {
   });
 
   if (upErr) throw new Error(upErr.message);
+}
+
+/** If the visit row never got a doctor_id but the appointment has one, copy it for display, Rx, and reporting. */
+async function syncVisitDoctorFromAppointment(
+  supabase: ReturnType<typeof createClient>,
+  clinic_id: string,
+  visitId: string,
+) {
+  const { data: row } = await supabase
+    .from("visits")
+    .select("doctor_id, appointment_id")
+    .eq("id", visitId)
+    .eq("clinic_id", clinic_id)
+    .maybeSingle();
+
+  if (!row?.appointment_id || row.doctor_id) return;
+
+  const { data: appt } = await supabase
+    .from("appointments")
+    .select("doctor_id")
+    .eq("id", row.appointment_id)
+    .eq("clinic_id", clinic_id)
+    .maybeSingle();
+
+  if (!appt?.doctor_id) return;
+
+  const { error } = await supabase
+    .from("visits")
+    .update({ doctor_id: appt.doctor_id })
+    .eq("id", visitId)
+    .eq("clinic_id", clinic_id);
+
+  if (error) throw new Error(error.message);
+
+  await supabase
+    .from("prescriptions")
+    .update({ doctor_id: appt.doctor_id })
+    .eq("visit_id", visitId)
+    .eq("clinic_id", clinic_id)
+    .is("doctor_id", null);
+}
+
+export async function saveVisitConsultation(formData: FormData) {
+  const visitId = String(formData.get("visit_id") ?? "").trim();
+  if (!visitId) throw new Error("Visit id is required.");
+
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+  await persistVisitConsultation(supabase, clinic_id, formData);
+  await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
+
+  revalidatePath("/appointments");
+  revalidatePath(`/visits/${visitId}`);
+  revalidatePath("/medical-records");
+}
+
+export async function saveVisitClinicalEvaluation(formData: FormData) {
+  const visitId = String(formData.get("visit_id") ?? "").trim();
+  if (!visitId) throw new Error("Visit id is required.");
+
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+  await persistVisitClinicalEvaluation(supabase, clinic_id, formData);
+  await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
 
   revalidatePath(`/visits/${visitId}`);
+}
+
+/** Persists clinical evaluation and SOAP in one submit so users do not lose half-filled sections. */
+export async function saveVisitRecord(formData: FormData) {
+  const visitId = String(formData.get("visit_id") ?? "").trim();
+  if (!visitId) throw new Error("Visit id is required.");
+
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+
+  await persistVisitClinicalEvaluation(supabase, clinic_id, formData);
+  await persistVisitConsultation(supabase, clinic_id, formData);
+  await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
+
+  revalidatePath("/appointments");
+  revalidatePath(`/visits/${visitId}`);
+  revalidatePath("/medical-records");
 }
 
 export async function ensurePrescriptionForVisit(visitId: string): Promise<string> {

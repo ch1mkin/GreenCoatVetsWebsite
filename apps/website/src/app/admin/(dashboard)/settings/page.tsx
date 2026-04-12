@@ -1,4 +1,4 @@
-import { updateMarketingSettings } from "@/app/admin/(dashboard)/actions";
+import { refreshInstagramEmbedsFromGraph, updateMarketingSettings } from "@/app/admin/(dashboard)/actions";
 import { AdminFlashMessages } from "@/components/admin/admin-flash-messages";
 import { AdminSubmitButton } from "@/components/admin/admin-submit-button";
 import { MarketingImageFields } from "@/components/admin/marketing-image-fields";
@@ -25,6 +25,7 @@ export default async function AdminSettingsPage({
 }) {
   await requireSuperAdmin();
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
+  const igSync = searchParams.ig_sync === "1" || searchParams.ig_sync === "true";
   const errorParam = searchParams.error;
   const errorMessage = typeof errorParam === "string" ? errorParam : null;
 
@@ -32,6 +33,12 @@ export default async function AdminSettingsPage({
   const { data: clinics } = await supabase.from("clinics").select("id, name, slug").eq("is_active", true).order("name");
 
   const settings = await getMarketingSiteSettings();
+  const { data: igMeta } = await supabase
+    .from("marketing_site_settings")
+    .select("instagram_embed_synced_at")
+    .eq("id", "default")
+    .maybeSingle();
+  const igSyncedAt = (igMeta as { instagram_embed_synced_at?: string | null } | null)?.instagram_embed_synced_at ?? null;
   const merged = mergeHomepageImages(settings.homepage_images);
 
   return (
@@ -45,6 +52,20 @@ export default async function AdminSettingsPage({
       </div>
 
       <AdminFlashMessages saved={saved} error={errorMessage} />
+      {igSync ? (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 shadow-sm"
+        >
+          <span className="material-symbols-outlined shrink-0 text-emerald-600">sync</span>
+          <div>
+            <p className="font-headline font-bold">Instagram embeds updated</p>
+            <p className="mt-0.5 text-emerald-800/90">
+              Latest post and reel links were loaded from Instagram. The marketing homepage uses them immediately.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <form action={updateMarketingSettings} className="space-y-10">
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -268,14 +289,51 @@ export default async function AdminSettingsPage({
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-headline text-lg font-bold text-primary">Instagram — homepage reels &amp; posts</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Paste one <strong>public</strong> Instagram post or reel URL per line (copy from the browser or Share → Copy link). After you save, the
-            marketing home page shows embedded players — no Instagram login needed for visitors. Invalid lines are skipped. Use Chrome or Safari for
-            best results when embedding.
+            The homepage uses Instagram&apos;s official embed player for each link. You can <strong>paste URLs manually</strong> (one per line) or{" "}
+            <strong>refresh from Instagram</strong> when the server is configured with Meta&apos;s Instagram Graph API (see below). Visitors never need
+            to log in to Instagram.
           </p>
-          <div className="mt-4 max-w-3xl">
+          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-700">
+            <p className="font-headline font-semibold text-slate-900">Automatic feed (recommended)</p>
+            <p className="mt-1 leading-relaxed">
+              Set <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs">INSTAGRAM_USER_ID</code> and{" "}
+              <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs">INSTAGRAM_ACCESS_TOKEN</code> in the website environment (see{" "}
+              <code className="rounded bg-white px-1.5 py-0.5 font-mono text-xs">.env.example</code>). The Instagram account must be{" "}
+              <strong>Professional</strong> (Business or Creator) and linked to a Facebook Page — this is how Meta exposes recent media for{" "}
+              <a
+                className="font-semibold text-primary underline"
+                href="https://developers.facebook.com/docs/instagram-api/getting-started"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Instagram Graph API
+              </a>
+              . Then use <strong>Refresh from Instagram</strong> to pull the latest permalinks; repeat whenever you want new posts on the site.
+            </p>
+            {igSyncedAt ? (
+              <p className="mt-2 text-xs text-slate-600">
+                Last sync:{" "}
+                <time dateTime={igSyncedAt}>{new Date(igSyncedAt).toLocaleString()}</time>
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-600">Not synced from the API yet (manual URLs still work).</p>
+            )}
+            <form action={refreshInstagramEmbedsFromGraph} className="mt-3">
+              <AdminSubmitButton
+                pendingLabel="Fetching from Instagram…"
+                className="rounded-xl border border-primary/30 bg-white px-4 py-2.5 font-headline text-sm font-bold text-primary shadow-sm hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-80"
+              >
+                Refresh from Instagram
+              </AdminSubmitButton>
+            </form>
+          </div>
+          <div className="mt-6 max-w-3xl">
             <label className="block text-xs font-bold uppercase text-slate-500" htmlFor="instagram_embed_urls">
-              Post / reel URLs
+              Post / reel URLs (manual override)
             </label>
+            <p className="mt-1 text-xs text-slate-500">
+              One permalink per line. Saving replaces the list unless you use API refresh above (refresh also overwrites this list).
+            </p>
             <textarea
               id="instagram_embed_urls"
               name="instagram_embed_urls"

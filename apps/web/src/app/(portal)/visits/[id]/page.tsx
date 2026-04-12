@@ -1,11 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  ensurePrescriptionForVisit,
-  saveVisitClinicalEvaluation,
-  saveVisitConsultation,
-  uploadVisitAttachment,
-} from "../actions";
+import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
 import { addPrescriptionItem } from "@/app/(portal)/prescriptions/actions";
 import { regeneratePrescriptionPdfForm } from "@/app/(portal)/invoicing/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
@@ -23,6 +18,8 @@ import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
+
+export const dynamic = "force-dynamic";
 
 function ownerDisplayName(owner: {
   first_name?: string | null;
@@ -79,7 +76,7 @@ export default async function VisitDetailsPage({
   const { data: visit, error } = await supabase
     .from("visits")
     .select(
-      "id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake)"
+      "id, doctor_id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, updated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
     )
     .eq("id", params.id)
     .eq("clinic_id", clinic_id)
@@ -115,6 +112,24 @@ export default async function VisitDetailsPage({
   const referredSet = new Set(
     Array.isArray(evaluation?.tests_referred) ? (evaluation?.tests_referred as string[]) : []
   );
+
+  const visitDoctorId = visit.doctor_id as string | null | undefined;
+  const apptDoctorId = (appt?.doctor_id as string | undefined) ?? undefined;
+  const resolvedDoctorStaffId = visitDoctorId ?? apptDoctorId;
+
+  let doctorDisplayName = (visit.staff_profiles as { full_name?: string } | null)?.full_name ?? null;
+  if (!doctorDisplayName && resolvedDoctorStaffId) {
+    const { data: docRow } = await supabase
+      .from("staff_profiles")
+      .select("full_name")
+      .eq("id", resolvedDoctorStaffId)
+      .maybeSingle();
+    doctorDisplayName = docRow?.full_name ?? null;
+  }
+
+  const visitUpdated = String((visit as { updated_at?: string }).updated_at ?? "");
+  const evalUpdated = String(evaluation?.updated_at ?? "");
+  const visitFormKey = `${visit.id}-${visitUpdated}-${evalUpdated}`;
 
   const prescriptionId = await ensurePrescriptionForVisit(visit.id);
 
@@ -286,37 +301,42 @@ export default async function VisitDetailsPage({
               <span className="text-on-surface-variant">Branch:</span> {branch?.name ?? "—"}
             </p>
             <p>
-              <span className="text-on-surface-variant">Doctor:</span>{" "}
-              {(visit.staff_profiles as { full_name?: string } | null)?.full_name ?? "—"}
+              <span className="text-on-surface-variant">Doctor:</span> {doctorDisplayName ?? "—"}
             </p>
             <p>
               <span className="text-on-surface-variant">Appointment:</span> {String(appt?.status ?? "—")}
             </p>
             <p>
-              <span className="text-on-surface-variant">Reason:</span> {String(appt?.reason ?? "—")}
+              <span className="text-on-surface-variant">Reason:</span>{" "}
+              {String(appt?.reason ?? "").trim() || ic("chief_complaint") || "—"}
             </p>
           </div>
         </VisitSection>
 
-        <VisitSection
-          embed={embed}
-          id="section-clinical"
-          title="Clinical evaluation"
-          defaultOpen
-          description={
-            !embed ? (
-              <span>Pre-filled from the appointment / patient where possible. Saved for medical record and invoicing.</span>
-            ) : (
-              <span className="text-slate-600">Pre-filled where possible. Saves for record & billing.</span>
-            )
-          }
+        <form
+          id="form-visit-record"
+          key={visitFormKey}
+          action={saveVisitRecord}
+          className={embed ? "space-y-2" : "space-y-4"}
         >
-          <form
-            id="form-visit-clinical"
-            action={saveVisitClinicalEvaluation}
-            className={embed ? "space-y-2" : "space-y-3"}
+          <input type="hidden" name="visit_id" value={visit.id} />
+          <p className={embed ? "text-[11px] text-slate-600" : "text-[12px] text-on-surface-variant"}>
+            Clinical evaluation and consultation save together — use one button below for SOAP + exam fields.
+          </p>
+          <VisitSection
+            embed={embed}
+            id="section-clinical"
+            title="Clinical evaluation"
+            defaultOpen
+            description={
+              !embed ? (
+                <span>Pre-filled from the appointment / patient where possible. Saved for medical record and invoicing.</span>
+              ) : (
+                <span className="text-slate-600">Pre-filled where possible. Saves for record & billing.</span>
+              )
+            }
           >
-            <input type="hidden" name="visit_id" value={visit.id} />
+            <div className={embed ? "space-y-2" : "space-y-3"}>
             <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
               <label className="flex flex-col gap-0.5">
                 <span className="text-[11px] font-semibold text-on-surface-variant">Species class</span>
@@ -454,16 +474,11 @@ export default async function VisitDetailsPage({
                 defaultValue={evaluation?.physical_examination ?? ""}
               />
             </label>
-
-            <SubmitButton className="btn-primary btn-compact" pendingLabel="Saving evaluation…">
-              Save clinical evaluation
-            </SubmitButton>
-          </form>
-        </VisitSection>
+            </div>
+          </VisitSection>
 
         <VisitSection embed={embed} id="section-soap" title="Consultation (SOAP)" defaultOpen={!embed}>
-          <form id="form-visit-consultation" action={saveVisitConsultation} className="space-y-2">
-            <input type="hidden" name="visit_id" value={visit.id} />
+          <div className="space-y-2">
             <textarea
               className="input-soft min-h-[64px] w-full py-2 text-[13px]"
               name="symptoms"
@@ -496,20 +511,21 @@ export default async function VisitDetailsPage({
               Mark visit complete
             </label>
             <div className="flex flex-wrap gap-2">
-              <SubmitButton className="btn-secondary btn-compact" pendingLabel="Saving…">
-                Save consultation
+              <SubmitButton className="btn-primary btn-compact" pendingLabel="Saving visit…">
+                Save entire visit
               </SubmitButton>
               <button
                 type="submit"
                 name="complete_visit"
                 value="true"
-                className="btn-primary btn-compact"
+                className="btn-secondary btn-compact"
               >
                 Complete visit
               </button>
             </div>
-          </form>
+          </div>
         </VisitSection>
+        </form>
 
         <VisitSection embed={embed} id="section-rx" title="Prescription" defaultOpen={!embed}>
           <p className="text-[11px] text-on-surface-variant">

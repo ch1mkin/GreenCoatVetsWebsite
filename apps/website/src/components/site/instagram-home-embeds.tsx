@@ -73,7 +73,7 @@ export function InstagramHomeEmbeds({ urls }: { urls: string[] }) {
             From our Instagram
           </h2>
           <p className="max-w-2xl text-on-surface-variant">
-            Latest reels and posts — add or update links anytime in admin; the homepage picks them up after you save.
+            Latest reels and posts from your curated list — update manually in admin or sync from Instagram when Graph API credentials are configured.
           </p>
         </div>
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">

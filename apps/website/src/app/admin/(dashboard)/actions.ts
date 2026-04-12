@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { HomepageCopy, SocialLinks } from "@/lib/marketing/defaults";
 import { DEFAULT_HOMEPAGE_IMAGES, type HomepageImageKey } from "@/lib/marketing/defaults";
 import { parseInstagramEmbedUrlsBlock } from "@/lib/marketing/instagram-embed-url";
+import { fetchInstagramMediaPermalinks, getInstagramGraphEnv } from "@/lib/marketing/instagram-graph-media";
 
 async function requireSuperAdmin() {
   await assertSuperAdmin();
@@ -111,6 +112,51 @@ export async function updateMarketingSettings(formData: FormData) {
   revalidatePath("/locations");
   revalidatePath("/admin/settings");
   redirect("/admin/settings?saved=1");
+}
+
+/**
+ * Pulls latest post/reel permalinks from Instagram Graph API into `instagram_embed_urls`.
+ * Requires server env INSTAGRAM_USER_ID (Instagram Business Account id) and INSTAGRAM_ACCESS_TOKEN.
+ */
+export async function refreshInstagramEmbedsFromGraph() {
+  const supabase = await requireSuperAdmin();
+
+  const env = getInstagramGraphEnv();
+  if (!env) {
+    redirect(
+      `/admin/settings?error=${encodeURIComponent(
+        "Set INSTAGRAM_USER_ID and INSTAGRAM_ACCESS_TOKEN on the server (see .env.example). The account must be a Professional Instagram linked to a Facebook Page.",
+      )}`,
+    );
+  }
+
+  const result = await fetchInstagramMediaPermalinks({
+    userId: env.userId,
+    accessToken: env.accessToken,
+  });
+
+  if (!result.ok) {
+    redirect(`/admin/settings?error=${encodeURIComponent(result.message)}`);
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase
+    .from("marketing_site_settings")
+    .update({
+      instagram_embed_urls: result.permalinks,
+      instagram_embed_synced_at: nowIso,
+      updated_at: nowIso,
+    })
+    .eq("id", "default");
+
+  if (error) {
+    redirect(`/admin/settings?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/");
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?ig_sync=1");
 }
 
 export async function addMarketingLocation(formData: FormData) {

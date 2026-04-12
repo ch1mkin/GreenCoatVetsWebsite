@@ -4,34 +4,30 @@ import { useCallback, useId, useMemo, useState } from "react";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { parseLabeledClinicalSpeech } from "@/lib/clinical/visit-speech-parse";
 
-const FORM_CLINICAL = "#form-visit-clinical";
-const FORM_CONSULT = "#form-visit-consultation";
+/** Clinical + SOAP live in one form so dictation targets all fields under the same root. */
+const FORM_VISIT_RECORD = "#form-visit-record";
 
-type Target = { name: string; label: string; form: "clinical" | "consult" };
+type Target = { name: string; label: string };
 
 const FIELD_TARGETS: Target[] = [
-  { name: "cc_hp", label: "CC / HPI", form: "clinical" },
-  { name: "physical_examination", label: "Physical examination", form: "clinical" },
-  { name: "section_deworming", label: "Deworming", form: "clinical" },
-  { name: "section_vaccination", label: "Vaccination", form: "clinical" },
-  { name: "tests_other", label: "Other tests", form: "clinical" },
-  { name: "param_rt", label: "Parameter: RT", form: "clinical" },
-  { name: "param_rr", label: "Parameter: RR", form: "clinical" },
-  { name: "param_hr", label: "Parameter: HR", form: "clinical" },
-  { name: "param_crt", label: "Parameter: CRT", form: "clinical" },
-  { name: "param_allergic", label: "Parameter: Allergic", form: "clinical" },
-  { name: "param_bw", label: "Parameter: B/W", form: "clinical" },
-  { name: "symptoms", label: "SOAP — Symptoms", form: "consult" },
-  { name: "diagnosis", label: "SOAP — Diagnosis", form: "consult" },
-  { name: "treatment_plan", label: "SOAP — Treatment plan", form: "consult" },
+  { name: "cc_hp", label: "CC / HPI" },
+  { name: "physical_examination", label: "Physical examination" },
+  { name: "section_deworming", label: "Deworming" },
+  { name: "section_vaccination", label: "Vaccination" },
+  { name: "tests_other", label: "Other tests" },
+  { name: "param_rt", label: "Parameter: RT" },
+  { name: "param_rr", label: "Parameter: RR" },
+  { name: "param_hr", label: "Parameter: HR" },
+  { name: "param_crt", label: "Parameter: CRT" },
+  { name: "param_allergic", label: "Parameter: Allergic" },
+  { name: "param_bw", label: "Parameter: B/W" },
+  { name: "symptoms", label: "SOAP — Symptoms" },
+  { name: "diagnosis", label: "SOAP — Diagnosis" },
+  { name: "treatment_plan", label: "SOAP — Treatment plan" },
 ];
 
-function formSelector(form: "clinical" | "consult"): string {
-  return form === "clinical" ? FORM_CLINICAL : FORM_CONSULT;
-}
-
-function setNamedFieldValue(form: "clinical" | "consult", name: string, value: string, append: boolean): boolean {
-  const root = document.querySelector(formSelector(form));
+function setNamedFieldValue(name: string, value: string, append: boolean): boolean {
+  const root = document.querySelector(FORM_VISIT_RECORD);
   if (!root) return false;
   const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
   if (!el) return false;
@@ -58,7 +54,7 @@ export function VisitVoiceDictation({ embed }: { embed?: boolean }) {
 
   const insertIntoField = useCallback(() => {
     if (!line.trim()) return;
-    const ok = setNamedFieldValue(selected.form, selected.name, line, append);
+    const ok = setNamedFieldValue(selected.name, line, append);
     if (ok) clearLine();
   }, [line, selected, append, clearLine]);
 
@@ -70,7 +66,7 @@ export function VisitVoiceDictation({ embed }: { embed?: boolean }) {
       if (!val?.trim()) continue;
       const t = FIELD_TARGETS.find((x) => x.name === key);
       if (!t) continue;
-      if (setNamedFieldValue(t.form, key, val, append)) n += 1;
+      if (setNamedFieldValue(key, val, append)) n += 1;
     }
     if (n > 0) clearLine();
   }, [line, append, clearLine]);

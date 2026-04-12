@@ -45,7 +45,7 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
   const { data: visit, error: vErr } = await supabase
     .from("visits")
     .select(
-      "symptoms, diagnosis, treatment_plan, follow_up_at, started_at, completed_at, created_at, clinic_id, pets(name, species, breed), owners(first_name, last_name, full_name), branches(name), staff_profiles(full_name)"
+      "symptoms, diagnosis, treatment_plan, follow_up_at, started_at, completed_at, created_at, clinic_id, doctor_id, appointment_id, pets(name, species, breed), owners(first_name, last_name, full_name), branches(name), staff_profiles(full_name), appointments(doctor_id)"
     )
     .eq("id", visitId)
     .single();
@@ -72,6 +72,16 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
   const br = Array.isArray(brRaw) ? brRaw[0] ?? null : brRaw;
   const docRaw = visit.staff_profiles as { full_name?: string } | { full_name?: string }[] | null;
   const doc = Array.isArray(docRaw) ? docRaw[0] ?? null : docRaw;
+  const apptForDoctor = visit.appointments as { doctor_id?: string | null } | { doctor_id?: string | null }[] | null;
+  const apptD = Array.isArray(apptForDoctor) ? apptForDoctor[0] ?? null : apptForDoctor;
+  const visitDoctorId = visit.doctor_id as string | null | undefined;
+  const resolvedDoctorId = visitDoctorId ?? apptD?.doctor_id ?? undefined;
+
+  let doctorName = String(doc?.full_name ?? "").trim();
+  if (!doctorName && resolvedDoctorId) {
+    const { data: sp } = await supabase.from("staff_profiles").select("full_name").eq("id", resolvedDoctorId).maybeSingle();
+    doctorName = String(sp?.full_name ?? "").trim();
+  }
   const owRaw = visit.owners as { first_name?: string; last_name?: string; full_name?: string } | { first_name?: string }[] | null;
   const ow = Array.isArray(owRaw) ? owRaw[0] ?? null : owRaw;
 
@@ -110,7 +120,7 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
   return {
     clinicName: String(clinic?.name ?? "Clinic"),
     branchName: String(br?.name ?? "—"),
-    doctorName: String(doc?.full_name ?? "—"),
+    doctorName: doctorName || "—",
     petName: String(pet?.name ?? "—"),
     petSpecies: [pet?.species, pet?.breed].filter(Boolean).join(" · ") || "—",
     ownerName: ownerName(ow),
