@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
-import { addPrescriptionItem } from "@/app/(portal)/prescriptions/actions";
 import { regeneratePrescriptionPdfForm } from "@/app/(portal)/invoicing/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { canManageInvoices } from "@/lib/auth/invoice-access";
@@ -16,7 +15,7 @@ import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
-import { VisitRxVoicePanel } from "@/components/clinical/visit-rx-voice-panel";
+import { VisitPrescriptionBlockClient } from "@/components/clinical/visit-prescription-block-client";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
@@ -197,8 +196,8 @@ export default async function VisitDetailsPage({
   }));
 
   const visitMainClass = embed
-    ? "space-y-2 text-[13px] leading-snug"
-    : "workspace-form mx-auto max-w-5xl space-y-4 text-sm";
+    ? "space-y-3 text-[13px] leading-snug"
+    : "workspace-form mx-auto max-w-5xl space-y-6 text-sm";
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
 
@@ -380,7 +379,7 @@ export default async function VisitDetailsPage({
           id="form-visit-record"
           key={visitFormKey}
           action={saveVisitRecord}
-          className={embed ? "space-y-2" : "space-y-4"}
+          className={embed ? "space-y-3" : "space-y-6"}
         >
           <input type="hidden" name="visit_id" value={visit.id} />
           <input type="hidden" name="embed" value={embed ? "1" : ""} />
@@ -648,63 +647,22 @@ export default async function VisitDetailsPage({
           ) : (
             <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
           )}
-          {showVoiceDictation ? (
-            <VisitRxVoicePanel
-              embed={embed}
-              visitId={visit.id}
-              lines={(rxItems ?? []).map((r) => ({
-                id: r.id,
-                medicine_name: String(r.medicine_name ?? ""),
-                instructions: r.instructions ?? null,
-              }))}
-            />
-          ) : null}
-          <form id="form-rx-add" action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
-            <input type="hidden" name="prescription_id" value={prescriptionId} />
-            <input type="hidden" name="visit_id" value={visit.id} />
-            <input type="hidden" name="embed" value={embed ? "1" : ""} />
-            <input className="input-soft input-compact md:col-span-2" name="medicine_name" placeholder="Medicine name *" required />
-            <input className="input-soft input-compact" name="dosage" placeholder="Dosage *" required />
-            <input className="input-soft input-compact" name="frequency" placeholder="Frequency" />
-            <input className="input-soft input-compact" name="duration" placeholder="Duration" />
-            <textarea
-              id="rx-new-instructions"
-              className="input-soft input-compact md:col-span-2 min-h-[48px]"
-              name="instructions"
-              placeholder="Instructions (use the prescription mic above, or type here)"
-            />
-            <button type="submit" className="btn-primary btn-compact md:col-span-2">
-              Add medicine line
-            </button>
-          </form>
+          <VisitPrescriptionBlockClient
+            initialItems={(rxItems ?? []).map((r) => ({
+              id: r.id,
+              medicine_name: String(r.medicine_name ?? ""),
+              dosage: String(r.dosage ?? ""),
+              frequency: r.frequency ?? null,
+              duration: r.duration ?? null,
+              instructions: r.instructions ?? null,
+            }))}
+            prescriptionId={prescriptionId}
+            visitId={visit.id}
+            embed={embed}
+            showVoiceDictation={showVoiceDictation}
+          />
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-[11px]">
-              <thead>
-                <tr className="border-b border-outline-variant/20 text-[10px] font-bold uppercase text-on-surface-variant">
-                  <th className="py-1.5 pr-2">Medicine</th>
-                  <th className="py-1.5 pr-2">Dosage</th>
-                  <th className="py-1.5 pr-2">Frequency</th>
-                  <th className="py-1.5 pr-2">Duration</th>
-                  <th className="py-1.5">Instructions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rxItems?.map((item) => (
-                  <tr key={item.id} className="border-b border-outline-variant/10">
-                    <td className="py-1.5 pr-2">{item.medicine_name}</td>
-                    <td className="py-1.5 pr-2">{item.dosage}</td>
-                    <td className="py-1.5 pr-2">{item.frequency ?? "—"}</td>
-                    <td className="py-1.5 pr-2">{item.duration ?? "—"}</td>
-                    <td className="py-1.5">{item.instructions ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!rxItems?.length ? <p className="py-2 text-on-surface-variant">No line items yet.</p> : null}
-          </div>
-
-          <div className="flex flex-col gap-2 border-t border-outline-variant/15 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="mt-4 flex flex-col gap-2 border-t border-outline-variant/15 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
             {prescriptionPdfUrl ? (
               <a
                 className="btn-primary btn-compact text-xs"

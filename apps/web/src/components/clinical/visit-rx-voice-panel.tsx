@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useId, useMemo, useState } from "react";
-import { updatePrescriptionItemInstructions } from "@/app/(portal)/prescriptions/actions";
+import { updatePrescriptionItemInstructionsAction } from "@/app/(portal)/prescriptions/actions";
 import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 
 type Line = { id: string; medicine_name: string; instructions: string | null };
@@ -23,15 +23,19 @@ export function VisitRxVoicePanel({
   embed,
   visitId,
   lines,
+  onInstructionsSaved,
 }: {
   embed: boolean;
   visitId: string;
   lines: Line[];
+  onInstructionsSaved?: (itemId: string, instructions: string | null) => void;
 }) {
   const panelId = useId();
   const [lang, setLang] = useState("en-IN");
   const [target, setTarget] = useState<"new" | string>("new");
   const [append, setAppend] = useState(true);
+  const [savePending, setSavePending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { status, line, error, start, stop, clearLine } = useSpeechRecognition(lang);
 
   const selectedLabel = useMemo(() => {
@@ -173,10 +177,30 @@ export function VisitRxVoicePanel({
       {error ? <p className="mt-1 text-[12px] text-error">{error}</p> : null}
 
       {target !== "new" && lines.some((l) => l.id === target) ? (
-        <form action={updatePrescriptionItemInstructions} className="mt-3 space-y-2 rounded-lg border border-outline-variant/25 bg-surface-container-low/50 p-3">
-          <input type="hidden" name="item_id" value={target} />
-          <input type="hidden" name="visit_id" value={visitId} />
-          <input type="hidden" name="embed" value={embed ? "1" : ""} />
+        <form
+          className="mt-3 space-y-2 rounded-lg border border-outline-variant/25 bg-surface-container-low/50 p-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setSaveError(null);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
+            fd.set("item_id", target);
+            fd.set("visit_id", visitId);
+            fd.set("embed", embed ? "1" : "");
+            setSavePending(true);
+            try {
+              const res = await updatePrescriptionItemInstructionsAction(fd);
+              if (res.ok) {
+                const instr = String(fd.get("instructions") ?? "").trim() || null;
+                onInstructionsSaved?.(target, instr);
+              } else {
+                setSaveError(res.error);
+              }
+            } finally {
+              setSavePending(false);
+            }
+          }}
+        >
           <label className="flex flex-col gap-1">
             <span className="text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
               Instructions for selected medicine
@@ -189,9 +213,10 @@ export function VisitRxVoicePanel({
               key={target}
             />
           </label>
-          <button type="submit" className="btn-secondary btn-compact text-xs">
-            Save instructions for this line
+          <button type="submit" className="btn-secondary btn-compact text-xs" disabled={savePending}>
+            {savePending ? "Saving…" : "Save instructions for this line"}
           </button>
+          {saveError ? <p className="text-[12px] text-error">{saveError}</p> : null}
         </form>
       ) : null}
     </section>
