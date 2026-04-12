@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
-import { regeneratePrescriptionPdfForm } from "@/app/(portal)/invoicing/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { canManageInvoices } from "@/lib/auth/invoice-access";
 import { getUserAccess } from "@/lib/auth/get-user-access";
@@ -11,13 +10,14 @@ import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-tests";
 import { inferSpeciesClass, SPECIES_CLASS_OPTIONS } from "@/lib/clinical/species-class";
 import { SubmitButton } from "@/components/web/submit-button";
-import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
 import { VisitPrescriptionBlockClient } from "@/components/clinical/visit-prescription-block-client";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
+import { VisitSavePendingBanner } from "@/components/clinical/visit-save-pending";
+import { VisitSaveFooter } from "@/components/clinical/visit-save-footer";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
 
 export const dynamic = "force-dynamic";
@@ -151,15 +151,7 @@ export default async function VisitDetailsPage({
 
   const prescriptionId = await ensurePrescriptionForVisit(visit.id);
 
-  const { data: rxMeta } = await supabase.from("prescriptions").select("pdf_url").eq("id", prescriptionId).maybeSingle();
-  const prescriptionPdfUrl = rxMeta?.pdf_url
-    ? await resolveSignedImageUrl(supabase, rxMeta.pdf_url, { expiresIn: 3600 })
-    : null;
-
   const canInvoice = canManageInvoices(access);
-  const canRxPdf =
-    access.isSuperAdmin ||
-    ["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist", "lab_technician"].includes(role);
 
   const { data: rxItems, error: rxItemsError } = await supabase
     .from("prescription_items")
@@ -216,20 +208,11 @@ export default async function VisitDetailsPage({
           </p>
         </div>
       ) : null}
-      {showRxPdfBanner ? (
-        <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
-          <p className="font-headline font-bold text-emerald-900">Prescription PDF ready</p>
-          <p className={embed ? "mt-0.5 text-[11px] text-emerald-900/90" : "mt-1 text-emerald-800/95"}>
-            The file was saved to storage. Use <strong>Open printable prescription (PDF)</strong> below or{" "}
-            <strong>Download PDF</strong> to view it.
-          </p>
-        </div>
-      ) : null}
       {showRxItemBanner ? (
         <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
           <p className="font-headline font-bold text-sky-900">Medicine line added</p>
           <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
-            Generate or refresh the prescription PDF when you are ready to print it for the owner.
+            Lines are saved on this visit and will appear in the visit report PDF under Prescription.
           </p>
         </div>
       ) : null}
@@ -385,6 +368,7 @@ export default async function VisitDetailsPage({
         >
           <input type="hidden" name="visit_id" value={visit.id} />
           <input type="hidden" name="embed" value={embed ? "1" : ""} />
+          <VisitSavePendingBanner />
           <p className={embed ? "text-[11px] text-slate-600" : "text-[12px] text-on-surface-variant"}>
             Clinical evaluation and consultation save together — use one button below for SOAP + exam fields.
           </p>
@@ -580,22 +564,6 @@ export default async function VisitDetailsPage({
             placeholder="Treatment plan"
             defaultValue={visit.treatment_plan ?? ""}
           />
-          <div>
-              <label className="mb-0.5 block text-[11px] font-semibold text-on-surface-variant">Follow-up</label>
-            <input
-                className="input-soft input-compact"
-              type="datetime-local"
-              name="follow_up_at"
-                defaultValue={visit.follow_up_at ? new Date(visit.follow_up_at).toISOString().slice(0, 16) : ""}
-            />
-          </div>
-            <label className="flex items-center gap-2 text-[13px]">
-            <input type="checkbox" name="complete_visit" defaultChecked={Boolean(visit.completed_at)} />
-            Mark visit complete
-          </label>
-            <p className="text-[11px] text-on-surface-variant">
-              Use <strong>Save entire visit</strong> and <strong>Complete visit</strong> at the bottom of this page (after attachments).
-            </p>
           </div>
         </VisitSection>
         </form>
@@ -612,43 +580,9 @@ export default async function VisitDetailsPage({
           }
         >
           <p className="text-[11px] text-on-surface-variant">
-            Medicines and instructions are stored on this visit (no separate prescription screen). Generate a PDF for the owner. Billing uses{" "}
+            Medicines and instructions are saved on this visit and appear under <strong>Prescription</strong> in the visit report PDF. Billing uses{" "}
             <strong>Billing / invoice</strong> on this visit.
           </p>
-          <div
-            className={`rounded-lg border px-3 py-2 text-[11px] ${
-              prescriptionPdfUrl ? "border-emerald-200/80 bg-emerald-50/60 text-emerald-950" : "border-amber-200/90 bg-amber-50/80 text-amber-950"
-            }`}
-            role="status"
-          >
-            <p className="font-semibold">
-              PDF status: {prescriptionPdfUrl ? "Ready — opens in a new tab below." : "Not generated — add medicines, then click Save prescription PDF."}
-            </p>
-          </div>
-          {canRxPdf ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <form action={regeneratePrescriptionPdfForm}>
-                <input type="hidden" name="prescription_id" value={prescriptionId} />
-                <input type="hidden" name="visit_id" value={visit.id} />
-                <input type="hidden" name="embed" value={embed ? "1" : ""} />
-                <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Generating PDF…">
-                  Save prescription PDF
-                </SubmitButton>
-        </form>
-              {prescriptionPdfUrl ? (
-                <a
-                  className="text-xs font-semibold text-primary underline"
-                  href={prescriptionPdfUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Download PDF
-                </a>
-              ) : null}
-            </div>
-          ) : (
-            <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
-          )}
           <VisitPrescriptionBlockClient
             key={visit.id}
             initialItems={(rxItems ?? []).map((r) => ({
@@ -664,23 +598,6 @@ export default async function VisitDetailsPage({
             embed={embed}
             showVoiceDictation={showVoiceDictation}
           />
-
-          <div className="mt-4 flex flex-col gap-2 border-t border-outline-variant/15 pt-3 sm:flex-row sm:flex-wrap sm:items-center">
-            {prescriptionPdfUrl ? (
-              <a
-                className="btn-primary btn-compact text-xs"
-                href={prescriptionPdfUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open printable prescription (PDF)
-              </a>
-            ) : (
-              <span className="text-[11px] text-on-surface-variant">
-                Printable PDF appears here after you save the prescription PDF above.
-              </span>
-            )}
-          </div>
         </VisitSection>
         </div>
 
@@ -707,32 +624,14 @@ export default async function VisitDetailsPage({
           </ul>
         </VisitSection>
 
-        <div
-          className={
-            embed
-              ? "mt-3 rounded-lg border border-primary/25 bg-primary-fixed/10 px-2 py-2 text-[11px]"
-              : "mx-auto mt-4 flex max-w-5xl flex-col gap-2 rounded-xl border border-outline-variant/25 bg-surface-container-low/80 px-4 py-4"
+        <VisitSaveFooter
+          embed={embed}
+          defaultFollowUpIsoSlice={
+            visit.follow_up_at ? new Date(visit.follow_up_at as string).toISOString().slice(0, 16) : ""
           }
-        >
-          <p className={embed ? "text-slate-700" : "text-[12px] font-semibold text-on-surface"}>Save clinical visit</p>
-          <p className={embed ? "text-[11px] text-slate-600" : "text-[11px] text-on-surface-variant"}>
-            Saves clinical evaluation, SOAP fields, and completion status. Prescription lines save separately when you add or update them above.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" form="form-visit-record" className="btn-primary btn-compact">
-              Save entire visit
-            </button>
-            <button
-              type="submit"
-              form="form-visit-record"
-              name="complete_visit"
-              value="true"
-              className="btn-secondary btn-compact"
-            >
-              Complete visit
-            </button>
-          </div>
-        </div>
+          defaultCompleted={Boolean(visit.completed_at)}
+          showSavedSuccess={showVisitSavedBanner}
+        />
       </div>
     </>
   );

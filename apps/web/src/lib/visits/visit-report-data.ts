@@ -58,15 +58,10 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
 
   const { data: evaluation } = await supabase.from("visit_clinical_evaluations").select("*").eq("visit_id", visitId).maybeSingle();
 
-  const { data: prescRows, error: prescErr } = await supabase
-    .from("prescriptions")
-    .select("prescription_items(medicine_name, dosage, frequency, duration, instructions)")
-    .eq("visit_id", visitId)
-    .order("created_at", { ascending: true })
-    .limit(1);
+  const { data: prescList, error: prescErr } = await supabase.from("prescriptions").select("id").eq("visit_id", visitId);
 
   if (prescErr) throw new Error(prescErr.message);
-  const presc = prescRows?.[0] ?? null;
+  const prescIds = (prescList ?? []).map((p) => p.id as string).filter(Boolean);
 
   const petRaw = visit.pets as { name?: string; species?: string; breed?: string } | { name?: string }[] | null;
   const pet = (Array.isArray(petRaw) ? petRaw[0] ?? null : petRaw) as {
@@ -107,16 +102,23 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
       ? (testsRef as string[]).filter(Boolean).join(", ")
       : "";
 
-  const items = presc?.prescription_items as Record<string, string | null>[] | null | undefined;
-  const rxLines = Array.isArray(items)
-    ? items.map((row) => ({
-        medicine_name: String(row.medicine_name ?? ""),
-        dosage: String(row.dosage ?? ""),
-        frequency: String(row.frequency ?? ""),
-        duration: String(row.duration ?? ""),
-        instructions: String(row.instructions ?? ""),
-      }))
-    : [];
+  let rxLines: VisitReportPayload["rxLines"] = [];
+  if (prescIds.length) {
+    const { data: itemRows, error: itemsErr } = await supabase
+      .from("prescription_items")
+      .select("medicine_name, dosage, frequency, duration, instructions")
+      .in("prescription_id", prescIds)
+      .order("created_at", { ascending: true });
+
+    if (itemsErr) throw new Error(itemsErr.message);
+    rxLines = (itemRows ?? []).map((row) => ({
+      medicine_name: String(row.medicine_name ?? ""),
+      dosage: String(row.dosage ?? ""),
+      frequency: String(row.frequency ?? ""),
+      duration: String(row.duration ?? ""),
+      instructions: String(row.instructions ?? ""),
+    }));
+  }
 
   const t0 = visit.completed_at ?? visit.started_at ?? visit.created_at;
   const visitWhen = t0 ? new Date(t0 as string).toLocaleString() : "—";
