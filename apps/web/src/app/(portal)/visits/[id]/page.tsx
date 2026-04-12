@@ -16,6 +16,7 @@ import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
+import { VisitRxVoicePanel } from "@/components/clinical/visit-rx-voice-panel";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
@@ -85,6 +86,7 @@ export default async function VisitDetailsPage({
   const showVisitSavedBanner = searchParamOne(sp, "saved") === "1";
   const showRxPdfBanner = searchParamOne(sp, "rx_pdf") === "1";
   const showRxItemBanner = searchParamOne(sp, "rx_item") === "1";
+  const showRxEditBanner = searchParamOne(sp, "rx_edit") === "1";
 
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
@@ -228,6 +230,14 @@ export default async function VisitDetailsPage({
           <p className="font-headline font-bold text-sky-900">Medicine line added</p>
           <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
             Generate or refresh the prescription PDF when you are ready to print it for the owner.
+          </p>
+        </div>
+      ) : null}
+      {showRxEditBanner ? (
+        <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
+          <p className="font-headline font-bold text-sky-900">Instructions updated</p>
+          <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
+            Regenerate the visit report PDF if you need the printed summary to match.
           </p>
         </div>
       ) : null}
@@ -582,19 +592,9 @@ export default async function VisitDetailsPage({
             <input type="checkbox" name="complete_visit" defaultChecked={Boolean(visit.completed_at)} />
             Mark visit complete
           </label>
-            <div className="flex flex-wrap gap-2">
-              <SubmitButton className="btn-primary btn-compact" pendingLabel="Saving visit…">
-                Save entire visit
-              </SubmitButton>
-              <button
-                type="submit"
-                name="complete_visit"
-                value="true"
-                className="btn-secondary btn-compact"
-              >
-                Complete visit
-          </button>
-            </div>
+            <p className="text-[11px] text-on-surface-variant">
+              Use <strong>Save entire visit</strong> and <strong>Complete visit</strong> at the bottom of this page (after attachments).
+            </p>
           </div>
         </VisitSection>
         </form>
@@ -633,7 +633,7 @@ export default async function VisitDetailsPage({
                 <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Generating PDF…">
                   Save prescription PDF
                 </SubmitButton>
-              </form>
+        </form>
               {prescriptionPdfUrl ? (
                 <a
                   className="text-xs font-semibold text-primary underline"
@@ -648,6 +648,17 @@ export default async function VisitDetailsPage({
           ) : (
             <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
           )}
+          {showVoiceDictation ? (
+            <VisitRxVoicePanel
+              embed={embed}
+              visitId={visit.id}
+              lines={(rxItems ?? []).map((r) => ({
+                id: r.id,
+                medicine_name: String(r.medicine_name ?? ""),
+                instructions: r.instructions ?? null,
+              }))}
+            />
+          ) : null}
           <form id="form-rx-add" action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
             <input type="hidden" name="prescription_id" value={prescriptionId} />
             <input type="hidden" name="visit_id" value={visit.id} />
@@ -657,13 +668,14 @@ export default async function VisitDetailsPage({
             <input className="input-soft input-compact" name="frequency" placeholder="Frequency" />
             <input className="input-soft input-compact" name="duration" placeholder="Duration" />
             <textarea
+              id="rx-new-instructions"
               className="input-soft input-compact md:col-span-2 min-h-[48px]"
               name="instructions"
-              placeholder="Instructions (dictate via mic — target: Rx — Instructions)"
+              placeholder="Instructions (use the prescription mic above, or type here)"
             />
-            <SubmitButton className="btn-primary btn-compact md:col-span-2" pendingLabel="Adding…">
+            <button type="submit" className="btn-primary btn-compact md:col-span-2">
               Add medicine line
-            </SubmitButton>
+            </button>
           </form>
 
           <div className="overflow-x-auto">
@@ -733,6 +745,33 @@ export default async function VisitDetailsPage({
             {!attachments?.length ? <li className="text-on-surface-variant">No attachments yet.</li> : null}
           </ul>
         </VisitSection>
+
+        <div
+          className={
+            embed
+              ? "mt-3 rounded-lg border border-primary/25 bg-primary-fixed/10 px-2 py-2 text-[11px]"
+              : "mx-auto mt-4 flex max-w-5xl flex-col gap-2 rounded-xl border border-outline-variant/25 bg-surface-container-low/80 px-4 py-4"
+          }
+        >
+          <p className={embed ? "text-slate-700" : "text-[12px] font-semibold text-on-surface"}>Save clinical visit</p>
+          <p className={embed ? "text-[11px] text-slate-600" : "text-[11px] text-on-surface-variant"}>
+            Saves clinical evaluation, SOAP fields, and completion status. Prescription lines save separately when you add or update them above.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" form="form-visit-record" className="btn-primary btn-compact">
+              Save entire visit
+            </button>
+            <button
+              type="submit"
+              form="form-visit-record"
+              name="complete_visit"
+              value="true"
+              className="btn-secondary btn-compact"
+            >
+              Complete visit
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );

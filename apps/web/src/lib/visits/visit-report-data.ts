@@ -58,11 +58,15 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
 
   const { data: evaluation } = await supabase.from("visit_clinical_evaluations").select("*").eq("visit_id", visitId).maybeSingle();
 
-  const { data: presc } = await supabase
+  const { data: prescRows, error: prescErr } = await supabase
     .from("prescriptions")
     .select("prescription_items(medicine_name, dosage, frequency, duration, instructions)")
     .eq("visit_id", visitId)
-    .maybeSingle();
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (prescErr) throw new Error(prescErr.message);
+  const presc = prescRows?.[0] ?? null;
 
   const petRaw = visit.pets as { name?: string; species?: string; breed?: string } | { name?: string }[] | null;
   const pet = (Array.isArray(petRaw) ? petRaw[0] ?? null : petRaw) as {
