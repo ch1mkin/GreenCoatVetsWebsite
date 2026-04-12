@@ -19,13 +19,7 @@ const PATIENT_VIEWS = [
   { id: "soc", label: "S.O.C." },
   { id: "financial", label: "Financial" },
   { id: "communication", label: "Communication" },
-  { id: "boarding", label: "Boarding" },
-  { id: "dental", label: "Dental" },
-  { id: "images", label: "Image annotations" },
-  { id: "summaries", label: "Summaries" },
-  { id: "imaging", label: "Imaging" },
   { id: "medication", label: "Medication" },
-  { id: "vaccinations", label: "Vaccinations" },
   { id: "appointments", label: "Appointments" },
   { id: "attachments", label: "Attachments" },
   { id: "merge", label: "Merge" },
@@ -359,15 +353,6 @@ export default async function PetRecordPage({
               </div>
             ) : null}
 
-            {safeView === "vaccinations" ? (
-              <div className="card-soft text-sm text-on-surface-variant">
-                <Link href="/vaccinations" className="font-semibold text-primary">
-                  Open vaccination register
-                </Link>
-                <p className="mt-2">Patient-specific vaccination history will appear here as visits are recorded.</p>
-              </div>
-            ) : null}
-
             {safeView === "medication" ? (
               <div className="card-soft text-sm">
                 <p className="font-semibold text-on-background">Medication history from prescriptions</p>
@@ -520,14 +505,11 @@ export default async function PetRecordPage({
               </div>
             ) : null}
 
-            {["soc", "boarding", "dental", "images", "summaries", "imaging", "merge"].includes(
-              safeView
-            ) ? (
+            {["soc", "merge"].includes(safeView) ? (
               <div className="card-soft text-sm text-on-surface-variant">
                 <p className="font-medium text-on-background">This section is being brought to parity with your data model.</p>
                 <p className="mt-2">
-                  Standard-of-care schedules, boarding, dental charts, imaging annotations, summaries, imaging reports,
-                  and record merge will connect to existing visits and billing in upcoming iterations.
+                  Standard-of-care schedules and record merge will connect to existing visits and billing in upcoming iterations.
                 </p>
               </div>
             ) : null}
