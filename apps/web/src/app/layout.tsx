@@ -19,14 +19,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: title, template: `%s · ${branding.product_name}` },
     description: "Veterinary clinic operations — appointments, records, pharmacy, and payments.",
-    ...(icon
-      ? {
-          icons: {
-            icon: [{ url: icon, type: "image/png" }],
-            apple: [{ url: icon }],
-          },
-        }
-      : {}),
+    icons: {
+      icon: [
+        ...(icon ? [{ url: icon, type: "image/png" as const }] : []),
+        { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+      ],
+      apple: icon ? [{ url: icon }] : [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    },
   };
 }
 

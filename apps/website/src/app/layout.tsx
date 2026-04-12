@@ -27,14 +27,13 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: `${branding.product_name} — Clinical Sanctuary`, template: `%s · ${branding.product_name}` },
     description: "Veterinary care, appointments, store, and wellness — GreenCoatVets experience.",
-    ...(icon
-      ? {
-          icons: {
-            icon: [{ url: icon, type: "image/png" }],
-            apple: [{ url: icon }],
-          },
-        }
-      : {}),
+    icons: {
+      icon: [
+        ...(icon ? [{ url: icon, type: "image/png" as const }] : []),
+        { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+      ],
+      apple: icon ? [{ url: icon }] : [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    },
   };
 }
 
