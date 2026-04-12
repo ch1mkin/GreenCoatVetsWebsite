@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-tests";
@@ -228,6 +229,14 @@ async function syncVisitDoctorFromAppointment(
     .is("doctor_id", null);
 }
 
+function redirectAfterVisitSave(visitId: string, formData: FormData) {
+  const embed = String(formData.get("embed") ?? "").trim();
+  const q = new URLSearchParams();
+  q.set("saved", "1");
+  if (embed === "1") q.set("embed", "1");
+  redirect(`/visits/${visitId}?${q.toString()}`);
+}
+
 export async function saveVisitConsultation(formData: FormData) {
   const visitId = String(formData.get("visit_id") ?? "").trim();
   if (!visitId) throw new Error("Visit id is required.");
@@ -240,6 +249,7 @@ export async function saveVisitConsultation(formData: FormData) {
   revalidatePath("/appointments");
   revalidatePath(`/visits/${visitId}`);
   revalidatePath("/medical-records");
+  redirectAfterVisitSave(visitId, formData);
 }
 
 export async function saveVisitClinicalEvaluation(formData: FormData) {
@@ -252,6 +262,7 @@ export async function saveVisitClinicalEvaluation(formData: FormData) {
   await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
 
   revalidatePath(`/visits/${visitId}`);
+  redirectAfterVisitSave(visitId, formData);
 }
 
 /** Persists clinical evaluation and SOAP in one submit so users do not lose half-filled sections. */
@@ -269,6 +280,7 @@ export async function saveVisitRecord(formData: FormData) {
   revalidatePath("/appointments");
   revalidatePath(`/visits/${visitId}`);
   revalidatePath("/medical-records");
+  redirectAfterVisitSave(visitId, formData);
 }
 
 export async function ensurePrescriptionForVisit(visitId: string): Promise<string> {

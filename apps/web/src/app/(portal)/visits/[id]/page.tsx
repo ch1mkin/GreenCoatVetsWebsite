@@ -53,7 +53,7 @@ export default async function VisitDetailsPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { embed?: string };
+  searchParams?: { embed?: string; saved?: string };
 }) {
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/login");
@@ -320,6 +320,7 @@ export default async function VisitDetailsPage({
           className={embed ? "space-y-2" : "space-y-4"}
         >
           <input type="hidden" name="visit_id" value={visit.id} />
+          <input type="hidden" name="embed" value={embed ? "1" : ""} />
           <p className={embed ? "text-[11px] text-slate-600" : "text-[12px] text-on-surface-variant"}>
             Clinical evaluation and consultation save together — use one button below for SOAP + exam fields.
           </p>

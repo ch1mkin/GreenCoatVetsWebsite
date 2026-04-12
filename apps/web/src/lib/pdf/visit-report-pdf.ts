@@ -18,6 +18,7 @@ const WHITE = rgb(1, 1, 1);
 
 function sanitizePdfText(text: string): string {
   return text
+    .replace(/\u211e/g, "Rx")
     .replace(/\u20b9/g, "Rs.")
     .replace(/[\u2018\u2019\u2032]/g, "'")
     .replace(/[\u201c\u201d\u2033]/g, '"')

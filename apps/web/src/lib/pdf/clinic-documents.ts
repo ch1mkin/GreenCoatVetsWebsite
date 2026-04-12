@@ -40,6 +40,7 @@ const TABLE_HEAD = BRAND_PRIMARY;
  */
 function sanitizePdfText(text: string): string {
   return text
+    .replace(/\u211e/g, "Rx") // prescription symbol — WinAnsi / StandardFonts cannot encode U+211E
     .replace(/\u20b9/g, "Rs.")
     .replace(/\u20ac/g, "EUR ")
     .replace(/[\u2018\u2019\u2032]/g, "'")
@@ -656,7 +657,7 @@ export async function buildPrescriptionPdfBytes(opts: {
     y = titleY - 22;
   };
 
-  drawSectionTitle("\u211e Medications");
+  drawSectionTitle("Rx / Medications");
 
   for (let i = 0; i < opts.items.length; i++) {
     const it = opts.items[i];
