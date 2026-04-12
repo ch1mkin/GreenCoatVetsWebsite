@@ -83,7 +83,6 @@ export default async function VisitDetailsPage({
   const sp = await Promise.resolve(searchParams ?? {});
   const embed = searchParamOne(sp, "embed") === "1";
   const showVisitSavedBanner = searchParamOne(sp, "saved") === "1";
-  const showRxPdfBanner = searchParamOne(sp, "rx_pdf") === "1";
   const showRxItemBanner = searchParamOne(sp, "rx_item") === "1";
   const showRxEditBanner = searchParamOne(sp, "rx_edit") === "1";
 
