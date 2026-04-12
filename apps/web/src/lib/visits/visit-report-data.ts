@@ -109,7 +109,7 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
       ? (testsRef as string[]).filter(Boolean).join(", ")
       : "";
 
-  let rxLines: VisitReportPayload["rxLines"] = [];
+  const rxLines: VisitReportPayload["rxLines"] = [];
   if (prescRow?.id) {
     const { data: itemRows, error: itemsErr } = await supabase
       .from("prescription_items")
