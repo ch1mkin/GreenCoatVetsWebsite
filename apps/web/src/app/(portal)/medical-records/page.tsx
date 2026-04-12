@@ -67,7 +67,7 @@ export default async function MedicalRecordsPage({
     (v) => !existingVisitIds.has(v.id) && Boolean(v.diagnosis || v.symptoms || v.treatment_plan),
   );
   if (missing.length) {
-    await supabase.from("medical_records").upsert(
+    const { error: backfillErr } = await supabase.from("medical_records").insert(
       missing.map((v) => ({
         clinic_id,
         branch_id: v.branch_id,
@@ -76,8 +76,8 @@ export default async function MedicalRecordsPage({
         diagnosis: v.diagnosis ?? null,
         notes: v.treatment_plan ?? v.symptoms ?? null,
       })),
-      { onConflict: "visit_id" },
     );
+    if (backfillErr) throw new Error(backfillErr.message);
   }
 
   let recordsQuery = supabase

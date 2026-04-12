@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-tests";
+import { upsertMedicalRecordForVisit } from "@/lib/medical-records/upsert-by-visit";
 
 export async function createVisitFromAppointment(formData: FormData) {
   const appointmentId = String(formData.get("appointment_id") ?? "").trim();
@@ -121,19 +122,15 @@ async function persistVisitConsultation(
 
   const notesCombined = [symptoms, treatmentPlan].filter(Boolean).join("\n\n") || null;
 
-  const { error: medErr } = await supabase.from("medical_records").upsert(
-    {
-      clinic_id,
-      branch_id: visit.branch_id,
-      pet_id: visit.pet_id,
-      visit_id: visitId,
-      diagnosis: diagnosis || null,
-      notes: notesCombined,
-      lab_tests: null,
-    },
-    { onConflict: "visit_id" },
-  );
-  if (medErr) throw new Error(medErr.message);
+  await upsertMedicalRecordForVisit(supabase, {
+    clinic_id,
+    branch_id: visit.branch_id as string,
+    pet_id: visit.pet_id as string,
+    visit_id: visitId,
+    diagnosis: diagnosis || null,
+    notes: notesCombined,
+    lab_tests: null,
+  });
 }
 
 async function persistVisitClinicalEvaluation(
