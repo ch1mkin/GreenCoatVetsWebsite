@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import { summarizePrescriptionForDashboard } from "../../lib/formatPrescription";
 import { commonStyles } from "../../theme/commonStyles";
 import { theme } from "../../theme/theme";
-import { Appointment, Pet } from "../../types/app";
+import { Appointment, OwnerPrescription, OwnerVisitReport, Pet } from "../../types/app";
 import { PetAvatar } from "../../components/PetAvatar";
 
 type Vac = {
@@ -12,7 +14,6 @@ type Vac = {
   status: string | null;
   pets?: { name?: string | null } | null;
 };
-type Rx = { id: string; issued_at: string; notes: string | null };
 type Attachment = {
   id: string;
   file_name: string | null;
@@ -26,6 +27,7 @@ export function OwnerDashboardScreen({
   vaccinations,
   prescriptions,
   attachments,
+  visitReports,
   refreshing,
   onRefresh,
   onGoBook,
@@ -35,8 +37,9 @@ export function OwnerDashboardScreen({
   pets: Pet[];
   appointments: Appointment[];
   vaccinations: Vac[];
-  prescriptions: Rx[];
+  prescriptions: OwnerPrescription[];
   attachments: Attachment[];
+  visitReports: OwnerVisitReport[];
   refreshing: boolean;
   onRefresh: () => void;
   onGoBook: () => void;
@@ -212,5 +215,6 @@ const styles = StyleSheet.create({
   em: { fontWeight: "700", color: theme.onSurface, fontSize: 15 },
   alertLine: { color: theme.onSurfaceVariant, marginBottom: 6, fontSize: 14 },
   rxLine: { color: theme.onSurfaceVariant, marginBottom: 6, fontSize: 14 },
-  fileLine: { color: theme.onSurfaceVariant, fontSize: 14 },
+  fileTitle: { fontWeight: "700", color: theme.onSurface, fontSize: 14 },
+  fileLine: { color: theme.onSurfaceVariant, fontSize: 13, marginTop: 2 },
 });

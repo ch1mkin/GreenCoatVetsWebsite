@@ -35,6 +35,8 @@ import {
   DoctorNotification,
   Membership,
   Order,
+  OwnerPrescription,
+  OwnerVisitReport,
   Pet,
   ProductListItem,
   StaffDoctorOption,
@@ -112,7 +114,8 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
   const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [prescriptions, setPrescriptions] = useState<Array<{ id: string; issued_at: string; notes: string | null; pdf_url: string | null }>>([]);
+  const [prescriptions, setPrescriptions] = useState<OwnerPrescription[]>([]);
+  const [ownerVisitReports, setOwnerVisitReports] = useState<OwnerVisitReport[]>([]);
   const [vaccinations, setVaccinations] = useState<
     Array<{ id: string; vaccine_name: string; due_on: string | null; status: string | null; pets?: { name?: string | null } | null }>
   >([]);
@@ -376,7 +379,9 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
                 .limit(30),
               supabase
                 .from("prescriptions")
-                .select("id, issued_at, notes, pdf_url")
+                .select(
+                  "id, issued_at, notes, pdf_url, visit_id, pets(name), prescription_items(id, medicine_name, dosage, frequency, duration, instructions)"
+                )
                 .eq("clinic_id", membershipData.clinic_id)
                 .in("pet_id", petIds)
                 .order("issued_at", { ascending: false })
@@ -390,7 +395,7 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
                 .limit(30),
               supabase
                 .from("visits")
-                .select("id, pet_id, started_at, diagnosis")
+                .select("id, pet_id, started_at, diagnosis, visit_report_pdf_path, visit_report_pdf_generated_at, pets(name)")
                 .eq("clinic_id", membershipData.clinic_id)
                 .in("pet_id", petIds)
                 .order("started_at", { ascending: false })
@@ -411,8 +416,24 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
               return { id: row.id, vaccine_name: row.vaccine_name, due_on: row.due_on, status: row.status, pets: pet };
             })
           );
+          const rawRx = (prescriptionData ?? []) as Array<
+            OwnerPrescription & {
+              pets?: { name?: string | null } | { name?: string | null }[] | null;
+              prescription_items?: OwnerPrescription["prescription_items"];
+            }
+          >;
           setPrescriptions(
-            (prescriptionData as Array<{ id: string; issued_at: string; notes: string | null; pdf_url: string | null }>) ?? []
+            rawRx.map((row) => {
+              const p = row.pets;
+              const pet = Array.isArray(p) ? p[0] ?? null : p ?? null;
+              const items = row.prescription_items;
+              const flat = Array.isArray(items) ? items : [];
+              return {
+                ...row,
+                pets: pet,
+                prescription_items: flat,
+              };
+            })
           );
           setAttachments(
             (attachmentData as Array<{
@@ -424,12 +445,43 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
               visit_id: string | null;
             }>) ?? []
           );
-          setVisitSummaries((visitsData as VisitSummary[]) ?? []);
+          const vRows = (visitsData ?? []) as Array<
+            VisitSummary & {
+              visit_report_pdf_path?: string | null;
+              visit_report_pdf_generated_at?: string | null;
+              pets?: { name?: string | null } | { name?: string | null }[] | null;
+            }
+          >;
+          setVisitSummaries(
+            vRows.map((v) => ({
+              id: v.id,
+              pet_id: v.pet_id,
+              started_at: v.started_at,
+              diagnosis: v.diagnosis,
+            }))
+          );
+          setOwnerVisitReports(
+            vRows
+              .filter((v) => Boolean(v.visit_report_pdf_path?.trim()))
+              .map((v) => {
+                const p = v.pets;
+                const pet = Array.isArray(p) ? p[0] : p ?? null;
+                return {
+                  id: v.id,
+                  pet_id: v.pet_id,
+                  started_at: v.started_at,
+                  visit_report_pdf_path: v.visit_report_pdf_path as string,
+                  visit_report_pdf_generated_at: v.visit_report_pdf_generated_at ?? null,
+                  pet_name: pet?.name?.trim() || "Pet",
+                };
+              })
+          );
         } else {
           setVaccinations([]);
           setPrescriptions([]);
           setAttachments([]);
           setVisitSummaries([]);
+          setOwnerVisitReports([]);
         }
       } else {
         setOwnerTimeChangeRequests([]);
@@ -962,6 +1014,39 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
     await Linking.openURL(data.signedUrl);
   }
 
+  async function onOpenVisitReport(visitId: string) {
+    if (!membership?.clinic_id) return;
+    const row = ownerVisitReports.find((v) => v.id === visitId);
+    let path: string | null | undefined = row?.visit_report_pdf_path;
+    if (!path) {
+      const { data, error } = await supabase
+        .from("visits")
+        .select("visit_report_pdf_path")
+        .eq("id", visitId)
+        .eq("clinic_id", membership.clinic_id)
+        .maybeSingle();
+      if (error || !data?.visit_report_pdf_path) {
+        Alert.alert("No report", "Visit report PDF is not available yet.");
+        return;
+      }
+      path = data.visit_report_pdf_path;
+    }
+    if (!path?.trim()) {
+      Alert.alert("No report", "Visit report PDF is not available yet.");
+      return;
+    }
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+      await Linking.openURL(path);
+      return;
+    }
+    const { data, error } = await supabase.storage.from("medical-files").createSignedUrl(path, 60 * 20);
+    if (error || !data?.signedUrl) {
+      Alert.alert("Unable to open PDF", error?.message ?? "No URL generated");
+      return;
+    }
+    await Linking.openURL(data.signedUrl);
+  }
+
   async function onOpenLatestPrescriptionForAppointment(appointmentId: string) {
     if (!membership?.clinic_id) return;
     const { data: visit } = await supabase
@@ -1462,6 +1547,7 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
                       vaccinations={vaccinations}
                       prescriptions={prescriptions}
                       attachments={attachments}
+                      visitReports={ownerVisitReports}
                       refreshing={refreshing}
                       onRefresh={refreshData}
                       onGoBook={() => props.navigation.navigate("Book")}
@@ -1519,8 +1605,10 @@ function MobileHome({ onSignOut }: { onSignOut: () => void }) {
                       prescriptions={prescriptions}
                       vaccinations={vaccinations}
                       attachments={attachments}
+                      visitReports={ownerVisitReports}
                       onOpenAttachment={onOpenAttachment}
                       onOpenPrescriptionPdf={onOpenPrescriptionPdf}
+                      onOpenVisitReport={onOpenVisitReport}
                       refreshing={refreshing}
                       onRefresh={refreshData}
                     />

@@ -54,6 +54,37 @@ export type VisitSummary = {
   diagnosis: string | null;
 };
 
+/** One line from `prescription_items` (portal / visit Rx). */
+export type PrescriptionItemLine = {
+  id: string;
+  medicine_name: string;
+  dosage: string | null;
+  frequency: string | null;
+  duration: string | null;
+  instructions: string | null;
+};
+
+/** Prescription header + lines for owner Health / dashboard. */
+export type OwnerPrescription = {
+  id: string;
+  issued_at: string;
+  notes: string | null;
+  pdf_url: string | null;
+  visit_id: string | null;
+  pets?: { name?: string | null } | null;
+  prescription_items?: PrescriptionItemLine[] | null;
+};
+
+/** Visit with a generated PDF report for owner download. */
+export type OwnerVisitReport = {
+  id: string;
+  pet_id: string;
+  started_at: string | null;
+  visit_report_pdf_path: string;
+  visit_report_pdf_generated_at: string | null;
+  pet_name: string;
+};
+
 export type StaffDoctorOption = {
   id: string;
   full_name: string;

@@ -1,13 +1,8 @@
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { formatPrescriptionItemLine } from "../lib/formatPrescription";
 import { commonStyles } from "../theme/commonStyles";
 import { theme } from "../theme/theme";
-
-type Prescription = {
-  id: string;
-  issued_at: string;
-  notes: string | null;
-  pdf_url: string | null;
-};
+import type { OwnerPrescription, OwnerVisitReport } from "../types/app";
 
 type Vaccination = {
   id: string;
@@ -20,12 +15,14 @@ export function OwnerHealthScreen({
   prescriptions,
   vaccinations,
   attachments,
+  visitReports,
   onOpenAttachment,
   onOpenPrescriptionPdf,
+  onOpenVisitReport,
   refreshing,
   onRefresh,
 }: {
-  prescriptions: Prescription[];
+  prescriptions: OwnerPrescription[];
   vaccinations: Vaccination[];
   attachments: Array<{
     id: string;
@@ -33,8 +30,10 @@ export function OwnerHealthScreen({
     created_at: string;
     visit_id: string | null;
   }>;
+  visitReports: OwnerVisitReport[];
   onOpenAttachment: (attachmentId: string) => Promise<void>;
   onOpenPrescriptionPdf: (prescriptionId: string) => Promise<void>;
+  onOpenVisitReport: (visitId: string) => Promise<void>;
   refreshing: boolean;
   onRefresh: () => void;
 }) {
@@ -48,24 +47,49 @@ export function OwnerHealthScreen({
     >
       <View style={commonStyles.card}>
         <Text style={commonStyles.cardTitle}>Prescriptions</Text>
-        {prescriptions.map((prescription, i) => (
-          <View
-            style={[commonStyles.row, i === prescriptions.length - 1 && commonStyles.rowLast]}
-            key={prescription.id}
-          >
-            <View>
-              <Text style={styles.itemTitle}>{new Date(prescription.issued_at).toLocaleDateString()}</Text>
-              <Text style={commonStyles.muted}>{prescription.notes ?? "No notes"}</Text>
-            </View>
-            <Pressable
-              style={[commonStyles.btnOutline, !prescription.pdf_url && styles.disabledBtn]}
-              disabled={!prescription.pdf_url}
-              onPress={() => onOpenPrescriptionPdf(prescription.id)}
+        <Text style={[commonStyles.muted, { marginBottom: 12 }]}>
+          Medicines recorded at the clinic for your pets. Lines match what staff saved on the visit.
+        </Text>
+        {prescriptions.map((prescription, i) => {
+          const lines = prescription.prescription_items ?? [];
+          const hasPdf = Boolean(prescription.pdf_url?.trim());
+          return (
+            <View
+              style={[styles.rxBlock, i === prescriptions.length - 1 && styles.rxBlockLast]}
+              key={prescription.id}
             >
-              <Text style={commonStyles.btnOutlineText}>PDF</Text>
-            </Pressable>
-          </View>
-        ))}
+              <View style={styles.rxHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.itemTitle}>
+                    {new Date(prescription.issued_at).toLocaleDateString()}
+                    {prescription.pets?.name ? ` · ${prescription.pets.name}` : ""}
+                  </Text>
+                  {prescription.notes?.trim() ? (
+                    <Text style={[commonStyles.muted, { marginTop: 4 }]}>{prescription.notes.trim()}</Text>
+                  ) : null}
+                </View>
+                <Pressable
+                  style={[commonStyles.btnOutline, !hasPdf && styles.disabledBtn]}
+                  disabled={!hasPdf}
+                  onPress={() => onOpenPrescriptionPdf(prescription.id)}
+                >
+                  <Text style={commonStyles.btnOutlineText}>Rx PDF</Text>
+                </Pressable>
+              </View>
+              {lines.length ? (
+                <View style={styles.lines}>
+                  {lines.map((line) => (
+                    <Text key={line.id} style={styles.lineText}>
+                      • {formatPrescriptionItemLine(line)}
+                    </Text>
+                  ))}
+                </View>
+              ) : (
+                <Text style={[commonStyles.muted, { marginTop: 6 }]}>No medicine lines on file for this Rx.</Text>
+              )}
+            </View>
+          );
+        })}
         {!prescriptions.length ? <Text style={commonStyles.emptyState}>No prescriptions on file.</Text> : null}
       </View>
 
@@ -88,16 +112,41 @@ export function OwnerHealthScreen({
       </View>
 
       <View style={commonStyles.card}>
-        <Text style={commonStyles.cardTitle}>Medical files</Text>
+        <Text style={commonStyles.cardTitle}>Visit reports (PDF)</Text>
+        <Text style={[commonStyles.muted, { marginBottom: 12 }]}>
+          Summary PDFs generated after visits — same as in your clinic portal.
+        </Text>
+        {visitReports.map((vr, i) => (
+          <View style={[styles.fileRow, i === visitReports.length - 1 && styles.fileRowLast]} key={vr.id}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.itemTitle}>{vr.pet_name}</Text>
+              <Text style={commonStyles.muted}>
+                {vr.started_at ? new Date(vr.started_at).toLocaleString() : "—"}
+                {vr.visit_report_pdf_generated_at
+                  ? ` · PDF saved ${new Date(vr.visit_report_pdf_generated_at).toLocaleDateString()}`
+                  : ""}
+              </Text>
+            </View>
+            <Pressable style={commonStyles.btnPrimary} onPress={() => onOpenVisitReport(vr.id)}>
+              <Text style={commonStyles.btnPrimaryText}>Open</Text>
+            </Pressable>
+          </View>
+        ))}
+        {!visitReports.length ? <Text style={commonStyles.emptyState}>No visit reports yet.</Text> : null}
+      </View>
+
+      <View style={commonStyles.card}>
+        <Text style={commonStyles.cardTitle}>Files from visits</Text>
+        <Text style={[commonStyles.muted, { marginBottom: 12 }]}>
+          Documents the clinic attached to visits (lab results, images, etc.).
+        </Text>
         {attachments.map((attachment, i) => (
-          <View
-            style={[styles.fileRow, i === attachments.length - 1 && styles.fileRowLast]}
-            key={attachment.id}
-          >
+          <View style={[styles.fileRow, i === attachments.length - 1 && styles.fileRowLast]} key={attachment.id}>
             <View style={{ flex: 1 }}>
               <Text style={styles.itemTitle}>{attachment.file_name ?? "File"}</Text>
               <Text style={commonStyles.muted}>
-                {new Date(attachment.created_at).toLocaleString()} · Visit {attachment.visit_id?.slice(0, 8) ?? "—"}…
+                {new Date(attachment.created_at).toLocaleString()}
+                {attachment.visit_id ? ` · Visit ${attachment.visit_id.slice(0, 8)}…` : ""}
               </Text>
             </View>
             <Pressable style={commonStyles.btnPrimary} onPress={() => onOpenAttachment(attachment.id)}>
@@ -113,6 +162,15 @@ export function OwnerHealthScreen({
 
 const styles = StyleSheet.create({
   itemTitle: { fontWeight: "700", color: theme.onSurface, fontSize: 15 },
+  rxBlock: {
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.outlineVariant,
+  },
+  rxBlockLast: { borderBottomWidth: 0 },
+  rxHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  lines: { marginTop: 8, paddingLeft: 4, gap: 4 },
+  lineText: { fontSize: 13, color: theme.onSurfaceVariant, lineHeight: 20 },
   fileRow: {
     flexDirection: "row",
     alignItems: "center",
