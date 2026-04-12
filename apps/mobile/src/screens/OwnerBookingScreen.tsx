@@ -193,7 +193,7 @@ export function OwnerBookingScreen({
               placeholder="Pet name"
               placeholderTextColor={theme.outline}
             />
-            <Text style={[commonStyles.sectionLabel, { marginTop: 12 }]}>Species (scientific)</Text>
+            <Text style={[commonStyles.sectionLabel, { marginTop: 12 }]}>Species</Text>
             <View style={styles.speciesChipWrap}>
               {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
                 <Pressable

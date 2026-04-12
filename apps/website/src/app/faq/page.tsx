@@ -20,7 +20,7 @@ const FAQ_ITEMS: FaqItem[] = [
     answer: (
       <>
         <p className="mb-3">
-          We provide expert care for <strong>canines, felines, exotics, avian species, and equines</strong>. Whether it&apos;s a puppy,
+          We provide expert care for <strong>canines, felines, exotics, avian, and equine</strong> patients. Whether it&apos;s a puppy,
           parrot, or pony — we&apos;ve got them covered.
         </p>
       </>

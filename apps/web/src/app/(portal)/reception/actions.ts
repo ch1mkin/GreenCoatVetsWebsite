@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
+import { normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { createClient } from "@/lib/supabase/server";
 
 const STAFF_ROLES = new Set([
@@ -36,7 +37,7 @@ export async function createWalkInGuestPatient(formData: FormData) {
   const ownerRaw = String(formData.get("owner_name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const petName = String(formData.get("pet_name") ?? "").trim();
-  const species = String(formData.get("species") ?? "").trim() || "unknown";
+  const species = normalizeLegacySpeciesToCanonical(String(formData.get("species") ?? "").trim() || "unknown");
   const branchId = String(formData.get("branch_id") ?? "").trim();
   const createAppointment = String(formData.get("create_appointment") ?? "") === "on";
   const notes = String(formData.get("notes") ?? "").trim();

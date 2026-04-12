@@ -7,6 +7,7 @@ import { AppShell } from "@/components/web/app-shell";
 import { RecordVisitBeacon } from "@/components/workspace/record-visit-beacon";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { formatInr } from "@/lib/format-currency";
+import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
 import { buildSignedUrlMap, resolveSignedImageUrl, urlForDisplay } from "@/lib/storage/resolve-signed-image-url";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -193,7 +194,7 @@ export default async function PetRecordPage({
       <RecordVisitBeacon tab={patientTab} />
       <AppShell
         title={pet.name}
-        subtitle={`Patient record · ${pet.species}${pet.breed ? ` · ${pet.breed}` : ""}`}
+        subtitle={`Patient record · ${formatSpeciesDisplay(pet.species)}${pet.breed ? ` · ${pet.breed}` : ""}`}
         activeHref="/pets"
         navGroups={navGroups}
         recordTabs={[patientTab]}
@@ -268,7 +269,7 @@ export default async function PetRecordPage({
             {safeView === "details" ? (
               <div className="card-soft grid gap-4 md:grid-cols-2">
                 <Field label="Name" value={pet.name} />
-                <Field label="Species" value={pet.species} />
+                <Field label="Species" value={formatSpeciesDisplay(pet.species)} />
                 <Field label="Breed" value={pet.breed ?? "—"} />
                 <Field label="Gender" value={pet.gender ?? "—"} />
                 <Field label="Color" value={pet.color ?? "—"} />

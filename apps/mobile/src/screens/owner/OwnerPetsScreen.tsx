@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   DEFAULT_PET_SPECIES_BOOKING_VALUE,
+  formatSpeciesLabel,
   normalizeLegacySpeciesToCanonical,
   PET_SPECIES_BOOKING_OPTIONS,
 } from "@saasclinics/lib";
@@ -86,7 +87,7 @@ export function OwnerPetsScreen({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.petName}>{pet.name}</Text>
                   <Text style={commonStyles.muted}>
-                    {pet.species}
+                    {formatSpeciesLabel(pet.species)}
                     {pet.breed ? ` · ${pet.breed}` : ""}
                   </Text>
                 </View>
@@ -105,7 +106,7 @@ export function OwnerPetsScreen({
                   </View>
                   <Text style={commonStyles.sectionLabel}>Edit</Text>
                   <TextInput style={commonStyles.input} value={editName} onChangeText={setEditName} placeholder="Name" placeholderTextColor={theme.outline} />
-                  <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Species (scientific)</Text>
+                  <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Species</Text>
                   <View style={styles.speciesChipWrap}>
                     {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
                       <Pressable
@@ -169,7 +170,7 @@ export function OwnerPetsScreen({
         {adding ? (
           <>
             <TextInput style={commonStyles.input} value={name} onChangeText={setName} placeholder="Pet name" placeholderTextColor={theme.outline} />
-            <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Species (scientific)</Text>
+            <Text style={[commonStyles.sectionLabel, { marginTop: 8 }]}>Species</Text>
             <View style={styles.speciesChipWrap}>
               {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
                 <Pressable

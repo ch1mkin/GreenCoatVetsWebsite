@@ -1,3 +1,4 @@
+import { formatSpeciesLabel } from "@saasclinics/lib";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createOwner } from "./actions";
@@ -94,7 +95,7 @@ export default async function OwnersPage({
     const rawAvatar = owner.photo_url ?? primary?.photo_url ?? null;
     const avatarSrc = urlForDisplay(rawAvatar, signedOwnerImages);
     const subtitle = primary
-      ? `${primary.species}${primary.breed ? ` • ${primary.breed}` : ""}`
+      ? `${formatSpeciesLabel(primary.species)}${primary.breed ? ` • ${primary.breed}` : ""}`
       : "No pets yet";
     const displayName =
       owner.first_name && owner.last_name

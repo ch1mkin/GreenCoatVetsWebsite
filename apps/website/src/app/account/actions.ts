@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,7 +26,7 @@ export async function addPet(formData: FormData) {
   const { owner, clinic } = portal;
 
   const name = (formData.get("name") as string)?.trim();
-  const species = (formData.get("species") as string)?.trim();
+  const species = normalizeLegacySpeciesToCanonical((formData.get("species") as string)?.trim() ?? "");
   if (!name || !species) throw new Error("Pet name and species are required.");
 
   const breed = (formData.get("breed") as string)?.trim() || null;

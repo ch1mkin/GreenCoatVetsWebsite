@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/web/app-shell";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { SubmitButton } from "@/components/web/submit-button";
+import { PET_SPECIES_BOOKING_OPTIONS } from "@saasclinics/lib";
 
 export default async function NewPatientPage() {
   const access = await getUserAccess();
@@ -103,7 +104,13 @@ export default async function NewPatientPage() {
           </label>
           <label className="flex flex-col gap-1">
             <span className="font-medium text-on-background">Species *</span>
-            <input className="input-soft" name="species" required placeholder="e.g. Dog, Cat" />
+            <select className="input-soft" name="species" required defaultValue="canine">
+              {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="flex flex-col gap-1 md:col-span-2">
             <span className="font-medium text-on-background">Breed</span>

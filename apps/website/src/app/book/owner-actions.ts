@@ -1,6 +1,6 @@
 "use server";
 
-import { DEFAULT_PET_SPECIES_BOOKING_VALUE } from "@saasclinics/lib";
+import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { redirect } from "next/navigation";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
@@ -52,7 +52,7 @@ export async function submitOwnerBooking(formData: FormData) {
         owner_id: ownerRow.id,
         primary_branch_id: branchId,
         name: newPetName,
-        species: newPetSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE,
+        species: normalizeLegacySpeciesToCanonical(newPetSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE),
         is_active: true,
       })
       .select("id")

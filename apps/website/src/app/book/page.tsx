@@ -277,7 +277,7 @@ export default async function BookAppointmentPage() {
                         </option>
                       ))}
                     </select>
-                    <p className="mt-1 text-xs text-on-surface-variant">Stored as taxonomic species for clinical records, visits, and prescriptions.</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">Choose canine, feline, exotic, avian, or equine — same categories as in clinic records.</p>
                   </div>
                 </div>
               </section>

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { DEFAULT_PET_SPECIES_BOOKING_VALUE } from "@saasclinics/lib";
+import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { createClient } from "@/lib/supabase/server";
 
@@ -53,7 +53,7 @@ export async function submitGuestBooking(formData: FormData) {
     p_owner_phone: phone,
     p_owner_email: email,
     p_pet_name: petName,
-    p_pet_species: petSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE,
+    p_pet_species: normalizeLegacySpeciesToCanonical(petSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE),
     p_chief_complaint: chiefComplaint,
     p_notes: notes,
     p_allergies: allergies,

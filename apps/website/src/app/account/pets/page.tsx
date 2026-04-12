@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { addPet } from "@/app/account/actions";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
+import { formatSpeciesLabel, PET_SPECIES_BOOKING_OPTIONS } from "@saasclinics/lib";
 import { createClient } from "@/lib/supabase/server";
 
 const field =
@@ -48,7 +49,13 @@ export default async function AccountPetsPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Species *</label>
-              <input className={field} name="species" required placeholder="e.g. canine, feline, avian" />
+              <select className={field} name="species" required defaultValue="canine">
+                {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-bold uppercase text-on-surface-variant">Breed</label>
@@ -102,7 +109,7 @@ export default async function AccountPetsPage() {
                   <div>
                     <p className="font-headline font-bold text-on-surface">{pet.name}</p>
                     <p className="text-sm text-on-surface-variant">
-                      {pet.species}
+                      {formatSpeciesLabel(pet.species)}
                       {pet.breed ? ` · ${pet.breed}` : ""}
                       {!pet.is_active ? <span className="ml-2 text-error">(inactive)</span> : null}
                     </p>

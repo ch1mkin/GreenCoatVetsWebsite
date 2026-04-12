@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { formatSpeciesLabel } from "@saasclinics/lib";
 
 function ownerName(o: {
   first_name?: string | null;
@@ -123,7 +124,7 @@ export async function loadVisitReportPayload(supabase: SupabaseClient, visitId: 
     branchName: String(br?.name ?? "—"),
     doctorName: doctorName || "—",
     petName: String(pet?.name ?? "—"),
-    petSpecies: [pet?.species, pet?.breed].filter(Boolean).join(" · ") || "—",
+    petSpecies: [pet?.species ? formatSpeciesLabel(pet.species) : "", pet?.breed].filter(Boolean).join(" · ") || "—",
     ownerName: ownerName(ow),
     visitWhen,
     completedWhen,

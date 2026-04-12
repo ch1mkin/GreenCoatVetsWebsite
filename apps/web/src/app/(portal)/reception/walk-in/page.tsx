@@ -82,7 +82,12 @@ export default async function WalkInGuestPage() {
         </label>
         <label className="flex flex-col gap-0.5">
           <span className="font-semibold text-slate-800">Species *</span>
-          <input name="species" className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="dog, cat…" defaultValue="dog" />
+          <input
+            name="species"
+            className="rounded border border-slate-200 bg-white px-2 py-1.5"
+            placeholder="canine, feline, avian…"
+            defaultValue="canine"
+          />
         </label>
         <label className="flex flex-col gap-0.5">
           <span className="font-semibold text-slate-800">Primary branch</span>

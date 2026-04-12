@@ -5,14 +5,17 @@ import { useSearchParams } from "next/navigation";
 
 const OPTIONS = [
   { key: "all", label: "All", icon: "grid_view" },
-  { key: "dog", label: "Canine", icon: "pets" },
-  { key: "cat", label: "Feline", icon: "auto_awesome" },
-  { key: "exotic", label: "Exotic / other", icon: "bug_report" },
+  { key: "canine", label: "Canine", icon: "pets" },
+  { key: "feline", label: "Feline", icon: "auto_awesome" },
+  { key: "avian", label: "Avian", icon: "flutter_dash" },
+  { key: "equine", label: "Equine", icon: "agriculture" },
+  { key: "exotic", label: "Exotic", icon: "bug_report" },
 ] as const;
 
 export function SpeciesChips() {
   const sp = useSearchParams();
-  const current = (sp.get("species") ?? "all").toLowerCase();
+  const raw = (sp.get("species") ?? "all").toLowerCase();
+  const current = raw === "dog" ? "canine" : raw === "cat" ? "feline" : raw;
   const q = sp.get("q")?.trim();
 
   return (

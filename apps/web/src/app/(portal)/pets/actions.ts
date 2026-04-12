@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createPet(formData: FormData) {
   const ownerId = String(formData.get("owner_id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const species = String(formData.get("species") ?? "").trim();
+  const species = normalizeLegacySpeciesToCanonical(String(formData.get("species") ?? ""));
   const breed = String(formData.get("breed") ?? "").trim();
   const gender = String(formData.get("gender") ?? "").trim();
   const microchipId = String(formData.get("microchip_id") ?? "").trim();

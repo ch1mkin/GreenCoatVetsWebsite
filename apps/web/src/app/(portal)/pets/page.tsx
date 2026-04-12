@@ -11,7 +11,14 @@ import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { SubmitButton } from "@/components/web/submit-button";
 import { PawCircularLoader } from "@/components/web/paw-circular-loader";
 import { PetsDirectoryClient, type PetDirectoryRowData } from "@/components/workspace/pets-directory-client";
-import { SPECIES_OR_FILTER_CANINE, SPECIES_OR_FILTER_FELINE } from "@saasclinics/lib";
+import {
+  SPECIES_OR_FILTER_AVIAN,
+  SPECIES_OR_FILTER_CANINE,
+  SPECIES_OR_FILTER_EQUINE,
+  SPECIES_OR_FILTER_EXOTIC,
+  SPECIES_OR_FILTER_FELINE,
+  PET_SPECIES_BOOKING_OPTIONS,
+} from "@saasclinics/lib";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
 import { buildSignedUrlMap, urlForDisplay } from "@/lib/storage/resolve-signed-image-url";
 
@@ -43,7 +50,13 @@ export default async function PetsPage({ searchParams }: { searchParams: SearchP
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
   const supabase = createClient();
 
-  const speciesKey = (searchParams.species ?? "all").toLowerCase();
+  const rawSpecies = (searchParams.species ?? "all").toLowerCase();
+  const speciesKey =
+    rawSpecies === "dog"
+      ? "canine"
+      : rawSpecies === "cat"
+        ? "feline"
+        : rawSpecies;
   const q = (searchParams.q ?? "").trim().toLowerCase();
 
   let petsQuery = supabase
@@ -53,18 +66,16 @@ export default async function PetsPage({ searchParams }: { searchParams: SearchP
     .order("created_at", { ascending: false })
     .limit(120);
 
-  if (speciesKey === "dog") {
+  if (speciesKey === "canine") {
     petsQuery = petsQuery.or(SPECIES_OR_FILTER_CANINE);
-  } else if (speciesKey === "cat") {
+  } else if (speciesKey === "feline") {
     petsQuery = petsQuery.or(SPECIES_OR_FILTER_FELINE);
+  } else if (speciesKey === "avian") {
+    petsQuery = petsQuery.or(SPECIES_OR_FILTER_AVIAN);
+  } else if (speciesKey === "equine") {
+    petsQuery = petsQuery.or(SPECIES_OR_FILTER_EQUINE);
   } else if (speciesKey === "exotic") {
-    petsQuery = petsQuery
-      .not("species", "ilike", "%canis%")
-      .not("species", "ilike", "%dog%")
-      .not("species", "ilike", "%canine%")
-      .not("species", "ilike", "%felis%")
-      .not("species", "ilike", "%cat%")
-      .not("species", "ilike", "%feline%");
+    petsQuery = petsQuery.or(SPECIES_OR_FILTER_EXOTIC);
   }
 
   const [{ data: petsRaw, error: petsError }, { data: owners, error: ownersError }] = await Promise.all([
@@ -219,12 +230,13 @@ export default async function PetsPage({ searchParams }: { searchParams: SearchP
             ))}
           </select>
           <input className="input-soft py-2 text-[12px]" name="name" placeholder="Pet name" required />
-          <input
-            className="input-soft py-2 text-[12px]"
-            name="species"
-            placeholder="Species (e.g. canine, feline, avian)"
-            required
-          />
+          <select className="input-soft py-2 text-[12px]" name="species" required defaultValue="canine">
+            {PET_SPECIES_BOOKING_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
           <input className="input-soft py-2 text-[12px] md:col-span-2" name="breed" placeholder="Breed" />
           <SubmitButton className="btn-primary btn-compact md:col-span-2" pendingLabel="Saving pet…">
             Quick save pet

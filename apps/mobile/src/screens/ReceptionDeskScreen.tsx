@@ -61,7 +61,7 @@ export function ReceptionDeskScreen({
   const [ownerName, setOwnerName] = useState("");
   const [phone, setPhone] = useState("");
   const [petName, setPetName] = useState("");
-  const [species, setSpecies] = useState("dog");
+  const [species, setSpecies] = useState("canine");
   const [branchId, setBranchId] = useState(branches[0]?.id ?? "");
 
   useEffect(() => {
@@ -255,7 +255,13 @@ export function ReceptionDeskScreen({
             <Text style={[commonStyles.sectionLabel, { marginTop: 10 }]}>Pet</Text>
             <TextInput style={commonStyles.input} value={petName} onChangeText={setPetName} placeholder="Pet name" placeholderTextColor={theme.outline} />
             <Text style={[commonStyles.sectionLabel, { marginTop: 10 }]}>Species</Text>
-            <TextInput style={commonStyles.input} value={species} onChangeText={setSpecies} placeholder="dog, cat…" placeholderTextColor={theme.outline} />
+            <TextInput
+              style={commonStyles.input}
+              value={species}
+              onChangeText={setSpecies}
+              placeholder="canine, feline, exotic…"
+              placeholderTextColor={theme.outline}
+            />
             <Text style={[commonStyles.sectionLabel, { marginTop: 10 }]}>Branch</Text>
             <View style={styles.branchRow}>
               {branches.map((b) => (

@@ -1,3 +1,4 @@
+import { formatSpeciesLabel } from "@saasclinics/lib";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
@@ -225,7 +226,7 @@ export default async function ContactRecordPage({
                     <Link className="font-semibold text-primary hover:underline" href={`/pets/${p.id}`}>
                       {p.name}
                     </Link>
-                    <span className="text-on-surface-variant"> · {p.species}</span>
+                    <span className="text-on-surface-variant"> · {formatSpeciesLabel(p.species)}</span>
                   </li>
                 ))}
                 {!pets?.length ? <li className="text-on-surface-variant">No patients yet.</li> : null}
@@ -323,7 +324,7 @@ export default async function ContactRecordPage({
                         <div>
                           <p className="font-semibold">{p.name}</p>
                           <p className="text-xs text-on-surface-variant">
-                            {p.species}
+                            {formatSpeciesLabel(p.species)}
                             {p.breed ? ` · ${p.breed}` : ""}
                           </p>
                         </div>

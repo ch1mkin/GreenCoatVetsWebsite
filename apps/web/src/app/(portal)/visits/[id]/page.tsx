@@ -18,6 +18,7 @@ import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
+import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,7 @@ export default async function VisitDetailsPage({
     !!intakeObj &&
     ["chief_complaint", "allergies", "current_medications", "contact_phone", "contact_email"].some((k) => ic(k));
 
-  const species = String(pet?.species ?? "Pet");
+  const species = pet?.species ? formatSpeciesDisplay(String(pet.species)) : "Pet";
   const defaultSpeciesClass = inferSpeciesClass(species);
 
   const { data: evaluation } = await supabase

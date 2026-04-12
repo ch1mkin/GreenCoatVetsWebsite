@@ -376,7 +376,7 @@ export default async function Home() {
                 >
                   <span className="material-symbols-outlined mt-0.5 shrink-0 text-primary text-lg">help</span>
                   <span>{q}</span>
-                </li>
+          </li>
               ))}
             </ul>
             <Link
@@ -398,23 +398,23 @@ export default async function Home() {
             <div className="flex flex-wrap items-center justify-center gap-4">
               <a
                 href="https://www.instagram.com"
-                target="_blank"
+            target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-outline-variant px-5 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary"
               >
                 <span className="material-symbols-outlined text-lg">photo_camera</span>
                 Instagram
-              </a>
-              <a
+          </a>
+          <a
                 href="https://www.facebook.com"
-                target="_blank"
+            target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-outline-variant px-5 py-2.5 text-sm font-semibold text-on-surface transition-colors hover:border-primary hover:text-primary"
-              >
+          >
                 <span className="material-symbols-outlined text-lg">thumb_up</span>
                 Facebook
-              </a>
-            </div>
+          </a>
+        </div>
           </div>
         </section>
 

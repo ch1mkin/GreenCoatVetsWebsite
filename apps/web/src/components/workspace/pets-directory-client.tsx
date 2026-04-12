@@ -1,5 +1,6 @@
 "use client";
 
+import { formatSpeciesLabel } from "@saasclinics/lib";
 import { useState } from "react";
 import { DirectorySelectionHint, RecordDirectoryRow } from "@/components/workspace/record-directory-row";
 
@@ -37,7 +38,7 @@ export function PetsDirectoryClient({ rows }: { rows: PetDirectoryRowData[] }) {
             <div className="space-y-0.5">
               <p className="font-headline text-xs font-bold text-slate-900">{pet.name}</p>
               <p className="text-[10px] text-slate-600">
-                {pet.species}
+                {formatSpeciesLabel(pet.species)}
                 {pet.breed ? ` · ${pet.breed}` : ""}
               </p>
               <p className="text-[10px] text-slate-600">Owner: {pet.ownerLine}</p>
@@ -70,7 +71,7 @@ export function PetsDirectoryClient({ rows }: { rows: PetDirectoryRowData[] }) {
               </span>
             </div>
             <p className="text-[11px] font-medium text-slate-600">
-              {pet.species}
+              {formatSpeciesLabel(pet.species)}
               {pet.breed ? ` • ${pet.breed}` : ""}
             </p>
             <div className="mt-1 flex items-center justify-between gap-2">

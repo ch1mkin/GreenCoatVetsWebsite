@@ -9,9 +9,13 @@ export { DATA_SHARING_CONSENT_KEY, DATA_SHARING_CONSENT_VERSION } from "./consen
 
 export {
   DEFAULT_PET_SPECIES_BOOKING_VALUE,
+  formatSpeciesLabel,
   normalizeLegacySpeciesToCanonical,
   PET_SPECIES_BOOKING_OPTIONS,
+  SPECIES_OR_FILTER_AVIAN,
   SPECIES_OR_FILTER_CANINE,
+  SPECIES_OR_FILTER_EQUINE,
+  SPECIES_OR_FILTER_EXOTIC,
   SPECIES_OR_FILTER_FELINE,
   type PetSpeciesBookingOption,
 } from "./pet-species-booking";

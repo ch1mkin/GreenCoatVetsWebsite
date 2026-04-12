@@ -1,3 +1,4 @@
+import { formatSpeciesLabel } from "@saasclinics/lib";
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Appointment, Order, Pet } from "../types/app";
 import { commonStyles } from "../theme/commonStyles";
@@ -33,7 +34,7 @@ export function OwnerScreen({
           >
             <Text style={styles.emphasis}>{pet.name}</Text>
             <View style={commonStyles.pill}>
-              <Text style={commonStyles.pillText}>{pet.species}</Text>
+              <Text style={commonStyles.pillText}>{formatSpeciesLabel(pet.species)}</Text>
             </View>
           </View>
         ))}
