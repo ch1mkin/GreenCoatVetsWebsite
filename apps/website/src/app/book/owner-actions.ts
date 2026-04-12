@@ -2,6 +2,7 @@
 
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { redirect } from "next/navigation";
+import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
 
@@ -85,6 +86,31 @@ export async function submitOwnerBooking(formData: FormData) {
     created_by: user.id,
   });
   if (error) throw new Error(error.message);
+
+  let petDisplayName = newPetName;
+  if (existingPetId) {
+    const { data: petRow } = await supabase.from("pets").select("name").eq("id", petId).maybeSingle();
+    petDisplayName = (petRow?.name as string | undefined) ?? "—";
+  }
+
+  try {
+    await sendAppointmentBookingNotificationEmail({
+      clinicId: clinic.id,
+      clinicName: clinic.name,
+      branchId,
+      appointmentType,
+      startsAtIso: startsAt,
+      petName: petDisplayName,
+      ownerDisplay: ownerRow.full_name,
+      ownerEmail: contactEmail || ownerRow.email,
+      ownerPhone: contactPhone || ownerRow.phone,
+      chiefComplaint: chiefComplaint || null,
+      notes: notes || null,
+      bookingSource: "owner_portal",
+    });
+  } catch (mailErr) {
+    console.error("[book] admin notification email failed", mailErr);
+  }
 
   redirect("/account");
 }

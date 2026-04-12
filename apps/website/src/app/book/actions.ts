@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
+import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { createClient } from "@/lib/supabase/server";
 
 const appointmentTypes = ["consultation", "vaccination", "surgery", "grooming", "emergency"] as const;
@@ -71,6 +72,25 @@ export async function submitGuestBooking(formData: FormData) {
 
   if (user?.email && user.email.toLowerCase() === email) {
     await supabase.from("owners").update({ user_id: user.id }).eq("id", row.owner_id);
+  }
+
+  try {
+    await sendAppointmentBookingNotificationEmail({
+      clinicId: clinic.id,
+      clinicName: clinic.name,
+      branchId,
+      appointmentType,
+      startsAtIso: startsAt,
+      petName,
+      ownerDisplay: fullName,
+      ownerEmail: email,
+      ownerPhone: phone,
+      chiefComplaint: chiefComplaint || null,
+      notes: notes || null,
+      bookingSource: "guest_website",
+    });
+  } catch (mailErr) {
+    console.error("[book/guest] admin notification email failed", mailErr);
   }
 
   redirect(`/book/confirmed?token=${encodeURIComponent(row.merge_token)}`);

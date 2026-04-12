@@ -125,9 +125,10 @@ export default async function AdminSettingsPage({
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="font-headline text-lg font-bold text-primary">Contact form notifications</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Public <code className="rounded bg-slate-100 px-1">/contact</code> submissions are emailed to this address when{" "}
-            <strong>Hostinger SMTP</strong> env vars are set on the server (same as the staff portal). If empty, the app falls back to the resolved
-            clinic&apos;s <code className="rounded bg-slate-50 px-1">support_email</code>.
+            Public <code className="rounded bg-slate-100 px-1">/contact</code> and <strong>new appointment requests</strong> (book flow) are emailed
+            to the admin inbox when <strong>Hostinger SMTP</strong> is configured. If you set{" "}
+            <code className="rounded bg-slate-50 px-1">ADMIN_NOTIFICATION_EMAIL</code> in Vercel, that address is used first. Otherwise this field,
+            then the clinic&apos;s <code className="rounded bg-slate-50 px-1">support_email</code>.
           </p>
           <div className="mt-6 max-w-xl">
             <label className="block text-xs font-bold uppercase text-slate-500" htmlFor="contact_form_recipient_email">
