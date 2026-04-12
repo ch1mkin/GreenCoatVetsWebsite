@@ -76,6 +76,8 @@ export async function addPrescriptionItem(formData: FormData) {
 
   if (error) throw new Error(error.message);
 
+  await supabase.from("prescriptions").update({ pdf_url: null }).eq("id", prescriptionId);
+
   revalidatePath(`/visits/${prescription.visit_id}`);
   revalidatePath(`/prescriptions/${prescriptionId}`);
 }

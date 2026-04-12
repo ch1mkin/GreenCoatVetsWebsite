@@ -53,7 +53,7 @@ export default async function VisitDetailsPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { embed?: string; saved?: string };
+  searchParams?: { embed?: string; saved?: string; rx_pdf?: string };
 }) {
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/login");
@@ -68,6 +68,8 @@ export default async function VisitDetailsPage({
   }
 
   const embed = searchParams?.embed === "1";
+  const showVisitSavedBanner = searchParams?.saved === "1";
+  const showRxPdfBanner = searchParams?.rx_pdf === "1";
 
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
@@ -185,6 +187,32 @@ export default async function VisitDetailsPage({
 
   const body = (
     <>
+      {(showVisitSavedBanner || showRxPdfBanner) && (
+        <div
+          className={`pointer-events-none fixed left-1/2 z-[200] w-[min(100%,26rem)] -translate-x-1/2 px-3 ${embed ? "top-2" : "top-14"}`}
+        >
+          {showVisitSavedBanner ? (
+            <div
+              role="status"
+              className="pointer-events-auto mb-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-950 shadow-lg"
+            >
+              <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
+              <p className="mt-1 text-emerald-900/95">Clinical evaluation and consultation updates are stored for this visit.</p>
+            </div>
+          ) : null}
+          {showRxPdfBanner ? (
+            <div
+              role="status"
+              className="pointer-events-auto rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-[13px] text-emerald-950 shadow-lg"
+            >
+              <p className="font-headline font-bold text-emerald-900">Prescription PDF ready</p>
+              <p className="mt-1 text-emerald-900/95">
+                The file was generated. Use <strong>Open printable prescription (PDF)</strong> or <strong>Download PDF</strong> below.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
       {!embed ? <VisitAnchorNav showIntake={hasOwnerIntake} /> : null}
       {!embed ? (
         <>
@@ -550,10 +578,26 @@ export default async function VisitDetailsPage({
           <p className="text-[11px] text-on-surface-variant">
             Add dispensed lines; PDF for owner; reception bills from Billing / invoice.
           </p>
+          <div className="rounded-lg border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 text-[11px] leading-snug">
+            <p className="font-semibold text-on-surface">PDF status</p>
+            {!rxItems?.length ? (
+              <p className="mt-0.5 text-amber-900/95">Add at least one medicine line before generating a PDF.</p>
+            ) : prescriptionPdfUrl ? (
+              <p className="mt-0.5 text-emerald-900/95">
+                PDF generated — open it below. Regenerate after you change medicines (adding a line clears the old file until you save again).
+              </p>
+            ) : (
+              <p className="mt-0.5 text-amber-900/95">
+                Lines saved — click <strong>Save prescription PDF</strong> to create the file.
+              </p>
+            )}
+          </div>
           {canRxPdf ? (
             <div className="flex flex-wrap items-center gap-2">
-              <form action={regeneratePrescriptionPdfForm}>
+              <form action={regeneratePrescriptionPdfForm} className="inline-flex flex-wrap items-center gap-2">
                 <input type="hidden" name="prescription_id" value={prescriptionId} />
+                <input type="hidden" name="redirect_after" value="visit" />
+                <input type="hidden" name="embed" value={embed ? "1" : ""} />
                 <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Generating PDF…">
                   Save prescription PDF
                 </SubmitButton>
@@ -568,10 +612,12 @@ export default async function VisitDetailsPage({
                   Download PDF
                 </a>
               ) : (
-                <span className="text-[11px] text-on-surface-variant">PDF not generated yet.</span>
+                <span className="text-[11px] text-on-surface-variant">No PDF file yet.</span>
               )}
             </div>
-          ) : null}
+          ) : (
+            <p className="text-[11px] text-on-surface-variant">PDF generation is limited to clinical roles — ask reception if needed.</p>
+          )}
           <form action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
             <input type="hidden" name="prescription_id" value={prescriptionId} />
             <input className="input-soft input-compact md:col-span-2" name="medicine_name" placeholder="Medicine name *" required />
@@ -610,10 +656,27 @@ export default async function VisitDetailsPage({
             {!rxItems?.length ? <p className="py-2 text-on-surface-variant">No line items yet.</p> : null}
           </div>
 
-          <div className="border-t border-outline-variant/15 pt-2">
-            <Link className="btn-secondary btn-compact text-xs" href={`/prescriptions/${prescriptionId}`}>
-              Open printable prescription
-            </Link>
+          <div className="space-y-2 border-t border-outline-variant/15 pt-3">
+            {prescriptionPdfUrl ? (
+              <a
+                className="btn-primary btn-compact inline-flex text-xs"
+                href={prescriptionPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open printable prescription (PDF)
+              </a>
+            ) : (
+              <p className="text-[11px] text-on-surface-variant">
+                Generate the PDF with the button above to open a printable file here.
+              </p>
+            )}
+            <p className="text-[10px] text-on-surface-variant">
+              <Link className="font-semibold text-primary underline" href={`/prescriptions/${prescriptionId}`}>
+                Full prescription page
+              </Link>{" "}
+              — edit lines or use Generate PDF there (same file as this visit).
+            </p>
           </div>
         </VisitSection>
 
