@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
@@ -62,9 +61,6 @@ export async function addPrescriptionItemAction(formData: FormData): Promise<Add
     if (insertError) return { ok: false, error: insertError.message };
     if (!inserted) return { ok: false, error: "Insert did not return a row." };
 
-    revalidatePath(`/visits/${prescription.visit_id}`, "layout");
-    revalidatePath(`/visits/${prescription.visit_id}`);
-
     const item: RxLineItem = {
       id: inserted.id as string,
       medicine_name: String(inserted.medicine_name ?? ""),
@@ -122,9 +118,6 @@ export async function updatePrescriptionItemInstructionsAction(formData: FormDat
       .eq("id", itemId);
 
     if (upErr) return { ok: false, error: upErr.message };
-
-    revalidatePath(`/visits/${visitId}`, "layout");
-    revalidatePath(`/visits/${visitId}`);
 
     return { ok: true };
   } catch (e) {

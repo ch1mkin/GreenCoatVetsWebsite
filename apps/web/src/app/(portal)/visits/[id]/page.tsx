@@ -197,7 +197,7 @@ export default async function VisitDetailsPage({
 
   const visitMainClass = embed
     ? "space-y-3 text-[13px] leading-snug"
-    : "workspace-form mx-auto max-w-5xl space-y-6 text-sm";
+    : "workspace-form mx-auto mt-6 max-w-5xl space-y-6 text-sm";
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
 
@@ -207,6 +207,7 @@ export default async function VisitDetailsPage({
 
   const body = (
     <>
+      <div className={embed ? "space-y-3" : "mx-auto flex max-w-5xl flex-col gap-6"}>
       {showVisitSavedBanner ? (
         <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
           <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
@@ -251,7 +252,7 @@ export default async function VisitDetailsPage({
             />
           ) : null}
           {previousVisits.length > 0 ? (
-            <div className="mx-auto max-w-5xl rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
+            <div className="rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
               <p className="font-headline font-bold">Earlier visits for this patient ({previousVisits.length})</p>
               <p className="mt-1 text-[11px] opacity-90">
                 Open a prior visit in the side panel or its PDF in a new tab to compare clinical context.
@@ -283,7 +284,7 @@ export default async function VisitDetailsPage({
           ) : null}
         </>
       ) : (
-        <div className="mb-2 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <a
             className="btn-secondary btn-compact text-[11px]"
             href={`/visits/${visit.id}/report`}
@@ -295,6 +296,7 @@ export default async function VisitDetailsPage({
         </div>
       )}
       {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
+      </div>
       <div className={visitMainClass}>
         {hasOwnerIntake ? (
           <VisitSection
@@ -648,6 +650,7 @@ export default async function VisitDetailsPage({
             <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
           )}
           <VisitPrescriptionBlockClient
+            key={visit.id}
             initialItems={(rxItems ?? []).map((r) => ({
               id: r.id,
               medicine_name: String(r.medicine_name ?? ""),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   addPrescriptionItemAction,
   type RxLineItem,
@@ -20,14 +20,11 @@ export function VisitPrescriptionBlockClient({
   embed: boolean;
   showVoiceDictation: boolean;
 }) {
+  /** Do not sync from server props after mount — revalidation can briefly return stale rows and wipe optimistic UI. */
   const [items, setItems] = useState<RxLineItem[]>(initialItems);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
-
-  useEffect(() => {
-    setItems(initialItems);
-  }, [initialItems]);
 
   const onInstructionsSaved = useCallback((itemId: string, instructions: string | null) => {
     setItems((prev) =>
