@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signOutFromAccount } from "@/app/account/actions";
 import { ClaimBookingForm } from "@/components/site/claim-booking-form";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
@@ -33,7 +32,7 @@ export default async function AccountPage({
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Pet owner portal</p>
           <div className="mt-1 flex flex-row items-center justify-between gap-3">
             <h1 className="min-w-0 font-headline text-3xl font-extrabold tracking-tight sm:text-4xl">Welcome back</h1>
-            <form action={signOutFromAccount} className="shrink-0">
+            <form action="/auth/signout" method="post" className="shrink-0">
               <button
                 type="submit"
                 className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition-colors hover:border-red-300 hover:bg-red-100"
@@ -82,7 +81,14 @@ export default async function AccountPage({
               website: <strong>{siteClinic.name}</strong>).
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <Link href="/signup" className="rounded-xl bg-primary px-5 py-2.5 font-headline text-sm font-bold text-on-primary">
+              <Link
+                href={
+                  user.email
+                    ? `/signup?email=${encodeURIComponent(user.email)}`
+                    : "/signup"
+                }
+                className="rounded-xl bg-primary px-5 py-2.5 font-headline text-sm font-bold text-on-primary"
+              >
                 Complete pet owner signup
               </Link>
               <Link href="/contact" className="rounded-xl border border-amber-300 px-5 py-2.5 text-sm font-semibold">

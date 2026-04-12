@@ -6,6 +6,8 @@ import { parseLabeledClinicalSpeech } from "@/lib/clinical/visit-speech-parse";
 
 /** Clinical + SOAP live in one form so dictation targets all fields under the same root. */
 const FORM_VISIT_RECORD = "#form-visit-record";
+/** Add-medicine row on the visit — instructions textarea lives in this form. */
+const FORM_RX_ADD = "#form-rx-add";
 
 type Target = { name: string; label: string };
 
@@ -25,12 +27,18 @@ const FIELD_TARGETS: Target[] = [
   { name: "symptoms", label: "SOAP — Symptoms" },
   { name: "diagnosis", label: "SOAP — Diagnosis" },
   { name: "treatment_plan", label: "SOAP — Treatment plan" },
+  { name: "instructions", label: "Rx — Instructions (new medicine line)" },
 ];
 
 function setNamedFieldValue(name: string, value: string, append: boolean): boolean {
-  const root = document.querySelector(FORM_VISIT_RECORD);
-  if (!root) return false;
-  const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
+  const roots = [document.querySelector(FORM_VISIT_RECORD), document.querySelector(FORM_RX_ADD)].filter(
+    (n): n is Element => Boolean(n),
+  );
+  let el: Element | null = null;
+  for (const root of roots) {
+    el = root.querySelector(`[name="${CSS.escape(name)}"]`);
+    if (el) break;
+  }
   if (!el) return false;
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
     const next =

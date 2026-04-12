@@ -5,43 +5,6 @@ import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
-export async function createPrescription(formData: FormData) {
-  const visitId = String(formData.get("visit_id") ?? "").trim();
-  const notes = String(formData.get("notes") ?? "").trim();
-
-  if (!visitId) throw new Error("Visit id is required.");
-
-  const { clinic_id } = await getActiveMembership();
-  const supabase = createClient();
-
-  const { data: visit, error: visitError } = await supabase
-    .from("visits")
-    .select("id, clinic_id, branch_id, pet_id, doctor_id")
-    .eq("id", visitId)
-    .eq("clinic_id", clinic_id)
-    .single();
-
-  if (visitError) throw new Error(visitError.message);
-
-  const { data: prescription, error } = await supabase
-    .from("prescriptions")
-    .insert({
-      clinic_id: visit.clinic_id,
-      branch_id: visit.branch_id,
-      visit_id: visit.id,
-      pet_id: visit.pet_id,
-      doctor_id: visit.doctor_id,
-      notes: notes || null,
-    })
-    .select("id")
-    .single();
-
-  if (error) throw new Error(error.message);
-
-  revalidatePath(`/visits/${visitId}`);
-  revalidatePath(`/prescriptions/${prescription.id}`);
-}
-
 export async function addPrescriptionItem(formData: FormData) {
   const prescriptionId = String(formData.get("prescription_id") ?? "").trim();
   const medicineName = String(formData.get("medicine_name") ?? "").trim();
@@ -78,7 +41,6 @@ export async function addPrescriptionItem(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath(`/visits/${prescription.visit_id}`);
-  revalidatePath(`/prescriptions/${prescriptionId}`);
 
   const returnVisitId = String(formData.get("visit_id") ?? "").trim();
   const embed = String(formData.get("embed") ?? "").trim();

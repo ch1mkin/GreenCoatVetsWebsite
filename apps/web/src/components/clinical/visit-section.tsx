@@ -7,6 +7,7 @@ export function VisitSection({
   title,
   defaultOpen = false,
   description,
+  className,
   children,
 }: {
   embed: boolean;
@@ -14,13 +15,15 @@ export function VisitSection({
   title: string;
   defaultOpen?: boolean;
   description?: ReactNode;
+  /** Merged with section shell classes (e.g. merge into a parent card). */
+  className?: string;
   children: ReactNode;
 }) {
   if (embed) {
     return (
       <details
         id={id}
-        className="group rounded-lg border border-slate-200/90 bg-white shadow-sm"
+        className={`group rounded-lg border border-slate-200/90 bg-white shadow-sm ${className ?? ""}`}
         open={defaultOpen}
       >
         <summary className="cursor-pointer list-none px-3 py-2 font-headline text-[13px] font-bold text-slate-800 marker:content-none [&::-webkit-details-marker]:hidden">
@@ -40,7 +43,7 @@ export function VisitSection({
   }
 
   return (
-    <section id={id} className="card-soft card-compact scroll-mt-24 space-y-2">
+    <section id={id} className={`card-soft card-compact scroll-mt-24 space-y-2 ${className ?? ""}`}>
       <h2 className="font-headline text-sm font-bold text-on-background">{title}</h2>
       {description ? <div className="text-[11px] text-on-surface-variant">{description}</div> : null}
       {children}

@@ -22,7 +22,7 @@ const SECTIONS: { id: string; title: string; body: string[] }[] = [
       "Dashboard — KPIs, calendar shortcuts, and daily operational snapshot.",
       "Contacts — owner/client records and communication context.",
       "Patients — animal records, species filters, and patient search.",
-      "Clinical — appointments, visits, medical records, prescriptions, and lab work.",
+      "Clinical — appointments, visits, medical records, visit prescriptions, and lab work.",
       "Financial — POS, invoices, ecommerce catalogue, and inventory where enabled.",
       "Reporting — analytics and (for platform admins) global reports.",
       "Admin — branches, clinic profile, invites, content tools, and notifications.",

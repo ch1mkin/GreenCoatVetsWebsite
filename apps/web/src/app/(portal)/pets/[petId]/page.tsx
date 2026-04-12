@@ -113,7 +113,9 @@ export default async function PetRecordPage({
 
   const rxRes = await supabase
     .from("prescriptions")
-    .select("id, issued_at, notes, prescription_items(id, medicine_name, dosage, frequency, duration, instructions)")
+    .select(
+      "id, visit_id, issued_at, notes, prescription_items(id, medicine_name, dosage, frequency, duration, instructions)"
+    )
     .eq("clinic_id", clinic_id)
     .eq("pet_id", pet.id)
     .order("issued_at", { ascending: false })
@@ -159,6 +161,7 @@ export default async function PetRecordPage({
   const petPrescriptions =
     (rxRes.data as Array<{
       id: string;
+      visit_id: string | null;
       issued_at: string;
       notes: string | null;
       prescription_items:
@@ -376,8 +379,11 @@ export default async function PetRecordPage({
                           <p className="text-xs font-bold uppercase tracking-wide text-primary">
                             {new Date(rx.issued_at).toLocaleDateString()}
                           </p>
-                          <Link className="text-xs font-semibold text-primary hover:underline" href={`/prescriptions/${rx.id}`}>
-                            Open prescription
+                          <Link
+                            className="text-xs font-semibold text-primary hover:underline"
+                            href={rx.visit_id ? `/visits/${rx.visit_id}` : `/pets/${params.petId}`}
+                          >
+                            Open visit
                           </Link>
                         </div>
                         {rx.prescription_items?.length ? (

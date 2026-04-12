@@ -513,7 +513,6 @@ export async function regeneratePrescriptionPdf(prescriptionId: string) {
 
   const visitId = rx.visit_id;
   revalidatePath(`/visits/${visitId}`);
-  revalidatePath(`/prescriptions/${prescriptionId}`);
   return pdfPath;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
@@ -14,16 +14,30 @@ export function WebsiteSignupForm({
   productName: string;
   logoUrl: string | null;
 }) {
+  const searchParams = useSearchParams();
+  const invite = (searchParams.get("invite") ?? "").trim();
+  const emailFromUrl = (searchParams.get("email") ?? "").trim();
+
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailFromUrl);
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const invite = (searchParams.get("invite") ?? "").trim();
+
+  useEffect(() => {
+    if (emailFromUrl) setEmail(emailFromUrl);
+  }, [emailFromUrl]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      const u = session?.user?.email?.trim();
+      if (u) setEmail((prev) => prev || u);
+    });
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

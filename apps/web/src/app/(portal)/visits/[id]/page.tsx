@@ -359,6 +359,13 @@ export default async function VisitDetailsPage({
           </div>
         </VisitSection>
 
+        <div
+          className={
+            embed
+              ? "contents"
+              : "rounded-2xl border border-outline-variant/25 bg-surface-container-low/15 shadow-sm overflow-hidden"
+          }
+        >
         <form
           id="form-visit-record"
           key={visitFormKey}
@@ -592,9 +599,20 @@ export default async function VisitDetailsPage({
         </VisitSection>
         </form>
 
-        <VisitSection embed={embed} id="section-rx" title="Prescription" defaultOpen={!embed}>
+        <VisitSection
+          embed={embed}
+          id="section-rx"
+          title="Prescription (this visit)"
+          defaultOpen={!embed}
+          className={
+            embed
+              ? ""
+              : "!rounded-none !border-0 !shadow-none border-t border-outline-variant/25 bg-surface-container-lowest/90 px-4 py-4"
+          }
+        >
           <p className="text-[11px] text-on-surface-variant">
-            Add dispensed lines, then generate a PDF for the owner. Billing uses <strong>Billing / invoice</strong> on this visit.
+            Medicines and instructions are stored on this visit (no separate prescription screen). Generate a PDF for the owner. Billing uses{" "}
+            <strong>Billing / invoice</strong> on this visit.
           </p>
           <div
             className={`rounded-lg border px-3 py-2 text-[11px] ${
@@ -630,7 +648,7 @@ export default async function VisitDetailsPage({
           ) : (
             <p className="text-[11px] text-on-surface-variant">Your role cannot generate prescription PDFs. Ask a clinician or reception.</p>
           )}
-          <form action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
+          <form id="form-rx-add" action={addPrescriptionItem} className="grid gap-2 md:grid-cols-2">
             <input type="hidden" name="prescription_id" value={prescriptionId} />
             <input type="hidden" name="visit_id" value={visit.id} />
             <input type="hidden" name="embed" value={embed ? "1" : ""} />
@@ -638,7 +656,11 @@ export default async function VisitDetailsPage({
             <input className="input-soft input-compact" name="dosage" placeholder="Dosage *" required />
             <input className="input-soft input-compact" name="frequency" placeholder="Frequency" />
             <input className="input-soft input-compact" name="duration" placeholder="Duration" />
-            <textarea className="input-soft input-compact md:col-span-2 min-h-[48px]" name="instructions" placeholder="Instructions" />
+            <textarea
+              className="input-soft input-compact md:col-span-2 min-h-[48px]"
+              name="instructions"
+              placeholder="Instructions (dictate via mic — target: Rx — Instructions)"
+            />
             <SubmitButton className="btn-primary btn-compact md:col-span-2" pendingLabel="Adding…">
               Add medicine line
             </SubmitButton>
@@ -685,16 +707,9 @@ export default async function VisitDetailsPage({
                 Printable PDF appears here after you save the prescription PDF above.
               </span>
             )}
-            <Link
-              className="btn-secondary btn-compact text-xs"
-              href={`/prescriptions/${prescriptionId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Full prescription page
-            </Link>
           </div>
         </VisitSection>
+        </div>
 
         <VisitSection embed={embed} id="section-files" title="Attachments" defaultOpen={!embed}>
           <form action={uploadVisitAttachment} className="space-y-2" encType="multipart/form-data">

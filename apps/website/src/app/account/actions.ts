@@ -6,12 +6,6 @@ import { normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
 
-export async function signOutFromAccount() {
-  const supabase = createClient();
-  await supabase.auth.signOut();
-  redirect("/login");
-}
-
 export async function addPet(formData: FormData) {
   const supabase = createClient();
   const {
