@@ -37,12 +37,12 @@ export async function updateClinicProfileImage(formData: FormData) {
   revalidatePath("/join-clinic");
 }
 
-export async function updateClinicPrescriptionTemplate(formData: FormData) {
+export async function updateClinicHandwrittenVisitTemplate(formData: FormData) {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
   if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admin can update the prescription template.");
+    throw new Error("Only clinic admin can update the handwritten visit template.");
   }
 
   const uploaded = formData.get("template_image");
@@ -53,7 +53,7 @@ export async function updateClinicPrescriptionTemplate(formData: FormData) {
   }
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${clinicId}/prescription-templates/${Date.now()}-${safeName}`;
+  const path = `${clinicId}/handwritten-visit-templates/${Date.now()}-${safeName}`;
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   const supabase = createClient();
@@ -66,8 +66,8 @@ export async function updateClinicPrescriptionTemplate(formData: FormData) {
   const { error } = await supabase
     .from("clinics")
     .update({
-      prescription_template_url: publicUrl.publicUrl,
-      prescription_template_updated_at: new Date().toISOString(),
+      handwritten_visit_template_url: publicUrl.publicUrl,
+      handwritten_visit_template_updated_at: new Date().toISOString(),
     })
     .eq("id", clinicId);
   if (error) throw new Error(error.message);
@@ -78,20 +78,20 @@ export async function updateClinicPrescriptionTemplate(formData: FormData) {
   revalidatePath("/visits");
 }
 
-export async function clearClinicPrescriptionTemplate() {
+export async function clearClinicHandwrittenVisitTemplate() {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
   if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admin can update the prescription template.");
+    throw new Error("Only clinic admin can update the handwritten visit template.");
   }
 
   const supabase = createClient();
   const { error } = await supabase
     .from("clinics")
     .update({
-      prescription_template_url: null,
-      prescription_template_updated_at: new Date().toISOString(),
+      handwritten_visit_template_url: null,
+      handwritten_visit_template_updated_at: new Date().toISOString(),
     })
     .eq("id", clinicId);
   if (error) throw new Error(error.message);

@@ -62,9 +62,9 @@ export default async function ClinicProfilePage() {
         </p>
         <p className="mt-2 text-sm text-on-surface-variant">
           <a className="font-semibold text-primary underline" href="/clinic-profile/prescription-template">
-            Handwritten prescription template
+            Handwritten full visit template
           </a>{" "}
-          — upload the sheet doctors draw on when saving stylus/mouse prescriptions.
+          — upload the full visit sheet doctors draw on when saving stylus/mouse visit documents.
         </p>
         <p className="mt-2 text-sm text-on-surface-variant">
           <a className="font-semibold text-primary underline" href="/medicines">

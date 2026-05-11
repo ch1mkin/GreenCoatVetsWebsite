@@ -1,17 +1,19 @@
 import Link from "next/link";
 
 /**
- * Visit report PDF is generated when the clinician saves the visit (`saveVisitRecord` → stored path).
+ * Visit report PDF can come from structured visit save or a handwritten full-visit sheet.
  * Download is only available once `storedAt` / `visit_report_pdf_generated_at` is set.
  */
 export function VisitReportToolbar({
   visitId,
   petId,
   storedAt,
+  source,
 }: {
   visitId: string;
   petId: string;
   storedAt: string | null;
+  source?: string | null;
 }) {
   const canDownload = Boolean(storedAt);
   return (
@@ -42,11 +44,12 @@ export function VisitReportToolbar({
       {storedAt ? (
         <p className="w-full text-[11px] text-on-surface-variant sm:ml-auto sm:w-auto">
           Last saved to record: {new Date(storedAt).toLocaleString()}
+          {source === "handwritten" ? " (handwritten full visit sheet)" : ""}
         </p>
       ) : (
         <p className="w-full text-[11px] text-on-surface-variant sm:ml-auto sm:w-auto">
-          The PDF is created when you use <strong>Save entire visit</strong> (or <strong>Complete visit</strong>) below — then you
-          can download it here and it appears on the patient record for owners.
+          The PDF is created when you use <strong>Save entire visit</strong> / <strong>Complete visit</strong> below, or when you
+          save the handwritten full visit sheet — then you can download it here and it appears on the patient record for owners.
         </p>
       )}
     </div>

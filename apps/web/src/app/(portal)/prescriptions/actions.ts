@@ -1,14 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
-import { getUserAccess } from "@/lib/auth/get-user-access";
 import {
   findBestMedicineCatalogMatch,
   shouldAutoCorrectMedicine,
   type MedicineCatalogEntry,
 } from "@/lib/medicines/catalog";
-import { buildHandwrittenPrescriptionPdfBytes } from "@/lib/pdf/clinic-documents";
 import { createClient } from "@/lib/supabase/server";
 
 export type RxLineItem = {
@@ -67,11 +64,6 @@ async function loadClinicMedicineCatalog(
     notes: row.notes ?? null,
     is_active: row.is_active ?? true,
   }));
-}
-
-function canSavePrescriptionArtifacts(role: string | null | undefined, isSuperAdmin: boolean): boolean {
-  if (isSuperAdmin) return true;
-  return ["receptionist", "clinic_admin", "branch_admin", "doctor", "pharmacist", "lab_technician"].includes(role ?? "");
 }
 
 /** Inserts a line and returns the row — no redirect (client updates UI). */
@@ -198,109 +190,5 @@ export async function updatePrescriptionItemInstructionsAction(formData: FormDat
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to update instructions.";
     return { ok: false, error: msg };
-  }
-}
-
-export type SaveHandwrittenPrescriptionResult = { ok: true; pdfPath: string } | { ok: false; error: string };
-
-function decodeImageDataUrl(dataUrl: string): Uint8Array {
-  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
-  if (!match) {
-    throw new Error("Handwritten prescription image is invalid.");
-  }
-
-  const base64 = match[2] ?? "";
-  return Uint8Array.from(Buffer.from(base64, "base64"));
-}
-
-export async function saveHandwrittenPrescriptionPdfAction(formData: FormData): Promise<SaveHandwrittenPrescriptionResult> {
-  try {
-    const access = await getUserAccess();
-    if (!canSavePrescriptionArtifacts(access.membership?.role, access.isSuperAdmin)) {
-      return { ok: false, error: "You do not have permission to save handwritten prescriptions." };
-    }
-
-    const prescriptionId = String(formData.get("prescription_id") ?? "").trim();
-    const visitId = String(formData.get("visit_id") ?? "").trim();
-    const imageDataUrl = String(formData.get("image_data_url") ?? "").trim();
-    if (!prescriptionId || !visitId || !imageDataUrl) {
-      return { ok: false, error: "Prescription, visit, and image are required." };
-    }
-
-    const { clinic_id } = await getActiveMembership();
-    const supabase = createClient();
-
-    const { data: prescription, error: prescriptionError } = await supabase
-      .from("prescriptions")
-      .select("id, clinic_id, visit_id, pet_id, branch_id")
-      .eq("id", prescriptionId)
-      .eq("clinic_id", clinic_id)
-      .maybeSingle();
-
-    if (prescriptionError) return { ok: false, error: prescriptionError.message };
-    if (!prescription || prescription.visit_id !== visitId) {
-      return { ok: false, error: "Prescription not found for this visit." };
-    }
-
-    const imageBytes = decodeImageDataUrl(imageDataUrl);
-    const pdfBytes = await buildHandwrittenPrescriptionPdfBytes({
-      imageBytes,
-      footerText: `Handwritten prescription saved ${new Date().toLocaleString()}.`,
-    });
-
-    const pdfPath = `${clinic_id}/prescriptions/${prescriptionId}-handwritten.pdf`;
-    const { error: uploadError } = await supabase.storage
-      .from("medical-files")
-      .upload(pdfPath, pdfBytes, { contentType: "application/pdf", upsert: true });
-    if (uploadError) return { ok: false, error: uploadError.message };
-
-    const { error: updateError } = await supabase
-      .from("prescriptions")
-      .update({ pdf_url: pdfPath })
-      .eq("id", prescriptionId)
-      .eq("clinic_id", clinic_id);
-    if (updateError) return { ok: false, error: updateError.message };
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const attachmentPayload = {
-      clinic_id,
-      branch_id: prescription.branch_id,
-      pet_id: prescription.pet_id,
-      visit_id: prescription.visit_id,
-      storage_bucket: "medical-files",
-      storage_path: pdfPath,
-      file_name: "handwritten-prescription.pdf",
-      mime_type: "application/pdf",
-      uploaded_by: user?.id ?? null,
-    };
-
-    const { data: existingAttachment, error: attachmentLookupError } = await supabase
-      .from("file_attachments")
-      .select("id")
-      .eq("clinic_id", clinic_id)
-      .eq("storage_path", pdfPath)
-      .maybeSingle();
-    if (attachmentLookupError) return { ok: false, error: attachmentLookupError.message };
-
-    if (existingAttachment?.id) {
-      const { error: attachmentUpdateError } = await supabase
-        .from("file_attachments")
-        .update(attachmentPayload)
-        .eq("id", existingAttachment.id)
-        .eq("clinic_id", clinic_id);
-      if (attachmentUpdateError) return { ok: false, error: attachmentUpdateError.message };
-    } else {
-      const { error: attachmentInsertError } = await supabase.from("file_attachments").insert(attachmentPayload);
-      if (attachmentInsertError) return { ok: false, error: attachmentInsertError.message };
-    }
-
-    revalidatePath(`/visits/${visitId}`);
-    revalidatePath("/medicines");
-    return { ok: true, pdfPath };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Failed to save handwritten prescription." };
   }
 }

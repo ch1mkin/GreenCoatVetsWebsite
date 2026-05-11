@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveHandwrittenPrescriptionPdfAction } from "@/app/(portal)/prescriptions/actions";
+import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
 
 type Point = { x: number; y: number };
 type Tool = "draw" | "erase" | "highlight";
@@ -29,7 +29,7 @@ function drawBuiltInTemplate(
   ctx.fillText(meta.clinicName || "Clinic", 86, 92);
   ctx.font = "22px Arial";
   ctx.fillStyle = "#475569";
-  ctx.fillText("Handwritten prescription sheet", 88, 126);
+  ctx.fillText("Handwritten visit sheet", 88, 126);
 
   ctx.strokeStyle = "#0f766e";
   ctx.lineWidth = 4;
@@ -48,9 +48,10 @@ function drawBuiltInTemplate(
   ctx.strokeStyle = "#cbd5e1";
   ctx.lineWidth = 2;
   const sections = [
-    { y: 330, title: "Rx" },
-    { y: 920, title: "Advice / Notes" },
-    { y: 1360, title: "Follow-up / Signature" },
+    { y: 330, title: "Complaint / History", height: 220 },
+    { y: 610, title: "Clinical Findings / Vitals", height: 240 },
+    { y: 910, title: "Diagnosis / Treatment / Prescription", height: 330 },
+    { y: 1300, title: "Advice / Follow-up / Signature", height: 300 },
   ];
 
   ctx.font = "bold 24px Arial";
@@ -58,18 +59,30 @@ function drawBuiltInTemplate(
 
   for (const section of sections) {
     ctx.fillText(section.title, 88, section.y - 16);
-    ctx.strokeRect(80, section.y, CANVAS_W - 160, section.title === "Rx" ? 520 : section.title === "Advice / Notes" ? 340 : 250);
+    ctx.strokeRect(80, section.y, CANVAS_W - 160, section.height);
   }
 
   ctx.strokeStyle = "#e2e8f0";
   ctx.lineWidth = 1;
-  for (let y = 370; y <= 810; y += 52) {
+  for (let y = 380; y <= 510; y += 44) {
     ctx.beginPath();
     ctx.moveTo(105, y);
     ctx.lineTo(CANVAS_W - 105, y);
     ctx.stroke();
   }
-  for (let y = 960; y <= 1210; y += 52) {
+  for (let y = 660; y <= 820; y += 44) {
+    ctx.beginPath();
+    ctx.moveTo(105, y);
+    ctx.lineTo(CANVAS_W - 105, y);
+    ctx.stroke();
+  }
+  for (let y = 960; y <= 1170; y += 44) {
+    ctx.beginPath();
+    ctx.moveTo(105, y);
+    ctx.lineTo(CANVAS_W - 105, y);
+    ctx.stroke();
+  }
+  for (let y = 1350; y <= 1530; y += 44) {
     ctx.beginPath();
     ctx.moveTo(105, y);
     ctx.lineTo(CANVAS_W - 105, y);
@@ -118,21 +131,19 @@ async function loadTemplateImage(url: string): Promise<HTMLImageElement> {
 }
 
 export function VisitHandwrittenPrescription({
-  prescriptionId,
   visitId,
   embed,
   templateImageUrl,
-  handwrittenPdfUrl,
+  hasSavedPdf,
   clinicName,
   petName,
   ownerName,
   doctorName,
 }: {
-  prescriptionId: string;
   visitId: string;
   embed: boolean;
   templateImageUrl: string | null;
-  handwrittenPdfUrl: string | null;
+  hasSavedPdf: boolean;
   clinicName: string;
   petName: string;
   ownerName: string;
@@ -259,15 +270,14 @@ export function VisitHandwrittenPrescription({
     try {
       const imageDataUrl = canvas.toDataURL("image/png");
       const fd = new FormData();
-      fd.set("prescription_id", prescriptionId);
       fd.set("visit_id", visitId);
       fd.set("image_data_url", imageDataUrl);
-      const result = await saveHandwrittenPrescriptionPdfAction(fd);
+      const result = await saveHandwrittenVisitPdfAction(fd);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      setMessage("Handwritten prescription saved as PDF.");
+      setMessage("Handwritten visit PDF saved.");
       router.refresh();
       setOpen(false);
     } finally {
@@ -280,19 +290,19 @@ export function VisitHandwrittenPrescription({
       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-on-background">Handwritten prescription</p>
+            <p className="text-sm font-semibold text-on-background">Handwritten full visit sheet</p>
             <p className="text-[12px] text-on-surface-variant">
-              Open a full-page writing studio for mouse or stylus input. The saved sheet is converted to PDF and stored on
-              this prescription record.
+              Open a full-page writing studio for mouse or stylus input. The saved sheet becomes the visit PDF used for
+              report download and owner-facing visit records.
             </p>
             <p className="text-[11px] text-on-surface-variant">
-              Background: {templateImageUrl ? "clinic template image" : "built-in blank prescription sheet"}
+              Background: {templateImageUrl ? "clinic full-visit template image" : "built-in blank visit sheet"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {handwrittenPdfUrl ? (
+            {hasSavedPdf ? (
               <a
-                href={handwrittenPdfUrl}
+                href={`/visits/${visitId}/report`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn-secondary btn-compact text-xs"
@@ -301,7 +311,7 @@ export function VisitHandwrittenPrescription({
               </a>
             ) : null}
             <button type="button" className="btn-primary btn-compact text-xs" onClick={() => setOpen(true)}>
-              {handwrittenPdfUrl ? "Edit handwritten PDF" : "Open handwriting studio"}
+              {hasSavedPdf ? "Edit handwritten visit PDF" : "Open handwriting studio"}
             </button>
           </div>
         </div>
@@ -318,9 +328,9 @@ export function VisitHandwrittenPrescription({
           <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
               <div>
-                <p className="font-headline text-base font-bold text-slate-900">Handwritten prescription studio</p>
+                <p className="font-headline text-base font-bold text-slate-900">Handwritten full visit studio</p>
                 <p className="text-[12px] text-slate-600">
-                  Draw on the sheet, then save it as the prescription PDF for {petName || "this patient"}.
+                  Draw on the whole visit template, then save it as the visit PDF for {petName || "this patient"}.
                 </p>
               </div>
               <button
@@ -416,7 +426,7 @@ export function VisitHandwrittenPrescription({
                     <ul className="mt-2 list-disc space-y-1 pl-4">
                       <li>Stylus works automatically where supported.</li>
                       <li>Highlight uses a transparent yellow marker.</li>
-                      <li>Save writes a PDF that appears in the pet owner app.</li>
+                      <li>Save writes the visit PDF that owners can open from visit reports.</li>
                     </ul>
                   </div>
 
@@ -427,10 +437,10 @@ export function VisitHandwrittenPrescription({
               <div className="flex min-h-0 flex-col bg-[#e2e8f0]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                   <div className="text-[12px] text-slate-600">
-                    {templateImageUrl ? "Template image loaded." : "Using built-in blank sheet."}
+                    {templateImageUrl ? "Full visit template image loaded." : "Using built-in blank visit sheet."}
                   </div>
                   <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
-                    {pending ? "Saving PDF…" : "Save handwritten prescription"}
+                    {pending ? "Saving PDF…" : "Save handwritten full visit"}
                   </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto p-4">

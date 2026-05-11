@@ -49,7 +49,7 @@ export default async function MedicinesPage() {
       .eq("clinic_id", clinic_id)
       .order("is_active", { ascending: false })
       .order("name", { ascending: true }),
-    supabase.from("clinics").select("name, prescription_template_url").eq("id", clinic_id).maybeSingle(),
+    supabase.from("clinics").select("name, handwritten_visit_template_url").eq("id", clinic_id).maybeSingle(),
   ]);
 
   if (error) throw new Error(error.message);
@@ -67,7 +67,7 @@ export default async function MedicinesPage() {
             Clinic profile
           </Link>
           <Link className="btn-primary text-sm" href="/clinic-profile/prescription-template">
-            Handwritten template
+            Full visit template
           </Link>
         </div>
       }
@@ -114,7 +114,7 @@ export default async function MedicinesPage() {
               <p className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Clinic</p>
               <p className="font-headline text-base font-bold text-primary">{clinic?.name ?? "Clinic"}</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Handwritten template: {clinic?.prescription_template_url ? "uploaded" : "using built-in blank layout"}
+                Handwritten visit template: {clinic?.handwritten_visit_template_url ? "uploaded" : "using built-in blank layout"}
               </p>
             </div>
           </div>

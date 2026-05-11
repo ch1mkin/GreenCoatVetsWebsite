@@ -729,7 +729,7 @@ export async function buildPrescriptionPdfBytes(opts: {
   return doc.save();
 }
 
-export async function buildHandwrittenPrescriptionPdfBytes(opts: {
+export async function buildHandwrittenCanvasPdfBytes(opts: {
   imageBytes: Uint8Array;
   footerText?: string | null;
 }): Promise<Uint8Array> {
@@ -756,7 +756,7 @@ export async function buildHandwrittenPrescriptionPdfBytes(opts: {
   page.drawImage(image, { x, y, width, height });
 
   const footer = sanitizePdfText(
-    opts.footerText?.trim() || "Handwritten prescription captured digitally and exported as a PDF record.",
+    opts.footerText?.trim() || "Handwritten clinical sheet captured digitally and exported as a PDF record.",
   );
   page.drawRectangle({
     x: BOX_INSET,

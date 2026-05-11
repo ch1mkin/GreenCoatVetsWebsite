@@ -13,6 +13,7 @@ import { SubmitButton } from "@/components/web/submit-button";
 import { VisitSection } from "@/components/clinical/visit-section";
 import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
+import { VisitHandwrittenPrescription } from "@/components/clinical/visit-handwritten-prescription";
 import { VisitPrescriptionBlockClient } from "@/components/clinical/visit-prescription-block-client";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
@@ -20,7 +21,6 @@ import { VisitSavePendingBanner } from "@/components/clinical/visit-save-pending
 import { VisitSaveFooter } from "@/components/clinical/visit-save-footer";
 import type { MedicineCatalogEntry } from "@/lib/medicines/catalog";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
-import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export default async function VisitDetailsPage({
   const { data: visit, error } = await supabase
     .from("visits")
     .select(
-      "id, doctor_id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, updated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
+      "id, doctor_id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, visit_report_pdf_source, updated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
     )
     .eq("id", resolvedParams.id)
     .eq("clinic_id", clinic_id)
@@ -158,7 +158,6 @@ export default async function VisitDetailsPage({
     { data: rxItems, error: rxItemsError },
     { data: attachments, error: attachmentsError },
     { data: medicineCatalogRows, error: medicineCatalogError },
-    { data: prescriptionRow, error: prescriptionRowError },
     { data: clinicRow, error: clinicRowError },
   ] = await Promise.all([
     supabase
@@ -180,14 +179,12 @@ export default async function VisitDetailsPage({
       .eq("clinic_id", clinic_id)
       .eq("is_active", true)
       .order("name", { ascending: true }),
-    supabase.from("prescriptions").select("id, pdf_url, issued_at").eq("id", prescriptionId).maybeSingle(),
-    supabase.from("clinics").select("name, prescription_template_url").eq("id", clinic_id).maybeSingle(),
+    supabase.from("clinics").select("name, handwritten_visit_template_url").eq("id", clinic_id).maybeSingle(),
   ]);
 
   if (rxItemsError) throw new Error(rxItemsError.message);
   if (attachmentsError) throw new Error(attachmentsError.message);
   if (medicineCatalogError) throw new Error(medicineCatalogError.message);
-  if (prescriptionRowError) throw new Error(prescriptionRowError.message);
   if (clinicRowError) throw new Error(clinicRowError.message);
 
   const medicineCatalog = ((medicineCatalogRows ?? []) as Array<
@@ -196,11 +193,6 @@ export default async function VisitDetailsPage({
     ...row,
     aliases: Array.isArray(row.aliases) ? row.aliases : [],
   }));
-  const prescriptionPdfSignedUrl = await resolveSignedImageUrl(
-    supabase,
-    (prescriptionRow?.pdf_url as string | null | undefined) ?? null,
-    { bucket: "medical-files", expiresIn: 60 * 30 },
-  );
   const ownerName = ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string } | null);
 
   const petId = String(pet?.id ?? "");
@@ -265,8 +257,35 @@ export default async function VisitDetailsPage({
               visitId={visit.id}
               petId={petId}
               storedAt={(visit.visit_report_pdf_generated_at as string | null) ?? null}
+              source={(visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source ?? null}
             />
           ) : null}
+          <VisitSection
+            embed={embed}
+            id="section-handwritten"
+            title="Handwritten full visit sheet"
+            defaultOpen={!embed}
+            className={
+              embed
+                ? ""
+                : "!rounded-none !border-0 !shadow-none border-t border-outline-variant/25 bg-surface-container-lowest/90 px-4 py-4"
+            }
+          >
+            <p className="mb-3 text-[11px] text-on-surface-variant">
+              Use this when the doctor wants to complete the entire visit on the handwritten template instead of only writing
+              a prescription. Saving here updates the visit PDF used by report download and owner-facing visit reports.
+            </p>
+            <VisitHandwrittenPrescription
+              visitId={visit.id}
+              embed={embed}
+              templateImageUrl={(clinicRow?.handwritten_visit_template_url as string | null | undefined) ?? null}
+              hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
+              clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
+              petName={String(pet?.name ?? "Patient")}
+              ownerName={ownerName}
+              doctorName={doctorDisplayName ?? "Doctor"}
+            />
+          </VisitSection>
           {previousVisits.length > 0 ? (
             <div className="rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
               <p className="font-headline font-bold">Earlier visits for this patient ({previousVisits.length})</p>
@@ -643,12 +662,6 @@ export default async function VisitDetailsPage({
             embed={embed}
             showVoiceDictation={showVoiceDictation}
             medicineCatalog={medicineCatalog}
-            handwrittenPdfUrl={prescriptionPdfSignedUrl}
-            templateImageUrl={(clinicRow?.prescription_template_url as string | null | undefined) ?? null}
-            clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
-            petName={String(pet?.name ?? "Patient")}
-            ownerName={ownerName}
-            doctorName={doctorDisplayName ?? "Doctor"}
           />
         </VisitSection>
         </div>

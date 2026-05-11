@@ -12,7 +12,6 @@ import {
   shouldAutoCorrectMedicine,
   type MedicineCatalogEntry,
 } from "@/lib/medicines/catalog";
-import { VisitHandwrittenPrescription } from "@/components/clinical/visit-handwritten-prescription";
 import { VisitRxVoicePanel } from "@/components/clinical/visit-rx-voice-panel";
 
 type DraftState = {
@@ -38,12 +37,6 @@ export function VisitPrescriptionBlockClient({
   embed,
   showVoiceDictation,
   medicineCatalog,
-  handwrittenPdfUrl,
-  templateImageUrl,
-  clinicName,
-  petName,
-  ownerName,
-  doctorName,
 }: {
   initialItems: RxLineItem[];
   prescriptionId: string;
@@ -51,16 +44,9 @@ export function VisitPrescriptionBlockClient({
   embed: boolean;
   showVoiceDictation: boolean;
   medicineCatalog: MedicineCatalogEntry[];
-  handwrittenPdfUrl: string | null;
-  templateImageUrl: string | null;
-  clinicName: string;
-  petName: string;
-  ownerName: string;
-  doctorName: string;
 }) {
   /** Do not sync from server props after mount — revalidation can briefly return stale rows and wipe optimistic UI. */
   const [items, setItems] = useState<RxLineItem[]>(initialItems);
-  const [mode, setMode] = useState<"structured" | "handwritten">("structured");
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -159,139 +145,102 @@ export function VisitPrescriptionBlockClient({
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-2xl border border-outline-variant/20 bg-surface-container-low p-1">
-        <button
-          type="button"
-          className={`rounded-xl px-3 py-2 text-xs font-semibold ${
-            mode === "structured" ? "bg-white text-primary shadow-sm" : "text-on-surface-variant"
-          }`}
-          onClick={() => setMode("structured")}
-        >
-          Structured prescription
-        </button>
-        <button
-          type="button"
-          className={`rounded-xl px-3 py-2 text-xs font-semibold ${
-            mode === "handwritten" ? "bg-white text-primary shadow-sm" : "text-on-surface-variant"
-          }`}
-          onClick={() => setMode("handwritten")}
-        >
-          Handwritten prescription
-        </button>
-      </div>
-
-      {mode === "structured" ? (
-        <>
-          {showVoiceDictation ? (
-            <VisitRxVoicePanel
-              embed={embed}
-              visitId={visitId}
-              lines={items.map((r) => ({
-                id: r.id,
-                medicine_name: r.medicine_name,
-                instructions: r.instructions,
-              }))}
-              onInstructionsSaved={onInstructionsSaved}
-              onInsertMedicineName={applyVoiceMedicineName}
-            />
-          ) : null}
-
-          <form id="form-rx-add" className="grid gap-2 md:grid-cols-2" onSubmit={onAddMedicine}>
-            <div className="space-y-2 md:col-span-2">
-              <div className="relative">
-                <input
-                  className="input-soft input-compact w-full"
-                  name="medicine_name"
-                  placeholder="Medicine name *"
-                  required
-                  value={draft.medicine_name}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, medicine_name: e.target.value }))}
-                  onBlur={maybeAutocorrectMedicine}
-                />
-                {!!filteredCatalog.length && (
-                  <div className="mt-2 rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-2">
-                    <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
-                      Searchable medicine picker
-                    </p>
-                    <div className="grid gap-1">
-                      {filteredCatalog.map((entry) => (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          className="rounded-xl border border-transparent px-3 py-2 text-left text-[12px] hover:border-outline-variant/20 hover:bg-surface-container-low"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => applyCatalogEntry(entry)}
-                        >
-                          <div className="font-semibold text-on-background">{entry.name}</div>
-                          <div className="text-[11px] text-on-surface-variant">
-                            {[entry.strength, entry.form, entry.default_dosage].filter(Boolean).join(" • ") || "Tap to use defaults"}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              {bestMatch ? (
-                <p className="text-[11px] text-on-surface-variant">
-                  Closest catalog match: <strong>{bestMatch.entry.name}</strong>
-                  {shouldAutoCorrectMedicine(bestMatch) ? " (will auto-correct on blur/save)." : " (review before saving)."}
-                </p>
-              ) : (
-                <p className="text-[11px] text-on-surface-variant">
-                  Manual typing is still allowed. If no match exists, the typed name will be saved as-is.
-                </p>
-              )}
-            </div>
-
-            <input
-              className="input-soft input-compact"
-              name="dosage"
-              placeholder="Dosage *"
-              required
-              value={draft.dosage}
-              onChange={(e) => setDraft((prev) => ({ ...prev, dosage: e.target.value }))}
-            />
-            <input
-              className="input-soft input-compact"
-              name="frequency"
-              placeholder="Frequency"
-              value={draft.frequency}
-              onChange={(e) => setDraft((prev) => ({ ...prev, frequency: e.target.value }))}
-            />
-            <input
-              className="input-soft input-compact"
-              name="duration"
-              placeholder="Duration"
-              value={draft.duration}
-              onChange={(e) => setDraft((prev) => ({ ...prev, duration: e.target.value }))}
-            />
-            <textarea
-              id="rx-new-instructions"
-              className="input-soft input-compact md:col-span-2 min-h-[48px]"
-              name="instructions"
-              placeholder="Instructions (use the prescription mic above, or type here)"
-              value={draft.instructions}
-              onChange={(e) => setDraft((prev) => ({ ...prev, instructions: e.target.value }))}
-            />
-            <button type="submit" className="btn-primary btn-compact md:col-span-2" disabled={pending}>
-              {pending ? "Adding…" : "Add medicine line"}
-            </button>
-          </form>
-        </>
-      ) : (
-        <VisitHandwrittenPrescription
-          prescriptionId={prescriptionId}
-          visitId={visitId}
+      {showVoiceDictation ? (
+        <VisitRxVoicePanel
           embed={embed}
-          templateImageUrl={templateImageUrl}
-          handwrittenPdfUrl={handwrittenPdfUrl}
-          clinicName={clinicName}
-          petName={petName}
-          ownerName={ownerName}
-          doctorName={doctorName}
+          visitId={visitId}
+          lines={items.map((r) => ({
+            id: r.id,
+            medicine_name: r.medicine_name,
+            instructions: r.instructions,
+          }))}
+          onInstructionsSaved={onInstructionsSaved}
+          onInsertMedicineName={applyVoiceMedicineName}
         />
-      )}
+      ) : null}
+
+      <form id="form-rx-add" className="grid gap-2 md:grid-cols-2" onSubmit={onAddMedicine}>
+        <div className="space-y-2 md:col-span-2">
+          <div className="relative">
+            <input
+              className="input-soft input-compact w-full"
+              name="medicine_name"
+              placeholder="Medicine name *"
+              required
+              value={draft.medicine_name}
+              onChange={(e) => setDraft((prev) => ({ ...prev, medicine_name: e.target.value }))}
+              onBlur={maybeAutocorrectMedicine}
+            />
+            {!!filteredCatalog.length && (
+              <div className="mt-2 rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-2">
+                <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">
+                  Searchable medicine picker
+                </p>
+                <div className="grid gap-1">
+                  {filteredCatalog.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className="rounded-xl border border-transparent px-3 py-2 text-left text-[12px] hover:border-outline-variant/20 hover:bg-surface-container-low"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applyCatalogEntry(entry)}
+                    >
+                      <div className="font-semibold text-on-background">{entry.name}</div>
+                      <div className="text-[11px] text-on-surface-variant">
+                        {[entry.strength, entry.form, entry.default_dosage].filter(Boolean).join(" • ") || "Tap to use defaults"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {bestMatch ? (
+            <p className="text-[11px] text-on-surface-variant">
+              Closest catalog match: <strong>{bestMatch.entry.name}</strong>
+              {shouldAutoCorrectMedicine(bestMatch) ? " (will auto-correct on blur/save)." : " (review before saving)."}
+            </p>
+          ) : (
+            <p className="text-[11px] text-on-surface-variant">
+              Manual typing is still allowed. If no match exists, the typed name will be saved as-is.
+            </p>
+          )}
+        </div>
+
+        <input
+          className="input-soft input-compact"
+          name="dosage"
+          placeholder="Dosage *"
+          required
+          value={draft.dosage}
+          onChange={(e) => setDraft((prev) => ({ ...prev, dosage: e.target.value }))}
+        />
+        <input
+          className="input-soft input-compact"
+          name="frequency"
+          placeholder="Frequency"
+          value={draft.frequency}
+          onChange={(e) => setDraft((prev) => ({ ...prev, frequency: e.target.value }))}
+        />
+        <input
+          className="input-soft input-compact"
+          name="duration"
+          placeholder="Duration"
+          value={draft.duration}
+          onChange={(e) => setDraft((prev) => ({ ...prev, duration: e.target.value }))}
+        />
+        <textarea
+          id="rx-new-instructions"
+          className="input-soft input-compact md:col-span-2 min-h-[48px]"
+          name="instructions"
+          placeholder="Instructions (use the prescription mic above, or type here)"
+          value={draft.instructions}
+          onChange={(e) => setDraft((prev) => ({ ...prev, instructions: e.target.value }))}
+        />
+        <button type="submit" className="btn-primary btn-compact md:col-span-2" disabled={pending}>
+          {pending ? "Adding…" : "Add medicine line"}
+        </button>
+      </form>
 
       {error ? (
         <p className="rounded-lg border border-error/40 bg-error-container/30 px-3 py-2 text-[12px] text-error" role="alert">

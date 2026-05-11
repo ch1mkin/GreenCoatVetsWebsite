@@ -4,7 +4,7 @@ import { AppShell } from "@/components/web/app-shell";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
-import { clearClinicPrescriptionTemplate, updateClinicPrescriptionTemplate } from "../actions";
+import { clearClinicHandwrittenVisitTemplate, updateClinicHandwrittenVisitTemplate } from "../actions";
 
 export default async function PrescriptionTemplatePage() {
   const access = await getUserAccess();
@@ -24,14 +24,14 @@ export default async function PrescriptionTemplatePage() {
   const supabase = createClient();
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("name, prescription_template_url, prescription_template_updated_at")
+    .select("name, handwritten_visit_template_url, handwritten_visit_template_updated_at")
     .eq("id", access.membership.clinic_id)
     .maybeSingle();
 
   return (
     <AppShell
-      title="Handwritten Prescription Template"
-      subtitle="Upload the sheet doctors trace on when they choose the handwritten prescription workspace."
+      title="Handwritten Full Visit Template"
+      subtitle="Upload the full visit sheet doctors trace on when they choose the handwritten visit workspace."
       activeHref="/clinic-profile/prescription-template"
       navGroups={navGroups}
       topRight={
@@ -49,8 +49,8 @@ export default async function PrescriptionTemplatePage() {
         <div className="rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
           <h2 className="font-headline text-lg font-bold text-on-background">{clinic?.name ?? "Clinic"} template</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Upload a clean prescription sheet image with empty fields. Doctors can then write over it using mouse or stylus,
-            and the saved sheet becomes a PDF record for the pet.
+            Upload a clean full-visit sheet image with empty fields. Doctors can then write over it using mouse or stylus,
+            and the saved sheet becomes the visit PDF record for the pet.
           </p>
           <div className="mt-4 rounded-2xl border border-dashed border-outline-variant/30 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
             Best results: portrait PNG/JPG, light background, dark printed lines, and a full-page sheet at roughly A4 ratio.
@@ -59,7 +59,7 @@ export default async function PrescriptionTemplatePage() {
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,380px)_1fr]">
           <div className="rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
-            <form action={updateClinicPrescriptionTemplate} encType="multipart/form-data">
+            <form action={updateClinicHandwrittenVisitTemplate} encType="multipart/form-data">
               <h3 className="font-headline text-base font-bold text-on-background">Upload / replace image</h3>
               <p className="mt-1 text-sm text-on-surface-variant">PNG, JPG, or WebP only.</p>
               <label className="mt-4 block text-sm font-medium text-on-surface-variant">
@@ -76,8 +76,8 @@ export default async function PrescriptionTemplatePage() {
                 Upload template
               </button>
             </form>
-            {clinic?.prescription_template_url ? (
-              <form action={clearClinicPrescriptionTemplate} className="mt-3">
+            {clinic?.handwritten_visit_template_url ? (
+              <form action={clearClinicHandwrittenVisitTemplate} className="mt-3">
                 <button className="btn-secondary text-sm" type="submit">
                   Use built-in blank sheet instead
                 </button>
@@ -90,27 +90,27 @@ export default async function PrescriptionTemplatePage() {
               <div>
                 <h3 className="font-headline text-base font-bold text-on-background">Preview</h3>
                 <p className="mt-1 text-sm text-on-surface-variant">
-                  {clinic?.prescription_template_url
+                  {clinic?.handwritten_visit_template_url
                     ? "Current clinic image used as the handwriting background."
-                    : "No uploaded image yet. Doctors will see the built-in blank prescription layout."}
+                    : "No uploaded image yet. Doctors will see the built-in blank full-visit layout."}
                 </p>
               </div>
               <p className="text-xs text-on-surface-variant">
-                {clinic?.prescription_template_updated_at
-                  ? `Updated ${new Date(clinic.prescription_template_updated_at).toLocaleString()}`
+                {clinic?.handwritten_visit_template_updated_at
+                  ? `Updated ${new Date(clinic.handwritten_visit_template_updated_at).toLocaleString()}`
                   : "Never uploaded"}
               </p>
             </div>
-            {clinic?.prescription_template_url ? (
+            {clinic?.handwritten_visit_template_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={clinic.prescription_template_url}
-                alt="Prescription template"
+                src={clinic.handwritten_visit_template_url}
+                alt="Handwritten full visit template"
                 className="mt-4 w-full rounded-2xl border border-outline-variant/15 bg-white object-contain shadow-sm"
               />
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-outline-variant/30 bg-white px-6 py-16 text-center text-sm text-on-surface-variant">
-                Built-in blank handwritten sheet will be used until an image is uploaded here.
+                Built-in blank handwritten full-visit sheet will be used until an image is uploaded here.
               </div>
             )}
           </div>
