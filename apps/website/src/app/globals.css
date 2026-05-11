@@ -247,3 +247,172 @@
   line-height: 1;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
 }
+
+/* Playful public-site scroll dog + softer branded scrollbar */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(54, 196, 151, 0.9) rgba(232, 242, 236, 0.95);
+}
+
+html::-webkit-scrollbar {
+  width: 14px;
+}
+
+html::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, rgba(244, 250, 248, 0.96), rgba(231, 240, 236, 0.96));
+}
+
+html::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 3px solid rgba(244, 250, 248, 0.96);
+  background: linear-gradient(180deg, rgba(54, 196, 151, 0.95), rgba(0, 108, 80, 0.95));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+@keyframes scroll-dog-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes scroll-dog-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(1px) scale(0.98);
+  }
+}
+
+@keyframes scroll-dog-doze {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(1px) scale(0.97);
+    opacity: 0.92;
+  }
+}
+
+@keyframes scroll-dog-zzz {
+  0% {
+    transform: translateY(4px) scale(0.9);
+    opacity: 0;
+  }
+  25%,
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-8px) scale(1.06);
+    opacity: 0;
+  }
+}
+
+.scroll-dog-indicator {
+  pointer-events: none;
+  position: fixed;
+  top: 6.5rem;
+  right: 0.45rem;
+  z-index: 45;
+  display: none;
+  height: calc(100vh - 9rem);
+  width: 3.5rem;
+}
+
+@media (min-width: 1024px) {
+  .scroll-dog-indicator {
+    display: block;
+  }
+}
+
+.scroll-dog-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 0.4rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(226, 236, 231, 0.98), rgba(188, 214, 205, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 0 1px rgba(23, 28, 31, 0.05);
+}
+
+.scroll-dog-runner {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  transition:
+    top 120ms linear,
+    transform 180ms ease,
+    opacity 180ms ease;
+}
+
+.scroll-dog-emoji {
+  position: relative;
+  z-index: 2;
+  display: block;
+  font-size: 1.9rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(23, 28, 31, 0.18));
+  transform-origin: center center;
+}
+
+.scroll-dog-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 0.08rem;
+  z-index: 1;
+  height: 0.42rem;
+  width: 1.45rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(23, 28, 31, 0.13);
+  filter: blur(1px);
+}
+
+.scroll-dog-arrow,
+.scroll-dog-zzz {
+  position: absolute;
+  left: calc(100% - 0.1rem);
+  top: -0.2rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.1rem 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #0c6b4f;
+  box-shadow: 0 6px 16px rgba(23, 28, 31, 0.12);
+}
+
+.scroll-dog--down .scroll-dog-emoji {
+  animation: scroll-dog-bob 0.42s ease-in-out infinite;
+  transform: rotate(6deg);
+}
+
+.scroll-dog--up .scroll-dog-emoji {
+  animation: scroll-dog-bob 0.42s ease-in-out infinite;
+  transform: scaleX(-1) rotate(6deg);
+}
+
+.scroll-dog--sit .scroll-dog-emoji {
+  animation: scroll-dog-breathe 2.2s ease-in-out infinite;
+}
+
+.scroll-dog--sleep .scroll-dog-emoji {
+  animation: scroll-dog-doze 2.8s ease-in-out infinite;
+}
+
+.scroll-dog--sleep .scroll-dog-zzz {
+  animation: scroll-dog-zzz 2.2s ease-in-out infinite;
+}

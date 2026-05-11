@@ -6,6 +6,7 @@ import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-tests";
 import { upsertMedicalRecordForVisit } from "@/lib/medical-records/upsert-by-visit";
+import { regenerateVisitReportPdfAttachment } from "@/app/(portal)/visits/visit-report-actions";
 
 export async function createVisitFromAppointment(formData: FormData) {
   const appointmentId = String(formData.get("appointment_id") ?? "").trim();
@@ -276,6 +277,12 @@ export async function saveVisitRecord(formData: FormData) {
   await persistVisitClinicalEvaluation(supabase, clinic_id, formData);
   await persistVisitConsultation(supabase, clinic_id, formData);
   await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
+
+  try {
+    await regenerateVisitReportPdfAttachment(visitId);
+  } catch (e) {
+    console.error("[saveVisitRecord] visit report PDF", e);
+  }
 
   revalidatePath("/appointments");
   revalidatePath(`/visits/${visitId}`);

@@ -28,20 +28,6 @@ export const DEFAULT_MARKETING_LOCATIONS: MarketingLocationPublic[] = [
     longitude: 76.6478,
   },
   {
-    id: "default-mohali-tdi",
-    name: "Mohali TDI Clinic",
-    addressLines: [
-      "GREENCOAT VETS TDI PET CLINIC Tdi Oxfort Sreet, Airport Road, Mohali SAS Nagar,",
-      "Mohali — 160055 (Near Taj Plaza)",
-    ],
-    phoneDisplay: "9127700007",
-    telHref: "tel:+919127700007",
-    hoursLabel: "Open 24/7 on Call",
-    directionsUrl: null,
-    latitude: 30.667,
-    longitude: 76.707,
-  },
-  {
     id: "default-ropar",
     name: "Ropar Clinic",
     addressLines: ["XGC9+WRG, road, opposite Gugga marhi, Haveli Kalan,", "Rupnagar, Punjab 140001"],
@@ -100,6 +86,15 @@ export const DEFAULT_MARKETING_LOCATIONS: MarketingLocationPublic[] = [
     longitude: 74.466,
   },
 ];
+
+/**
+ * Public website should no longer list the deprecated Mohali TDI location.
+ * Keep the check broad enough to hide legacy DB rows until the cleanup migration runs.
+ */
+export function isSuppressedPublicLocation(loc: Pick<MarketingLocationPublic, "id" | "name" | "addressLines">): boolean {
+  const haystack = [loc.id, loc.name, ...(loc.addressLines ?? [])].join(" ").toLowerCase();
+  return haystack.includes("mohali tdi") || haystack.includes("tdi ox") || haystack.includes("taj plaza");
+}
 
 export function getDirectionsUrl(loc: MarketingLocationPublic): string {
   if (loc.directionsUrl?.trim()) return loc.directionsUrl;

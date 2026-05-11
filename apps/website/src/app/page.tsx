@@ -3,6 +3,7 @@ import Link from "next/link";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import {
   buildHeroSlideUrls,
+  getMarketingLocationsOrDefaults,
   getMarketingSiteSettings,
   mergeHomepageCopy,
   mergeHomepageImages,
@@ -57,25 +58,6 @@ const WHY_US = [
   },
 ] as const;
 
-const LOCATIONS = [
-  {
-    name: "Mohali clinic",
-    lines: [
-      "SCO 20, 9, near Bestech Mall, Industrial Area",
-      "Industrial Area Mohali Phase 9, Sahibzada Ajit Singh Nagar",
-      "Punjab 160062",
-    ],
-  },
-  {
-    name: "Mohali TDI clinic",
-    lines: ["TDI Oxford Street, Airport Road", "Mohali SAS Nagar – 160055", "(Near Taj Plaza)"],
-  },
-  {
-    name: "Kharar clinic",
-    lines: ["SCO 9, near Chirag Homes", "Jandpur Road, Mohali Sector 123", "140301"],
-  },
-] as const;
-
 const FAQ_PREVIEW = [
   "What are your clinic's operating hours?",
   "Do I need an appointment before visiting?",
@@ -99,10 +81,15 @@ export async function generateMetadata() {
 
 export default async function Home() {
   const clinic = await resolveClinic();
-  const [branding, marketing] = await Promise.all([getPlatformBranding(), getMarketingSiteSettings()]);
+  const [branding, marketing, publicLocations] = await Promise.all([
+    getPlatformBranding(),
+    getMarketingSiteSettings(),
+    getMarketingLocationsOrDefaults(),
+  ]);
   const images = mergeHomepageImages(marketing.homepage_images);
   const heroCopy = mergeHomepageCopy(marketing.homepage_copy);
   const heroSlides = buildHeroSlideUrls(images, marketing.homepage_images);
+  const homepageLocations = publicLocations.slice(0, 3);
   const supabase = createClient();
   const [{ data: services }, { data: reviews }] = await Promise.all([
     supabase
@@ -341,14 +328,14 @@ export default async function Home() {
             <h2 className="font-headline text-3xl font-extrabold text-on-surface sm:text-4xl">Locations</h2>
             <p className="mt-3 text-on-surface-variant">Visit us at a branch that&apos;s convenient for you.</p>
             <div className="mt-10 grid gap-8 md:grid-cols-3">
-              {LOCATIONS.map((loc) => (
+              {homepageLocations.map((loc) => (
                 <address
-                  key={loc.name}
+                  key={loc.id}
                   className="not-italic rounded-[2rem] border border-outline-variant/30 bg-surface-container-low p-6 shadow-sm"
                 >
                   <h3 className="font-headline text-lg font-bold text-primary">{loc.name}</h3>
                   <p className="mt-4 text-sm leading-relaxed text-on-surface-variant">
-                    {loc.lines.map((line) => (
+                    {loc.addressLines.map((line) => (
                       <span key={line} className="block">
                         {line}
                       </span>

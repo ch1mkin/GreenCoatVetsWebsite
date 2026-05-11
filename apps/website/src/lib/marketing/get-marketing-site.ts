@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_MARKETING_LOCATIONS } from "./default-locations";
+import { DEFAULT_MARKETING_LOCATIONS, isSuppressedPublicLocation } from "./default-locations";
 import {
   DEFAULT_HOMEPAGE_COPY,
   DEFAULT_HOMEPAGE_IMAGES,
@@ -111,29 +111,31 @@ export async function getMarketingLocations(): Promise<MarketingLocationPublic[]
     return [];
   }
 
-  return data.map((row) => ({
-    id: row.id as string,
-    name: row.name as string,
-    addressLines: Array.isArray(row.address_lines) ? (row.address_lines as string[]) : [],
-    phoneDisplay: (row.phone_display as string) ?? "",
-    telHref: (row.tel_href as string) ?? "",
-    hoursLabel: (row.hours_label as string) ?? "",
-    directionsUrl: (row.directions_url as string | null) ?? null,
-    latitude: (() => {
-      const n = typeof row.latitude === "number" ? row.latitude : Number(row.latitude);
-      return Number.isFinite(n) ? n : null;
-    })(),
-    longitude: (() => {
-      const n = typeof row.longitude === "number" ? row.longitude : Number(row.longitude);
-      return Number.isFinite(n) ? n : null;
-    })(),
-  }));
+  return data
+    .map((row) => ({
+      id: row.id as string,
+      name: row.name as string,
+      addressLines: Array.isArray(row.address_lines) ? (row.address_lines as string[]) : [],
+      phoneDisplay: (row.phone_display as string) ?? "",
+      telHref: (row.tel_href as string) ?? "",
+      hoursLabel: (row.hours_label as string) ?? "",
+      directionsUrl: (row.directions_url as string | null) ?? null,
+      latitude: (() => {
+        const n = typeof row.latitude === "number" ? row.latitude : Number(row.latitude);
+        return Number.isFinite(n) ? n : null;
+      })(),
+      longitude: (() => {
+        const n = typeof row.longitude === "number" ? row.longitude : Number(row.longitude);
+        return Number.isFinite(n) ? n : null;
+      })(),
+    }))
+    .filter((row) => !isSuppressedPublicLocation(row));
 }
 
 export async function getMarketingLocationsOrDefaults(): Promise<MarketingLocationPublic[]> {
   const rows = await getMarketingLocations();
   if (rows.length > 0) return rows;
-  return DEFAULT_MARKETING_LOCATIONS;
+  return DEFAULT_MARKETING_LOCATIONS.filter((row) => !isSuppressedPublicLocation(row));
 }
 
 export type { MarketingLocationPublic } from "./types";

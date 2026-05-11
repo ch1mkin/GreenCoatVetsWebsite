@@ -46,6 +46,9 @@ export default async function AdminLocationsPage({
           These rows power the public <code className="rounded bg-slate-100 px-1">/locations</code> page. If there are no rows, the site falls
           back to built‑in defaults.
         </p>
+        <p className="mt-2 text-sm text-slate-500">
+          Any <strong>active</strong> row with both <strong>latitude</strong> and <strong>longitude</strong> appears as a pin on the public map.
+        </p>
       </div>
 
       <AdminFlashMessages saved={saved} deleted={deleted} error={errorMessage} />

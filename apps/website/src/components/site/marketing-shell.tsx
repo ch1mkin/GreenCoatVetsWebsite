@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/site/site-footer";
 import { SiteHeader } from "@/components/site/site-header";
 import { BookingReminderBar } from "@/components/site/booking-reminder-bar";
 import { MarketingSitePopups } from "@/components/site/marketing-site-popups";
+import { ScrollDogIndicator } from "@/components/site/scroll-dog-indicator";
 import type { FooterNavGroup } from "@/lib/marketing/footer-nav";
 import type { SocialLinks } from "@/lib/marketing/defaults";
 import type { MarketingPopupRow } from "@/lib/marketing/popups";
@@ -55,6 +56,7 @@ export function MarketingShell({
         callTelHref={navbarCallTelHref}
         websiteStoreEnabled={websiteStoreEnabled}
       />
+      <ScrollDogIndicator />
       <div className="marketing-atmosphere relative pt-16 sm:pt-20">
         <div className="relative z-[1]">{children}</div>
       </div>
