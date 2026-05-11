@@ -9,6 +9,7 @@ type InkTool = "draw" | "erase" | "highlight";
 type Tool = InkTool | "scroll";
 type Stroke = { id: string; tool: InkTool; width: number; points: Point[] };
 type ToolbarPosition = { x: number; y: number };
+type ViewportSize = { width: number; height: number };
 
 const CANVAS_W = 1240;
 const CANVAS_H = 1754;
@@ -16,6 +17,7 @@ const EXPORT_MIME = "image/jpeg";
 const EXPORT_QUALITY = 0.92;
 const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
 const TOOLBAR_MARGIN = 12;
+const FULLSCREEN_SHEET_MARGIN = 24;
 
 function toolButtonClass(active: boolean) {
   return active
@@ -206,6 +208,7 @@ export function VisitHandwrittenPrescription({
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [fullscreenToolbarPos, setFullscreenToolbarPos] = useState<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
   const [toolbarDragActive, setToolbarDragActive] = useState(false);
+  const [viewportSize, setViewportSize] = useState<ViewportSize>({ width: CANVAS_W, height: CANVAS_H });
 
   const meta = useMemo(
     () => ({ clinicName, petName, ownerName, doctorName }),
@@ -270,6 +273,16 @@ export function VisitHandwrittenPrescription({
   }, [open, redrawStrokes]);
 
   useEffect(() => {
+    if (!open) return;
+    const redrawAll = () => {
+      redrawTemplate();
+      redrawStrokes();
+    };
+    const raf = window.requestAnimationFrame(redrawAll);
+    return () => window.cancelAnimationFrame(raf);
+  }, [open, fullscreenActive, redrawTemplate, redrawStrokes]);
+
+  useEffect(() => {
     if (!open) {
       setFullscreenActive(false);
       return;
@@ -298,6 +311,21 @@ export function VisitHandwrittenPrescription({
       window.removeEventListener("resize", updateToolbarBounds);
     };
   }, [fullscreenActive]);
+
+  useEffect(() => {
+    if (!open) return;
+    const updateViewportSize = () => {
+      setViewportSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    updateViewportSize();
+    window.addEventListener("resize", updateViewportSize);
+    return () => {
+      window.removeEventListener("resize", updateViewportSize);
+    };
+  }, [open]);
 
   const pointFromEvent = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -453,6 +481,16 @@ export function VisitHandwrittenPrescription({
   const writingCanvasClass = fullscreenActive
     ? `absolute inset-0 w-full ${scrollMode ? "pointer-events-none" : "touch-none"}`
     : `absolute inset-0 w-full rounded-[18px] ${scrollMode ? "pointer-events-none" : "touch-none"}`;
+  const fullscreenSheetStyle = useMemo(() => {
+    if (!fullscreenActive) return undefined;
+    const maxWidth = Math.max(320, viewportSize.width - FULLSCREEN_SHEET_MARGIN * 2);
+    const maxHeight = Math.max(320, viewportSize.height - FULLSCREEN_SHEET_MARGIN * 2);
+    const scale = Math.min(maxWidth / CANVAS_W, maxHeight / CANVAS_H);
+    return {
+      width: `${Math.max(320, Math.floor(CANVAS_W * scale))}px`,
+      height: `${Math.max(452, Math.floor(CANVAS_H * scale))}px`,
+    };
+  }, [fullscreenActive, viewportSize.height, viewportSize.width]);
 
   const toolbarBody = (
     <>
@@ -703,24 +741,26 @@ export function VisitHandwrittenPrescription({
               <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
                 {fullscreenToolbar}
                 <div className="h-full overflow-x-auto overflow-y-scroll bg-slate-950">
-                  <div className="relative w-full min-w-[760px] bg-white">
-                    <canvas
-                      ref={templateCanvasRef}
-                      width={CANVAS_W}
-                      height={CANVAS_H}
-                      className={sheetCanvasClass}
-                      aria-hidden="true"
-                    />
-                    <canvas
-                      ref={drawingCanvasRef}
-                      width={CANVAS_W}
-                      height={CANVAS_H}
-                      className={writingCanvasClass}
-                      onPointerDown={startStroke}
-                      onPointerMove={moveStroke}
-                      onPointerUp={endStroke}
-                      onPointerCancel={endStroke}
-                    />
+                  <div className="flex min-h-full items-start justify-center p-3">
+                    <div className="relative shrink-0 bg-white shadow-2xl" style={fullscreenSheetStyle}>
+                      <canvas
+                        ref={templateCanvasRef}
+                        width={CANVAS_W}
+                        height={CANVAS_H}
+                        className={sheetCanvasClass}
+                        aria-hidden="true"
+                      />
+                      <canvas
+                        ref={drawingCanvasRef}
+                        width={CANVAS_W}
+                        height={CANVAS_H}
+                        className={writingCanvasClass}
+                        onPointerDown={startStroke}
+                        onPointerMove={moveStroke}
+                        onPointerUp={endStroke}
+                        onPointerCancel={endStroke}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
