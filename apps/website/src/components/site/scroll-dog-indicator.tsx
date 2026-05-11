@@ -65,7 +65,7 @@ export function ScrollDogIndicator() {
       <div className="scroll-dog-track" />
       <div
         className={`scroll-dog-runner ${stateClass}`}
-        style={{ top: `calc(${(progress * 100).toFixed(2)}% - 1.5rem)` }}
+        style={{ top: `calc(${progress.toFixed(4)} * (100% - 3rem))` }}
       >
         <span className="scroll-dog-shadow" />
         <span className="material-symbols-outlined scroll-dog-emoji scroll-paw-icon">pets</span>

@@ -352,9 +352,9 @@ html::-webkit-scrollbar-thumb {
   left: 50%;
   transform: translateX(-50%);
   transition:
-    top 120ms linear,
     transform 180ms ease,
     opacity 180ms ease;
+  will-change: top;
 }
 
 .scroll-dog-emoji {
