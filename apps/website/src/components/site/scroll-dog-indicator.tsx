@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 
 type Direction = "up" | "down";
 type IdlePose = "sit" | "sleep";
+const TOP_OFFSET_PX = 104;
+const MIN_BOTTOM_OFFSET_PX = 24;
+const FOOTER_CLEARANCE_PX = 16;
 
 /**
  * Decorative site-wide scroll tracker for the public website.
@@ -15,6 +18,7 @@ export function ScrollDogIndicator() {
   const [direction, setDirection] = useState<Direction>("down");
   const [moving, setMoving] = useState(false);
   const [idlePose, setIdlePose] = useState<IdlePose>("sit");
+  const [bottomOffset, setBottomOffset] = useState(MIN_BOTTOM_OFFSET_PX);
   const lastY = useRef(0);
   const moveTimer = useRef<number | undefined>(undefined);
   const sleepTimer = useRef<number | undefined>(undefined);
@@ -29,8 +33,11 @@ export function ScrollDogIndicator() {
       const doc = document.documentElement;
       const maxScroll = Math.max(doc.scrollHeight - window.innerHeight, 0);
       const y = window.scrollY;
+      const footerRect = document.querySelector("footer")?.getBoundingClientRect();
+      const footerOverlap = footerRect ? Math.max(window.innerHeight - footerRect.top, 0) : 0;
       setVisible(maxScroll > 280);
       setProgress(maxScroll > 0 ? Math.min(Math.max(y / maxScroll, 0), 1) : 0);
+      setBottomOffset(Math.max(MIN_BOTTOM_OFFSET_PX, footerOverlap + FOOTER_CLEARANCE_PX));
 
       const delta = y - lastY.current;
       if (Math.abs(delta) > 1) {
@@ -61,8 +68,11 @@ export function ScrollDogIndicator() {
   const stateClass = moving ? `scroll-dog--${direction}` : idlePose === "sleep" ? "scroll-dog--sleep" : "scroll-dog--sit";
 
   return (
-    <div className="scroll-dog-indicator" aria-hidden="true">
-      <div className="scroll-dog-track" />
+    <div
+      className="scroll-dog-indicator"
+      aria-hidden="true"
+      style={{ top: `${TOP_OFFSET_PX}px`, bottom: `${bottomOffset}px` }}
+    >
       <div
         className={`scroll-dog-runner ${stateClass}`}
         style={{ top: `calc(${progress.toFixed(4)} * (100% - 3rem))` }}
