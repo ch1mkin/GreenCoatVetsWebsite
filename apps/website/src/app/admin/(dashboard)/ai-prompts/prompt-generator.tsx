@@ -42,8 +42,13 @@ export function PromptGenerator() {
     startTransition(() => {
       void (async () => {
         try {
-          const pack = await generateInstagramPromptPack(form);
-          setResult(pack);
+          const result = await generateInstagramPromptPack(form);
+          if (!result.ok) {
+            setResult(null);
+            setError(result.error);
+            return;
+          }
+          setResult(result.pack);
         } catch (err) {
           setResult(null);
           setError(err instanceof Error ? err.message : "Failed to generate prompt.");
@@ -78,6 +83,9 @@ export function PromptGenerator() {
           <p className="mt-2 text-sm text-slate-600">
             DeepSeek R1 creates the strategy and Gemini-ready art prompt. The output stays focused on illustrated, 2D,
             non-realistic Instagram creatives.
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Recommended free OpenRouter model: <code className="rounded bg-slate-100 px-1 py-0.5">deepseek/deepseek-r1-0528:free</code>
           </p>
         </div>
 
