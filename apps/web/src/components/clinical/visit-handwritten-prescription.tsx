@@ -43,6 +43,11 @@ function clampToolbarPosition(pos: ToolbarPosition, toolbar: HTMLDivElement | nu
   };
 }
 
+function applyToolbarPosition(toolbar: HTMLDivElement | null, pos: ToolbarPosition) {
+  if (!toolbar) return;
+  toolbar.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
+}
+
 function drawBuiltInTemplate(
   ctx: CanvasRenderingContext2D,
   meta: { clinicName: string; petName: string; ownerName: string; doctorName: string },
@@ -196,6 +201,9 @@ export function VisitHandwrittenPrescription({
   const activePointerId = useRef<number | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
   const toolbarDragOffset = useRef<Point | null>(null);
+  const fullscreenToolbarPosRef = useRef<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
+  const pendingToolbarPosRef = useRef<ToolbarPosition | null>(null);
+  const toolbarDragRafRef = useRef<number | null>(null);
   const [templateImage, setTemplateImage] = useState<HTMLImageElement | null>(null);
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
@@ -299,11 +307,15 @@ export function VisitHandwrittenPrescription({
 
   useEffect(() => {
     if (!fullscreenActive) {
+      fullscreenToolbarPosRef.current = TOOLBAR_DEFAULT_POS;
       setFullscreenToolbarPos(TOOLBAR_DEFAULT_POS);
       return;
     }
     const updateToolbarBounds = () => {
-      setFullscreenToolbarPos((current) => clampToolbarPosition(current, fullscreenToolbarRef.current));
+      const next = clampToolbarPosition(fullscreenToolbarPosRef.current, fullscreenToolbarRef.current);
+      fullscreenToolbarPosRef.current = next;
+      applyToolbarPosition(fullscreenToolbarRef.current, next);
+      setFullscreenToolbarPos(next);
     };
     updateToolbarBounds();
     window.addEventListener("resize", updateToolbarBounds);
@@ -311,6 +323,11 @@ export function VisitHandwrittenPrescription({
       window.removeEventListener("resize", updateToolbarBounds);
     };
   }, [fullscreenActive]);
+
+  useEffect(() => {
+    fullscreenToolbarPosRef.current = fullscreenToolbarPos;
+    applyToolbarPosition(fullscreenToolbarRef.current, fullscreenToolbarPos);
+  }, [fullscreenToolbarPos]);
 
   useEffect(() => {
     if (!open) return;
@@ -383,6 +400,18 @@ export function VisitHandwrittenPrescription({
   useEffect(() => {
     if (!toolbarDragActive) return;
 
+    const flushPendingToolbarPosition = () => {
+      if (toolbarDragRafRef.current !== null) {
+        window.cancelAnimationFrame(toolbarDragRafRef.current);
+        toolbarDragRafRef.current = null;
+      }
+      const next = pendingToolbarPosRef.current;
+      if (!next) return;
+      pendingToolbarPosRef.current = null;
+      fullscreenToolbarPosRef.current = next;
+      applyToolbarPosition(fullscreenToolbarRef.current, next);
+    };
+
     const onPointerMove = (event: PointerEvent) => {
       if (toolbarDragPointerId.current !== event.pointerId || !toolbarDragOffset.current) return;
       const next = clampToolbarPosition(
@@ -392,13 +421,24 @@ export function VisitHandwrittenPrescription({
         },
         fullscreenToolbarRef.current,
       );
-      setFullscreenToolbarPos(next);
+      pendingToolbarPosRef.current = next;
+      if (toolbarDragRafRef.current !== null) return;
+      toolbarDragRafRef.current = window.requestAnimationFrame(() => {
+        toolbarDragRafRef.current = null;
+        const framePos = pendingToolbarPosRef.current;
+        if (!framePos) return;
+        pendingToolbarPosRef.current = null;
+        fullscreenToolbarPosRef.current = framePos;
+        applyToolbarPosition(fullscreenToolbarRef.current, framePos);
+      });
     };
 
     const onPointerUp = (event: PointerEvent) => {
       if (toolbarDragPointerId.current !== event.pointerId) return;
+      flushPendingToolbarPosition();
       toolbarDragPointerId.current = null;
       toolbarDragOffset.current = null;
+      setFullscreenToolbarPos(fullscreenToolbarPosRef.current);
       setToolbarDragActive(false);
     };
 
@@ -406,6 +446,7 @@ export function VisitHandwrittenPrescription({
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("pointercancel", onPointerUp);
     return () => {
+      flushPendingToolbarPosition();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
@@ -415,6 +456,12 @@ export function VisitHandwrittenPrescription({
   const startToolbarDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     const rect = fullscreenToolbarRef.current?.getBoundingClientRect();
     if (!rect) return;
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* noop */
+    }
     toolbarDragPointerId.current = event.pointerId;
     toolbarDragOffset.current = {
       x: event.clientX - rect.left,
@@ -587,12 +634,12 @@ export function VisitHandwrittenPrescription({
   const fullscreenToolbar = (
     <div
       ref={fullscreenToolbarRef}
-      className="absolute z-20 w-[110px] rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
-      style={{ left: fullscreenToolbarPos.x, top: fullscreenToolbarPos.y }}
+      className="absolute left-0 top-0 z-20 w-[110px] will-change-transform rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
+      style={{ transform: `translate3d(${fullscreenToolbarPos.x}px, ${fullscreenToolbarPos.y}px, 0)` }}
     >
       <button
         type="button"
-        className="mb-2 flex w-full cursor-grab items-center justify-center rounded-lg border border-slate-300/80 bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 active:cursor-grabbing"
+        className="mb-2 flex w-full cursor-grab touch-none select-none items-center justify-center rounded-lg border border-slate-300/80 bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 active:cursor-grabbing"
         onPointerDown={startToolbarDrag}
       >
         Move
