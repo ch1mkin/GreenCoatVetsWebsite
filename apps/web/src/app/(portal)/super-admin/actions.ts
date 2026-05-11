@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
 import { createClient } from "@/lib/supabase/server";
 
 async function assertSuperAdmin() {
@@ -284,6 +285,7 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
   await assertSuperAdmin();
   const clinicId = String(formData.get("clinic_id") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
   const role = String(formData.get("role") ?? "").trim();
   const fullName = String(formData.get("full_name") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -298,17 +300,34 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
     p_email: email,
   });
   if (lookErr) throw new Error(lookErr.message);
-  if (!uid) throw new Error("No account with that email.");
+  let targetUserId = uid as string | null;
+  let createdUserId: string | null = null;
+  if (!targetUserId) {
+    const created = await provisionUserAccountForAdmin({
+      email,
+      password,
+      fullName,
+      phone,
+    });
+    targetUserId = created.userId;
+    createdUserId = created.userId;
+  }
+  if (!targetUserId) throw new Error("Unable to resolve a user for this email.");
 
   const { error } = await supabase.rpc("assign_user_to_clinic_by_admin", {
-    p_target_user_id: uid as string,
+    p_target_user_id: targetUserId,
     p_clinic_id: clinicId,
     p_role: role,
     p_staff_full_name: fullName,
     p_staff_phone: phone,
     p_working_hours: role === "doctor" ? workingHours : null,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (createdUserId) {
+      await rollbackProvisionedUser(createdUserId);
+    }
+    throw new Error(error.message);
+  }
   revalidatePath("/super-admin/users");
   revalidatePath("/team");
 }

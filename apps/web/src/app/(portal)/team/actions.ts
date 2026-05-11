@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
+import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
 import { createClient } from "@/lib/supabase/server";
 
 export type TeamMemberRow = {
@@ -32,6 +33,7 @@ export async function assignUserToClinicAction(formData: FormData) {
   }
   const { clinic_id } = await getActiveMembership();
   const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
   const role = String(formData.get("role") ?? "").trim() as
     | "branch_admin"
     | "doctor"
@@ -52,8 +54,20 @@ export async function assignUserToClinicAction(formData: FormData) {
     p_email: email,
   });
   if (lookErr) throw new Error(lookErr.message);
-  const uid = userId as string | null;
-  if (!uid) throw new Error("No account found with that email. They must sign up first.");
+  let uid = userId as string | null;
+  let createdUserId: string | null = null;
+
+  if (!uid) {
+    const created = await provisionUserAccountForAdmin({
+      email,
+      password,
+      fullName,
+      phone,
+    });
+    uid = created.userId;
+    createdUserId = created.userId;
+  }
+  if (!uid) throw new Error("Unable to resolve a user for this email.");
 
   const { error } = await supabase.rpc("assign_user_to_clinic_by_admin", {
     p_target_user_id: uid,
@@ -63,7 +77,12 @@ export async function assignUserToClinicAction(formData: FormData) {
     p_staff_phone: phone,
     p_working_hours: role === "doctor" ? workingHours : null,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (createdUserId) {
+      await rollbackProvisionedUser(createdUserId);
+    }
+    throw new Error(error.message);
+  }
   revalidatePath("/team");
 }
 

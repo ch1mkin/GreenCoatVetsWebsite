@@ -34,7 +34,7 @@ export default async function SuperAdminUsersPage() {
   return (
     <AppShell
       title="Users & roles"
-      subtitle="Look up accounts by email, assign roles to any clinic, or deactivate all clinic access for a user."
+      subtitle="Create accounts, assign roles to any clinic, or deactivate all clinic access for a user."
       activeHref="/super-admin/users"
       navGroups={navGroups}
       topRight={
@@ -46,7 +46,7 @@ export default async function SuperAdminUsersPage() {
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign role (any clinic)</h2>
         <p className="mt-1 text-[11px] text-slate-600">
-          The person must already have signed up. Doctors require working hours in the field below.
+          Existing users can be assigned immediately. If the email is new, add a custom password below and the account will be created and assigned in one step.
         </p>
         <form action={superAdminAssignUserToClinicAction} className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2 lg:col-span-3">
@@ -96,6 +96,16 @@ export default async function SuperAdminUsersPage() {
           <label className="flex flex-col gap-0.5 text-[11px]">
             <span className="font-semibold text-slate-700">Phone</span>
             <input name="phone" className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2">
+            <span className="font-semibold text-slate-700">Custom password for new user</span>
+            <input
+              type="password"
+              name="password"
+              placeholder="Required only when this email does not exist yet"
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]"
+              autoComplete="new-password"
+            />
           </label>
           <label className="flex flex-col gap-0.5 text-[11px]">
             <span className="font-semibold text-slate-700">Doctor working hours</span>

@@ -32,12 +32,15 @@ export default async function TeamManagementPage() {
   return (
     <AppShell
       title="Team & roles"
-      subtitle="Assign staff and pet owner roles by email. The person must already have an account (sign up once)."
+      subtitle="Assign staff and pet owner roles by email. If the email is new, create the account here with a custom password and assign access in one step."
       activeHref="/team"
       navGroups={navGroups}
     >
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign or update access</h2>
+        <p className="mt-1 text-[11px] text-slate-600">
+          Existing accounts keep their current password. For a brand-new user, enter the password you want to set for them now.
+        </p>
         <form action={assignUserToClinicAction} className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2">
             <span className="font-semibold text-slate-700">Account email</span>
@@ -67,6 +70,16 @@ export default async function TeamManagementPage() {
           <label className="flex flex-col gap-0.5 text-[11px]">
             <span className="font-semibold text-slate-700">Phone</span>
             <input name="phone" className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]" placeholder="+91…" />
+          </label>
+          <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2">
+            <span className="font-semibold text-slate-700">Custom password for new user</span>
+            <input
+              type="password"
+              name="password"
+              placeholder="Required only when this email is new"
+              className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]"
+              autoComplete="new-password"
+            />
           </label>
           <label className="flex flex-col gap-0.5 text-[11px]">
             <span className="font-semibold text-slate-700">Doctor working hours</span>
