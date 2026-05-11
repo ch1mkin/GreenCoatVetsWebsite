@@ -8,16 +8,37 @@ type Point = { x: number; y: number };
 type InkTool = "draw" | "erase" | "highlight";
 type Tool = InkTool | "scroll";
 type Stroke = { id: string; tool: InkTool; width: number; points: Point[] };
+type ToolbarPosition = { x: number; y: number };
 
 const CANVAS_W = 1240;
 const CANVAS_H = 1754;
 const EXPORT_MIME = "image/jpeg";
 const EXPORT_QUALITY = 0.92;
+const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
+const TOOLBAR_MARGIN = 12;
 
 function toolButtonClass(active: boolean) {
   return active
     ? "rounded-xl border border-primary bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm"
     : "rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low";
+}
+
+function compactToolButtonClass(active: boolean) {
+  return active
+    ? "w-full rounded-lg border border-primary bg-primary px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm"
+    : "w-full rounded-lg border border-slate-300/80 bg-white/95 px-2 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50";
+}
+
+function clampToolbarPosition(pos: ToolbarPosition, toolbar: HTMLDivElement | null): ToolbarPosition {
+  if (typeof window === "undefined") return pos;
+  const toolbarWidth = toolbar?.offsetWidth ?? 96;
+  const toolbarHeight = toolbar?.offsetHeight ?? 360;
+  const maxX = Math.max(TOOLBAR_MARGIN, window.innerWidth - toolbarWidth - TOOLBAR_MARGIN);
+  const maxY = Math.max(TOOLBAR_MARGIN, window.innerHeight - toolbarHeight - TOOLBAR_MARGIN);
+  return {
+    x: Math.min(Math.max(TOOLBAR_MARGIN, pos.x), maxX),
+    y: Math.min(Math.max(TOOLBAR_MARGIN, pos.y), maxY),
+  };
 }
 
 function drawBuiltInTemplate(
@@ -167,9 +188,12 @@ export function VisitHandwrittenPrescription({
 }) {
   const router = useRouter();
   const studioRef = useRef<HTMLDivElement | null>(null);
+  const fullscreenToolbarRef = useRef<HTMLDivElement | null>(null);
   const templateCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activePointerId = useRef<number | null>(null);
+  const toolbarDragPointerId = useRef<number | null>(null);
+  const toolbarDragOffset = useRef<Point | null>(null);
   const [templateImage, setTemplateImage] = useState<HTMLImageElement | null>(null);
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
@@ -180,6 +204,8 @@ export function VisitHandwrittenPrescription({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fullscreenActive, setFullscreenActive] = useState(false);
+  const [fullscreenToolbarPos, setFullscreenToolbarPos] = useState<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
+  const [toolbarDragActive, setToolbarDragActive] = useState(false);
 
   const meta = useMemo(
     () => ({ clinicName, petName, ownerName, doctorName }),
@@ -258,6 +284,21 @@ export function VisitHandwrittenPrescription({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!fullscreenActive) {
+      setFullscreenToolbarPos(TOOLBAR_DEFAULT_POS);
+      return;
+    }
+    const updateToolbarBounds = () => {
+      setFullscreenToolbarPos((current) => clampToolbarPosition(current, fullscreenToolbarRef.current));
+    };
+    updateToolbarBounds();
+    window.addEventListener("resize", updateToolbarBounds);
+    return () => {
+      window.removeEventListener("resize", updateToolbarBounds);
+    };
+  }, [fullscreenActive]);
+
   const pointFromEvent = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const scaleX = CANVAS_W / rect.width;
@@ -309,6 +350,49 @@ export function VisitHandwrittenPrescription({
     } catch {
       /* noop */
     }
+  }, []);
+
+  useEffect(() => {
+    if (!toolbarDragActive) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (toolbarDragPointerId.current !== event.pointerId || !toolbarDragOffset.current) return;
+      const next = clampToolbarPosition(
+        {
+          x: event.clientX - toolbarDragOffset.current.x,
+          y: event.clientY - toolbarDragOffset.current.y,
+        },
+        fullscreenToolbarRef.current,
+      );
+      setFullscreenToolbarPos(next);
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (toolbarDragPointerId.current !== event.pointerId) return;
+      toolbarDragPointerId.current = null;
+      toolbarDragOffset.current = null;
+      setToolbarDragActive(false);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [toolbarDragActive]);
+
+  const startToolbarDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+    const rect = fullscreenToolbarRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    toolbarDragPointerId.current = event.pointerId;
+    toolbarDragOffset.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    setToolbarDragActive(true);
   }, []);
 
   async function toggleFullscreen() {
@@ -363,6 +447,212 @@ export function VisitHandwrittenPrescription({
     }
   }
 
+  const sheetCanvasClass = fullscreenActive
+    ? "pointer-events-none block w-full bg-white"
+    : "pointer-events-none block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner";
+  const writingCanvasClass = fullscreenActive
+    ? `absolute inset-0 w-full ${scrollMode ? "pointer-events-none" : "touch-none"}`
+    : `absolute inset-0 w-full rounded-[18px] ${scrollMode ? "pointer-events-none" : "touch-none"}`;
+
+  const toolbarBody = (
+    <>
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tools</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+            Draw
+          </button>
+          <button type="button" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
+            Highlight
+          </button>
+          <button type="button" className={toolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
+            Erase
+          </button>
+          <button type="button" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
+            Scroll
+          </button>
+        </div>
+      </div>
+
+      <label className="block">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Stroke size</span>
+        <input
+          type="range"
+          min={2}
+          max={12}
+          step={1}
+          value={strokeWidth}
+          onChange={(e) => setStrokeWidth(Number(e.target.value))}
+          className="mt-2 w-full"
+        />
+      </label>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="btn-secondary btn-compact text-xs"
+          disabled={!strokes.length}
+          onClick={() => {
+            setStrokes((prev) => {
+              const next = [...prev];
+              const removed = next.pop();
+              if (removed) setRedoStack((redo) => [...redo, removed]);
+              return next;
+            });
+          }}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          className="btn-secondary btn-compact text-xs"
+          disabled={!redoStack.length}
+          onClick={() => {
+            setRedoStack((prev) => {
+              const next = [...prev];
+              const restored = next.pop();
+              if (restored) setStrokes((current) => [...current, restored]);
+              return next;
+            });
+          }}
+        >
+          Redo
+        </button>
+        <button
+          type="button"
+          className="btn-secondary btn-compact text-xs"
+          disabled={!strokes.length}
+          onClick={() => {
+            setRedoStack([]);
+            setStrokes([]);
+          }}
+        >
+          Clear
+        </button>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
+        <p className="font-semibold text-slate-800">Tips</p>
+        <ul className="mt-2 list-disc space-y-1 pl-4">
+          <li>Stylus works automatically where supported.</li>
+          <li>Highlight uses a transparent yellow marker.</li>
+          <li>Erase only removes your handwriting and keeps the uploaded template untouched.</li>
+          <li>Use Scroll mode when you want to move through the page without adding ink.</li>
+          <li>Save writes the visit PDF that owners can open from visit reports.</li>
+        </ul>
+      </div>
+
+      {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full handwriting save.</p> : null}
+    </>
+  );
+
+  const fullscreenToolbar = (
+    <div
+      ref={fullscreenToolbarRef}
+      className="absolute z-20 w-[110px] rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
+      style={{ left: fullscreenToolbarPos.x, top: fullscreenToolbarPos.y }}
+    >
+      <button
+        type="button"
+        className="mb-2 flex w-full cursor-grab items-center justify-center rounded-lg border border-slate-300/80 bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 active:cursor-grabbing"
+        onPointerDown={startToolbarDrag}
+      >
+        Move
+      </button>
+      <div className="space-y-2">
+        <button type="button" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+          Draw
+        </button>
+        <button type="button" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
+          Mark
+        </button>
+        <button type="button" className={compactToolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
+          Erase
+        </button>
+        <button type="button" className={compactToolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
+          Scroll
+        </button>
+
+        <label className="block rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
+          <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Size</span>
+          <input
+            type="range"
+            min={2}
+            max={12}
+            step={1}
+            value={strokeWidth}
+            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+            className="mt-1 w-full"
+          />
+        </label>
+
+        <button
+          type="button"
+          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+          disabled={!strokes.length}
+          onClick={() => {
+            setStrokes((prev) => {
+              const next = [...prev];
+              const removed = next.pop();
+              if (removed) setRedoStack((redo) => [...redo, removed]);
+              return next;
+            });
+          }}
+        >
+          Undo
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+          disabled={!redoStack.length}
+          onClick={() => {
+            setRedoStack((prev) => {
+              const next = [...prev];
+              const restored = next.pop();
+              if (restored) setStrokes((current) => [...current, restored]);
+              return next;
+            });
+          }}
+        >
+          Redo
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
+          disabled={!strokes.length}
+          onClick={() => {
+            setRedoStack([]);
+            setStrokes([]);
+          }}
+        >
+          Clear
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-primary bg-primary px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+          disabled={pending}
+          onClick={() => void savePdf()}
+        >
+          {pending ? "Saving..." : "Save"}
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700"
+          onClick={() => void toggleFullscreen()}
+        >
+          Exit
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700"
+          onClick={() => void closeStudio()}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
@@ -402,173 +692,110 @@ export function VisitHandwrittenPrescription({
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-[120] bg-slate-950/60 p-2 sm:p-4">
+        <div className={`fixed inset-0 z-[120] bg-slate-950/60 ${fullscreenActive ? "p-0" : "p-2 sm:p-4"}`}>
           <div
             ref={studioRef}
             className={`flex h-full flex-col overflow-hidden border border-slate-200 bg-[#f8fafc] shadow-2xl ${
-              fullscreenActive ? "rounded-none" : "rounded-[28px]"
+              fullscreenActive ? "rounded-none border-0 bg-slate-950 shadow-none" : "rounded-[28px]"
             }`}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
-              <div>
-                <p className="font-headline text-base font-bold text-slate-900">Handwritten full visit studio</p>
-                <p className="text-[12px] text-slate-600">
-                  Draw on the whole visit template, then save it as the visit PDF for {petName || "this patient"}.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                  onClick={() => void toggleFullscreen()}
-                >
-                  {fullscreenActive ? "Exit full screen" : "Full screen"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                  onClick={() => void closeStudio()}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-
-            <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <aside className="border-b border-slate-200 bg-white p-4 lg:border-b-0 lg:border-r">
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tools</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button type="button" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
-                        Draw
-                      </button>
-                      <button
-                        type="button"
-                        className={toolButtonClass(tool === "highlight")}
-                        onClick={() => setTool("highlight")}
-                      >
-                        Highlight
-                      </button>
-                      <button type="button" className={toolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
-                        Erase
-                      </button>
-                      <button type="button" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
-                        Scroll
-                      </button>
-                    </div>
-                  </div>
-
-                  <label className="block">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Stroke size</span>
-                    <input
-                      type="range"
-                      min={2}
-                      max={12}
-                      step={1}
-                      value={strokeWidth}
-                      onChange={(e) => setStrokeWidth(Number(e.target.value))}
-                      className="mt-2 w-full"
+            {fullscreenActive ? (
+              <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
+                {fullscreenToolbar}
+                <div className="h-full overflow-x-auto overflow-y-scroll bg-slate-950">
+                  <div className="relative w-full min-w-[760px] bg-white">
+                    <canvas
+                      ref={templateCanvasRef}
+                      width={CANVAS_W}
+                      height={CANVAS_H}
+                      className={sheetCanvasClass}
+                      aria-hidden="true"
                     />
-                  </label>
-
+                    <canvas
+                      ref={drawingCanvasRef}
+                      width={CANVAS_W}
+                      height={CANVAS_H}
+                      className={writingCanvasClass}
+                      onPointerDown={startStroke}
+                      onPointerMove={moveStroke}
+                      onPointerUp={endStroke}
+                      onPointerCancel={endStroke}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+                  <div>
+                    <p className="font-headline text-base font-bold text-slate-900">Handwritten full visit studio</p>
+                    <p className="text-[12px] text-slate-600">
+                      Draw on the whole visit template, then save it as the visit PDF for {petName || "this patient"}.
+                    </p>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className="btn-secondary btn-compact text-xs"
-                      disabled={!strokes.length}
-                      onClick={() => {
-                        setStrokes((prev) => {
-                          const next = [...prev];
-                          const removed = next.pop();
-                          if (removed) setRedoStack((redo) => [...redo, removed]);
-                          return next;
-                        });
-                      }}
+                      className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                      onClick={() => void toggleFullscreen()}
                     >
-                      Undo
+                      Full screen
                     </button>
                     <button
                       type="button"
-                      className="btn-secondary btn-compact text-xs"
-                      disabled={!redoStack.length}
-                      onClick={() => {
-                        setRedoStack((prev) => {
-                          const next = [...prev];
-                          const restored = next.pop();
-                          if (restored) setStrokes((current) => [...current, restored]);
-                          return next;
-                        });
-                      }}
+                      className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                      onClick={() => void closeStudio()}
                     >
-                      Redo
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary btn-compact text-xs"
-                      disabled={!strokes.length}
-                      onClick={() => {
-                        setRedoStack([]);
-                        setStrokes([]);
-                      }}
-                    >
-                      Clear
+                      Close
                     </button>
                   </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
-                    <p className="font-semibold text-slate-800">Tips</p>
-                    <ul className="mt-2 list-disc space-y-1 pl-4">
-                      <li>Stylus works automatically where supported.</li>
-                      <li>Highlight uses a transparent yellow marker.</li>
-                      <li>Erase only removes your handwriting and keeps the uploaded template untouched.</li>
-                      <li>Use Scroll mode when you want to move through the page without adding ink.</li>
-                      <li>Save writes the visit PDF that owners can open from visit reports.</li>
-                    </ul>
-                  </div>
-
-                  {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full handwriting save.</p> : null}
                 </div>
-              </aside>
 
-              <div className="flex min-h-0 flex-col bg-[#e2e8f0]">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
-                  <div className="text-[12px] text-slate-600">
-                    {scrollMode
-                      ? "Scroll mode is on. Use the scrollbar or wheel to move through the sheet safely."
-                      : templateImageUrl
-                        ? "Full visit template image loaded."
-                        : "Using built-in blank visit sheet."}
-                  </div>
-                  <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
-                    {pending ? "Saving PDF…" : "Save handwritten full visit"}
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-x-auto overflow-y-scroll p-4">
-                  <div className="mx-auto max-w-[980px] rounded-[24px] bg-white p-3 shadow-xl">
-                    <div className="relative">
-                      <canvas
-                        ref={templateCanvasRef}
-                        width={CANVAS_W}
-                        height={CANVAS_H}
-                        className="pointer-events-none block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner"
-                        aria-hidden="true"
-                      />
-                      <canvas
-                        ref={drawingCanvasRef}
-                        width={CANVAS_W}
-                        height={CANVAS_H}
-                        className={`absolute inset-0 w-full rounded-[18px] ${scrollMode ? "pointer-events-none" : "touch-none"}`}
-                        onPointerDown={startStroke}
-                        onPointerMove={moveStroke}
-                        onPointerUp={endStroke}
-                        onPointerCancel={endStroke}
-                      />
+                <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+                  <aside className="border-b border-slate-200 bg-white p-4 lg:border-b-0 lg:border-r">
+                    <div className="space-y-3">{toolbarBody}</div>
+                  </aside>
+
+                  <div className="flex min-h-0 flex-col bg-[#e2e8f0]">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+                      <div className="text-[12px] text-slate-600">
+                        {scrollMode
+                          ? "Scroll mode is on. Use the scrollbar or wheel to move through the sheet safely."
+                          : templateImageUrl
+                            ? "Full visit template image loaded."
+                            : "Using built-in blank visit sheet."}
+                      </div>
+                      <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
+                        {pending ? "Saving PDF…" : "Save handwritten full visit"}
+                      </button>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-scroll p-4">
+                      <div className="mx-auto max-w-[980px] rounded-[24px] bg-white p-3 shadow-xl">
+                        <div className="relative">
+                          <canvas
+                            ref={templateCanvasRef}
+                            width={CANVAS_W}
+                            height={CANVAS_H}
+                            className={sheetCanvasClass}
+                            aria-hidden="true"
+                          />
+                          <canvas
+                            ref={drawingCanvasRef}
+                            width={CANVAS_W}
+                            height={CANVAS_H}
+                            className={writingCanvasClass}
+                            onPointerDown={startStroke}
+                            onPointerMove={moveStroke}
+                            onPointerUp={endStroke}
+                            onPointerCancel={endStroke}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       ) : null}
