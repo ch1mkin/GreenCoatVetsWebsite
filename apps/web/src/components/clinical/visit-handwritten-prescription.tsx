@@ -50,14 +50,48 @@ async function waitForImages(root: HTMLElement) {
 
 function toolButtonClass(active: boolean) {
   return active
-    ? "rounded-xl border border-primary bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm"
-    : "rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-low";
+    ? "flex h-10 w-10 items-center justify-center rounded-xl border border-primary bg-primary text-white shadow-sm"
+    : "flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-white shadow-sm hover:bg-slate-700";
 }
 
 function compactToolButtonClass(active: boolean) {
   return active
-    ? "w-full rounded-lg border border-primary bg-primary px-2 py-1.5 text-[11px] font-semibold text-white shadow-sm"
-    : "w-full rounded-lg border border-slate-300/80 bg-white/95 px-2 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50";
+    ? "flex h-10 w-full items-center justify-center rounded-lg border border-primary bg-primary text-white shadow-sm"
+    : "flex h-10 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 text-white shadow-sm hover:bg-slate-700";
+}
+
+function ToolIcon({ tool }: { tool: Tool }) {
+  if (tool === "draw") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+        <path d="M4 20l4.5-1 9-9a1.8 1.8 0 0 0 0-2.5l-1-1a1.8 1.8 0 0 0-2.5 0l-9 9L4 20z" />
+        <path d="M13 6l5 5" />
+      </svg>
+    );
+  }
+  if (tool === "highlight") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+        <path d="M7 16l7-7 3 3-7 7H7v-3z" />
+        <path d="M14 9l2-2 3 3-2 2" />
+        <path d="M5 21h8" />
+      </svg>
+    );
+  }
+  if (tool === "erase") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+        <path d="M7 16l7-7 5 5-5 5H9l-2-2a2 2 0 0 1 0-3z" />
+        <path d="M14 19h6" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+      <path d="M8 4l1 6 3-2 1 6 3-2 1 8" />
+      <path d="M5 11c0-1.7 1.3-3 3-3h3" />
+    </svg>
+  );
 }
 
 function clampToolbarPosition(pos: ToolbarPosition, toolbar: HTMLDivElement | null): ToolbarPosition {
@@ -547,17 +581,17 @@ export function VisitHandwrittenPrescription({
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tools</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
-            Write
+          <button type="button" aria-label="Write" title="Write" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+            <ToolIcon tool="draw" />
           </button>
-          <button type="button" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
-            Highlight
+          <button type="button" aria-label="Highlight" title="Highlight" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
+            <ToolIcon tool="highlight" />
           </button>
-          <button type="button" className={toolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
-            Erase
+          <button type="button" aria-label="Erase" title="Erase" className={toolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
+            <ToolIcon tool="erase" />
           </button>
-          <button type="button" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
-            Scroll / Edit
+          <button type="button" aria-label="Scroll / Edit" title="Scroll / Edit" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
+            <ToolIcon tool="scroll" />
           </button>
         </div>
       </div>
@@ -621,17 +655,17 @@ export function VisitHandwrittenPrescription({
         Move
       </button>
       <div className="space-y-2">
-        <button type="button" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
-          Write
+        <button type="button" aria-label="Write" title="Write" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+          <ToolIcon tool="draw" />
         </button>
-        <button type="button" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
-          Mark
+        <button type="button" aria-label="Highlight" title="Highlight" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
+          <ToolIcon tool="highlight" />
         </button>
-        <button type="button" className={compactToolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
-          Erase
+        <button type="button" aria-label="Erase" title="Erase" className={compactToolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
+          <ToolIcon tool="erase" />
         </button>
-        <button type="button" className={compactToolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
-          Edit
+        <button type="button" aria-label="Scroll / Edit" title="Scroll / Edit" className={compactToolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
+          <ToolIcon tool="scroll" />
         </button>
 
         <label className="block rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">

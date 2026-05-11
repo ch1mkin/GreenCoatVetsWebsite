@@ -64,9 +64,8 @@ export function VisitHandwrittenHtmlSheet({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="top-logo"
-              src="https://gnnybhybyzkovcpuyoiy.supabase.co/storage/v1/object/public/clinic-assets/platform/branding/logo.png"
+              src="/platform-logo.png"
               alt="GreenCoatVets logo"
-              crossOrigin="anonymous"
             />
           </div>
 
@@ -158,9 +157,8 @@ export function VisitHandwrittenHtmlSheet({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="watermark"
-            src="https://gnnybhybyzkovcpuyoiy.supabase.co/storage/v1/object/public/clinic-assets/platform/branding/logo.png"
+            src="/platform-logo.png"
             alt=""
-            crossOrigin="anonymous"
           />
 
           <div className="left">
@@ -279,6 +277,8 @@ export function VisitHandwrittenHtmlSheet({
 
         .top-logo {
           width: 115px;
+          height: 115px;
+          display: block;
           object-fit: contain;
           margin-top: 5px;
         }
