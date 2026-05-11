@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
 
 type Point = { x: number; y: number };
-type Tool = "draw" | "erase" | "highlight";
-type Stroke = { id: string; tool: Tool; width: number; points: Point[] };
+type InkTool = "draw" | "erase" | "highlight";
+type Tool = InkTool | "scroll";
+type Stroke = { id: string; tool: InkTool; width: number; points: Point[] };
 
 const CANVAS_W = 1240;
 const CANVAS_H = 1754;
@@ -165,6 +166,7 @@ export function VisitHandwrittenPrescription({
   doctorName: string;
 }) {
   const router = useRouter();
+  const studioRef = useRef<HTMLDivElement | null>(null);
   const templateCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activePointerId = useRef<number | null>(null);
@@ -177,11 +179,13 @@ export function VisitHandwrittenPrescription({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
 
   const meta = useMemo(
     () => ({ clinicName, petName, ownerName, doctorName }),
     [clinicName, doctorName, ownerName, petName],
   );
+  const scrollMode = tool === "scroll";
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +243,21 @@ export function VisitHandwrittenPrescription({
     redrawStrokes();
   }, [open, redrawStrokes]);
 
+  useEffect(() => {
+    if (!open) {
+      setFullscreenActive(false);
+      return;
+    }
+    const onFullscreenChange = () => {
+      setFullscreenActive(document.fullscreenElement === studioRef.current);
+    };
+    onFullscreenChange();
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+    };
+  }, [open]);
+
   const pointFromEvent = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const scaleX = CANVAS_W / rect.width;
@@ -251,6 +270,7 @@ export function VisitHandwrittenPrescription({
 
   const startStroke = useCallback(
     (event: React.PointerEvent<HTMLCanvasElement>) => {
+      if (tool === "scroll") return;
       const point = pointFromEvent(event);
       activePointerId.current = event.pointerId;
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -290,6 +310,22 @@ export function VisitHandwrittenPrescription({
       /* noop */
     }
   }, []);
+
+  async function toggleFullscreen() {
+    if (!studioRef.current) return;
+    if (document.fullscreenElement === studioRef.current) {
+      await document.exitFullscreen();
+      return;
+    }
+    await studioRef.current.requestFullscreen();
+  }
+
+  async function closeStudio() {
+    if (document.fullscreenElement === studioRef.current) {
+      await document.exitFullscreen();
+    }
+    setOpen(false);
+  }
 
   async function savePdf() {
     const templateCanvas = templateCanvasRef.current;
@@ -367,7 +403,12 @@ export function VisitHandwrittenPrescription({
 
       {open ? (
         <div className="fixed inset-0 z-[120] bg-slate-950/60 p-2 sm:p-4">
-          <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-[#f8fafc] shadow-2xl">
+          <div
+            ref={studioRef}
+            className={`flex h-full flex-col overflow-hidden border border-slate-200 bg-[#f8fafc] shadow-2xl ${
+              fullscreenActive ? "rounded-none" : "rounded-[28px]"
+            }`}
+          >
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
               <div>
                 <p className="font-headline text-base font-bold text-slate-900">Handwritten full visit studio</p>
@@ -375,13 +416,22 @@ export function VisitHandwrittenPrescription({
                   Draw on the whole visit template, then save it as the visit PDF for {petName || "this patient"}.
                 </p>
               </div>
-              <button
-                type="button"
-                className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  onClick={() => void toggleFullscreen()}
+                >
+                  {fullscreenActive ? "Exit full screen" : "Full screen"}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-outline-variant/25 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  onClick={() => void closeStudio()}
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -402,6 +452,9 @@ export function VisitHandwrittenPrescription({
                       </button>
                       <button type="button" className={toolButtonClass(tool === "erase")} onClick={() => setTool("erase")}>
                         Erase
+                      </button>
+                      <button type="button" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
+                        Scroll
                       </button>
                     </div>
                   </div>
@@ -469,6 +522,7 @@ export function VisitHandwrittenPrescription({
                       <li>Stylus works automatically where supported.</li>
                       <li>Highlight uses a transparent yellow marker.</li>
                       <li>Erase only removes your handwriting and keeps the uploaded template untouched.</li>
+                      <li>Use Scroll mode when you want to move through the page without adding ink.</li>
                       <li>Save writes the visit PDF that owners can open from visit reports.</li>
                     </ul>
                   </div>
@@ -480,27 +534,31 @@ export function VisitHandwrittenPrescription({
               <div className="flex min-h-0 flex-col bg-[#e2e8f0]">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                   <div className="text-[12px] text-slate-600">
-                    {templateImageUrl ? "Full visit template image loaded." : "Using built-in blank visit sheet."}
+                    {scrollMode
+                      ? "Scroll mode is on. Use the scrollbar or wheel to move through the sheet safely."
+                      : templateImageUrl
+                        ? "Full visit template image loaded."
+                        : "Using built-in blank visit sheet."}
                   </div>
                   <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
                     {pending ? "Saving PDF…" : "Save handwritten full visit"}
                   </button>
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto p-4">
+                <div className="min-h-0 flex-1 overflow-x-auto overflow-y-scroll p-4">
                   <div className="mx-auto max-w-[980px] rounded-[24px] bg-white p-3 shadow-xl">
                     <div className="relative">
                       <canvas
                         ref={templateCanvasRef}
                         width={CANVAS_W}
                         height={CANVAS_H}
-                        className="block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner"
+                        className="pointer-events-none block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner"
                         aria-hidden="true"
                       />
                       <canvas
                         ref={drawingCanvasRef}
                         width={CANVAS_W}
                         height={CANVAS_H}
-                        className="absolute inset-0 touch-none w-full rounded-[18px]"
+                        className={`absolute inset-0 w-full rounded-[18px] ${scrollMode ? "pointer-events-none" : "touch-none"}`}
                         onPointerDown={startStroke}
                         onPointerMove={moveStroke}
                         onPointerUp={endStroke}
