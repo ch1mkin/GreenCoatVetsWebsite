@@ -244,29 +244,9 @@ export function createHandwrittenVisitSheetState(
   fields.ownerName = String(input.ownerName ?? "").trim();
   fields.mobile = String(input.mobile ?? "").trim();
   fields.date = String(input.date ?? "").trim();
-  fields.ccHp = String(input.ccHp ?? "").trim();
-  fields.dewormingText = String(input.dewormingText ?? "").trim();
-  fields.vaccinationText = String(input.vaccinationText ?? "").trim();
-  fields.rt = String(input.rt ?? "").trim();
-  fields.rr = String(input.rr ?? "").trim();
-  fields.hr = String(input.hr ?? "").trim();
-  fields.crt = String(input.crt ?? "").trim();
-  fields.allergic = String(input.allergic ?? "").trim();
-  fields.bw = String(input.bw ?? "").trim();
-  fields.otherTests = String(input.otherTests ?? "").trim();
-  fields.physicalExamination = String(input.physicalExamination ?? "").trim();
-  fields.diagnosis = String(input.diagnosis ?? "").trim();
-  fields.prescription = String(input.prescription ?? "").trim();
 
   Object.assign(checkboxes, inferSpeciesCheckboxes(input.species));
   Object.assign(checkboxes, inferGenderCheckboxes(input.gender));
-  if (fields.dewormingText) checkboxes.deworming = true;
-  if (fields.vaccinationText) checkboxes.vaccination = true;
-
-  for (const code of input.testsReferred ?? []) {
-    const checkboxId = TEST_CHECKBOX_MAP[code];
-    if (checkboxId) checkboxes[checkboxId] = true;
-  }
 
   return {
     version: HANDWRITTEN_VISIT_STATE_VERSION,

@@ -13,6 +13,7 @@ type Props = {
   state: HandwrittenVisitSheetState;
   registerFieldRef: (fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => void;
   registerCheckboxRef: (checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => void;
+  registerInfoSectionRef: (node: HTMLDivElement | null) => void;
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
   onWordDoubleClick: (token: HandwrittenVisitWordToken) => void;
   wordInteractionEnabled: boolean;
@@ -58,6 +59,7 @@ export function VisitHandwrittenHtmlSheet({
   state,
   registerFieldRef,
   registerCheckboxRef,
+  registerInfoSectionRef,
   onCheckboxChange,
   onWordDoubleClick,
   wordInteractionEnabled,
@@ -98,7 +100,7 @@ export function VisitHandwrittenHtmlSheet({
           <div className="reg-section" />
         </div>
 
-        <div className="info">
+        <div ref={registerInfoSectionRef} className="info">
           <div className="row species-row">
             <div className="item">
               Canine <SheetCheckbox checkboxId="speciesCanine" checked={checkboxes.speciesCanine} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />

@@ -58,6 +58,9 @@ const FIELD_IDS: HandwrittenVisitFieldId[] = [
   "prescription",
 ];
 
+const PREFILL_FIELD_IDS: HandwrittenVisitFieldId[] = ["patientName", "age", "ownerName", "mobile", "date"];
+const DRAWABLE_FIELD_IDS: HandwrittenVisitFieldId[] = FIELD_IDS.filter((fieldId) => !PREFILL_FIELD_IDS.includes(fieldId));
+
 const MULTILINE_FIELDS = new Set<HandwrittenVisitFieldId>([
   "ccHp",
   "physicalExamination",
@@ -256,6 +259,7 @@ export function VisitHandwrittenPrescription({
   const overlayRef = useRef<SVGSVGElement | null>(null);
   const fieldRefs = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLDivElement | null>>>({});
   const checkboxRefs = useRef<Partial<Record<HandwrittenVisitCheckboxId, HTMLInputElement | null>>>({});
+  const infoSectionRef = useRef<HTMLDivElement | null>(null);
   const activePointerId = useRef<number | null>(null);
   const activeStrokeRef = useRef<StrokeLike | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
@@ -290,6 +294,9 @@ export function VisitHandwrittenPrescription({
   }, []);
   const registerCheckboxRef = useCallback((checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => {
     checkboxRefs.current[checkboxId] = node;
+  }, []);
+  const registerInfoSectionRef = useCallback((node: HTMLDivElement | null) => {
+    infoSectionRef.current = node;
   }, []);
 
   const createSnapshot = useCallback(
@@ -433,44 +440,47 @@ export function VisitHandwrittenPrescription({
     };
   }, []);
 
+  const getNodeBounds = useCallback((node: Element | null): StrokeBounds | null => {
+    const stageNode = stageRef.current;
+    if (!node || !stageNode) return null;
+    const nodeRect = node.getBoundingClientRect();
+    const stageRect = stageNode.getBoundingClientRect();
+    if (!stageRect.width || !stageRect.height) return null;
+    return {
+      x: ((nodeRect.left - stageRect.left) / stageRect.width) * HANDWRITTEN_VISIT_SHEET_WIDTH,
+      y: ((nodeRect.top - stageRect.top) / stageRect.height) * HANDWRITTEN_VISIT_SHEET_HEIGHT,
+      width: (nodeRect.width / stageRect.width) * HANDWRITTEN_VISIT_SHEET_WIDTH,
+      height: (nodeRect.height / stageRect.height) * HANDWRITTEN_VISIT_SHEET_HEIGHT,
+    };
+  }, []);
+
   const getFieldBounds = useCallback((fieldId: HandwrittenVisitFieldId): StrokeBounds | null => {
     const fieldNode = fieldRefs.current[fieldId];
-    const stageNode = stageRef.current;
-    if (!fieldNode || !stageNode) return null;
-    const fieldRect = fieldNode.getBoundingClientRect();
-    const stageRect = stageNode.getBoundingClientRect();
-    return {
-      x: fieldRect.left - stageRect.left,
-      y: fieldRect.top - stageRect.top,
-      width: fieldRect.width,
-      height: fieldRect.height,
-    };
+    return getNodeBounds(fieldNode ?? null);
+  }, [getNodeBounds]);
+
+  const getInfoSectionBounds = useCallback(() => getNodeBounds(infoSectionRef.current), [getNodeBounds]);
+
+  const pointInBounds = useCallback((point: HandwrittenVisitPoint, bounds: StrokeBounds | null) => {
+    if (!bounds) return false;
+    return (
+      point.x >= bounds.x &&
+      point.x <= bounds.x + bounds.width &&
+      point.y >= bounds.y &&
+      point.y <= bounds.y + bounds.height
+    );
   }, []);
 
   const getCheckboxAtPoint = useCallback((point: HandwrittenVisitPoint): HandwrittenVisitCheckboxId | null => {
     for (const checkboxId of Object.keys(checkboxRefs.current) as HandwrittenVisitCheckboxId[]) {
       const node = checkboxRefs.current[checkboxId];
-      const stageNode = stageRef.current;
-      if (!node || !stageNode) continue;
-      const checkboxRect = node.getBoundingClientRect();
-      const stageRect = stageNode.getBoundingClientRect();
-      const bounds = {
-        x: checkboxRect.left - stageRect.left,
-        y: checkboxRect.top - stageRect.top,
-        width: checkboxRect.width,
-        height: checkboxRect.height,
-      };
-      if (
-        point.x >= bounds.x &&
-        point.x <= bounds.x + bounds.width &&
-        point.y >= bounds.y &&
-        point.y <= bounds.y + bounds.height
-      ) {
+      const bounds = getNodeBounds(node ?? null);
+      if (pointInBounds(point, bounds)) {
         return checkboxId;
       }
     }
     return null;
-  }, []);
+  }, [getNodeBounds, pointInBounds]);
 
   const buildPrefillTokensForField = useCallback(
     (fieldId: HandwrittenVisitFieldId, text: string): HandwrittenVisitWordToken[] => {
@@ -528,32 +538,29 @@ export function VisitHandwrittenPrescription({
 
   useEffect(() => {
     if (!open) return;
-    if (editorState.wordTokens.length > 0) return;
-    const hasFieldsToConvert = FIELD_IDS.some((fieldId) => editorState.fields[fieldId].trim());
-    if (!hasFieldsToConvert) return;
+    const renderedPrefillFields = new Set(editorState.wordTokens.map((token) => token.fieldId));
+    const missingFields = PREFILL_FIELD_IDS.filter(
+      (fieldId) => editorState.fields[fieldId].trim() && !renderedPrefillFields.has(fieldId),
+    );
+    if (!missingFields.length) return;
 
-    const nextTokens = FIELD_IDS.flatMap((fieldId) => buildPrefillTokensForField(fieldId, editorState.fields[fieldId]));
+    const nextTokens = missingFields.flatMap((fieldId) => buildPrefillTokensForField(fieldId, editorState.fields[fieldId]));
     if (!nextTokens.length) return;
     setEditorState((prev) => ({
       ...prev,
-      wordTokens: nextTokens,
+      wordTokens: [...prev.wordTokens, ...nextTokens],
     }));
-  }, [buildPrefillTokensForField, editorState.fields, editorState.wordTokens.length, open]);
+  }, [buildPrefillTokensForField, editorState.fields, editorState.wordTokens, open]);
 
   const findClosestField = useCallback(
     (point: HandwrittenVisitPoint) => {
       let bestField: HandwrittenVisitFieldId | null = null;
       let bestDistance = Number.POSITIVE_INFINITY;
 
-      for (const fieldId of FIELD_IDS) {
+      for (const fieldId of DRAWABLE_FIELD_IDS) {
         const bounds = getFieldBounds(fieldId);
         if (!bounds) continue;
-        if (
-          point.x >= bounds.x &&
-          point.x <= bounds.x + bounds.width &&
-          point.y >= bounds.y &&
-          point.y <= bounds.y + bounds.height
-        ) {
+        if (pointInBounds(point, bounds)) {
           return fieldId;
         }
         const cx = bounds.x + bounds.width / 2;
@@ -567,7 +574,7 @@ export function VisitHandwrittenPrescription({
 
       return bestDistance <= 160 ? bestField : null;
     },
-    [getFieldBounds],
+    [getFieldBounds, pointInBounds],
   );
 
   const getTesseractModule = useCallback(async () => {
@@ -774,6 +781,9 @@ export function VisitHandwrittenPrescription({
       handleCheckboxChange(checkboxId, !editorState.checkboxes[checkboxId]);
       return;
     }
+    if (pointInBounds(point, getInfoSectionBounds())) {
+      return;
+    }
     const stroke: StrokeLike = {
       id: crypto.randomUUID(),
       width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : Math.max(4, strokeWidth),
@@ -789,7 +799,7 @@ export function VisitHandwrittenPrescription({
     } catch {
       /* noop */
     }
-  }, [editorState.checkboxes, getCheckboxAtPoint, getStagePoint, handleCheckboxChange, strokeWidth, tool]);
+  }, [editorState.checkboxes, getCheckboxAtPoint, getInfoSectionBounds, getStagePoint, handleCheckboxChange, pointInBounds, strokeWidth, tool]);
 
   const moveStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerId.current !== event.pointerId || !activeStrokeRef.current) return;
@@ -1098,6 +1108,7 @@ export function VisitHandwrittenPrescription({
         state={editorState}
         registerFieldRef={registerFieldRef}
         registerCheckboxRef={registerCheckboxRef}
+        registerInfoSectionRef={registerInfoSectionRef}
         onCheckboxChange={handleCheckboxChange}
         onWordDoubleClick={handleWordDoubleClick}
         wordInteractionEnabled={scrollMode}
