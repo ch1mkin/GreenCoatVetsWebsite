@@ -3,34 +3,18 @@
 import type { RefObject } from "react";
 import type {
   HandwrittenVisitCheckboxId,
-  HandwrittenVisitFieldId,
   HandwrittenVisitSheetState,
-  HandwrittenVisitWordToken,
 } from "@/lib/visits/handwritten-visit-sheet";
 
 type Props = {
   stageRef: RefObject<HTMLDivElement>;
   state: HandwrittenVisitSheetState;
-  registerFieldRef: (fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => void;
   registerCheckboxRef: (checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => void;
-  registerInfoSectionRef: (node: HTMLDivElement | null) => void;
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
-  onWordDoubleClick: (token: HandwrittenVisitWordToken) => void;
-  wordInteractionEnabled: boolean;
 };
 
-function StaticFieldArea({
-  fieldId,
-  className,
-  registerFieldRef,
-}: {
-  fieldId: HandwrittenVisitFieldId;
-  className: string;
-  registerFieldRef: Props["registerFieldRef"];
-}) {
-  return (
-    <div ref={(node) => registerFieldRef(fieldId, node)} className={className} />
-  );
+function StaticFieldArea({ className }: { className: string }) {
+  return <div className={className} />;
 }
 
 function SheetCheckbox({
@@ -57,14 +41,10 @@ function SheetCheckbox({
 export function VisitHandwrittenHtmlSheet({
   stageRef,
   state,
-  registerFieldRef,
   registerCheckboxRef,
-  registerInfoSectionRef,
   onCheckboxChange,
-  onWordDoubleClick,
-  wordInteractionEnabled,
 }: Props) {
-  const { checkboxes, wordTokens } = state;
+  const { checkboxes } = state;
 
   return (
     <div className="sheet-shell">
@@ -100,7 +80,7 @@ export function VisitHandwrittenHtmlSheet({
           <div className="reg-section" />
         </div>
 
-        <div ref={registerInfoSectionRef} className="info">
+        <div className="info">
           <div className="row species-row">
             <div className="item">
               Canine <SheetCheckbox checkboxId="speciesCanine" checked={checkboxes.speciesCanine} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
@@ -121,12 +101,10 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-large">
             <div className="item">
-              Patient Name :{" "}
-              <StaticFieldArea fieldId="patientName" className="dotted-line patient-line" registerFieldRef={registerFieldRef} />
+              Patient Name : <StaticFieldArea className="dotted-line patient-line" />
             </div>
             <div className="item">
-              Age :{" "}
-              <StaticFieldArea fieldId="age" className="dotted-line age-line" registerFieldRef={registerFieldRef} />
+              Age : <StaticFieldArea className="dotted-line age-line" />
             </div>
             <div className="item gender-item">
               Gender : M{" "}
@@ -137,16 +115,13 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-medium">
             <div className="item">
-              Owner Name :{" "}
-              <StaticFieldArea fieldId="ownerName" className="dotted-line owner-line" registerFieldRef={registerFieldRef} />
+              Owner Name : <StaticFieldArea className="dotted-line owner-line" />
             </div>
             <div className="item">
-              Mobile :{" "}
-              <StaticFieldArea fieldId="mobile" className="dotted-line mobile-line" registerFieldRef={registerFieldRef} />
+              Mobile : <StaticFieldArea className="dotted-line mobile-line" />
             </div>
             <div className="item">
-              Date :
-              <StaticFieldArea fieldId="date" className="dotted-line date-line" registerFieldRef={registerFieldRef} />
+              Date : <StaticFieldArea className="dotted-line date-line" />
             </div>
           </div>
         </div>
@@ -154,17 +129,17 @@ export function VisitHandwrittenHtmlSheet({
         <div className="small-fields">
           <div className="row">
             <div className="small-label">CC / HP / :</div>
-            <StaticFieldArea fieldId="ccHp" className="small-row-field" registerFieldRef={registerFieldRef} />
+            <StaticFieldArea className="small-row-field" />
           </div>
           <div className="row">
             <div className="small-label">Deworming :</div>
             <SheetCheckbox checkboxId="deworming" checked={checkboxes.deworming} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
-            <StaticFieldArea fieldId="dewormingText" className="small-checkbox-field" registerFieldRef={registerFieldRef} />
+            <StaticFieldArea className="small-checkbox-field" />
           </div>
           <div className="row row-last">
             <div className="small-label">Vaccination :</div>
             <SheetCheckbox checkboxId="vaccination" checked={checkboxes.vaccination} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
-            <StaticFieldArea fieldId="vaccinationText" className="small-checkbox-field" registerFieldRef={registerFieldRef} />
+            <StaticFieldArea className="small-checkbox-field" />
           </div>
         </div>
 
@@ -181,27 +156,27 @@ export function VisitHandwrittenHtmlSheet({
 
             <div className="param-row">
               <div className="param">RT :</div>
-              <StaticFieldArea fieldId="rt" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
             <div className="param-row">
               <div className="param">RR :</div>
-              <StaticFieldArea fieldId="rr" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
             <div className="param-row">
               <div className="param">HR :</div>
-              <StaticFieldArea fieldId="hr" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
             <div className="param-row">
               <div className="param">CRT :</div>
-              <StaticFieldArea fieldId="crt" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
             <div className="param-row">
               <div className="param">ALLERGIC :</div>
-              <StaticFieldArea fieldId="allergic" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
             <div className="param-row">
               <div className="param">B/W</div>
-              <StaticFieldArea fieldId="bw" className="param-value" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="param-value" />
             </div>
 
             <div className="test-title">TEST REFERRED</div>
@@ -226,45 +201,24 @@ export function VisitHandwrittenHtmlSheet({
 
             <div className="other">
               <div>Any other tests</div>
-              <StaticFieldArea fieldId="otherTests" className="other-tests-field" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="other-tests-field" />
             </div>
           </div>
 
           <div className="right">
             <div className="physical">
               <span>Physical Examination :</span>
-              <StaticFieldArea fieldId="physicalExamination" className="physical-field" registerFieldRef={registerFieldRef} />
+              <StaticFieldArea className="physical-field" />
             </div>
             <div className="diagnosis">
               <div className="dx">Dx</div>
             </div>
-            <StaticFieldArea fieldId="diagnosis" className="diagnosis-field" registerFieldRef={registerFieldRef} />
+            <StaticFieldArea className="diagnosis-field" />
             <div className="rx">
               R<sub>x</sub>
             </div>
-            <StaticFieldArea fieldId="prescription" className="prescription-field" registerFieldRef={registerFieldRef} />
+            <StaticFieldArea className="prescription-field" />
           </div>
-        </div>
-
-        <div className={`token-layer ${wordInteractionEnabled ? "token-layer-active" : ""}`}>
-          {wordTokens.map((token) => (
-            <button
-              key={token.id}
-              type="button"
-              className="word-token"
-              style={{
-                left: `${token.x}px`,
-                top: `${token.y}px`,
-                minWidth: `${Math.max(12, token.width)}px`,
-                minHeight: `${Math.max(14, token.height)}px`,
-                fontSize: `${token.fontSize}px`,
-                lineHeight: `${Math.max(token.fontSize + 2, token.height)}px`,
-              }}
-              onDoubleClick={() => onWordDoubleClick(token)}
-            >
-              {token.text}
-            </button>
-          ))}
         </div>
 
         <div className="bottom">
@@ -397,6 +351,7 @@ export function VisitHandwrittenHtmlSheet({
           display: inline-block;
           position: relative;
           vertical-align: middle;
+          flex: 0 0 auto;
         }
 
         input[type="checkbox"]:checked {
@@ -410,10 +365,6 @@ export function VisitHandwrittenHtmlSheet({
           left: 6px;
           font-size: 16px;
           color: #24386f;
-        }
-
-        input[type="checkbox"]:disabled {
-          cursor: default;
         }
 
         .info {
@@ -461,6 +412,7 @@ export function VisitHandwrittenHtmlSheet({
         .dotted-line {
           border-bottom: 2px dotted #6b6b6b;
           min-height: 22px;
+          flex: 0 0 auto;
         }
 
         .patient-line {
@@ -504,7 +456,7 @@ export function VisitHandwrittenHtmlSheet({
         .diagnosis-field,
         .prescription-field {
           border: 2px solid #777;
-          background: #fff;
+          background: transparent;
           position: relative;
         }
 
@@ -690,32 +642,6 @@ export function VisitHandwrittenHtmlSheet({
           color: #24386f;
           font-size: 16px;
           font-weight: 700;
-        }
-
-        .token-layer {
-          position: absolute;
-          inset: 0;
-          z-index: 3;
-          pointer-events: none;
-        }
-
-        .token-layer-active {
-          pointer-events: auto;
-        }
-
-        .word-token {
-          pointer-events: auto;
-          position: absolute;
-          border: 0;
-          padding: 0 2px;
-          margin: 0;
-          background: transparent;
-          color: #111827;
-          font-family: "Times New Roman", serif;
-          font-weight: 700;
-          text-align: left;
-          white-space: pre;
-          cursor: text;
         }
       `}</style>
     </div>

@@ -191,23 +191,6 @@ function createEmptyCheckboxes(): Record<HandwrittenVisitCheckboxId, boolean> {
   );
 }
 
-function inferSpeciesCheckboxes(species: string | null | undefined): Partial<Record<HandwrittenVisitCheckboxId, boolean>> {
-  const normalized = String(species ?? "").trim().toLowerCase();
-  if (!normalized) return {};
-  if (/(dog|canine)/i.test(normalized)) return { speciesCanine: true };
-  if (/(cat|feline)/i.test(normalized)) return { speciesFeline: true };
-  if (/(bird|avian)/i.test(normalized)) return { speciesAvian: true };
-  if (/(horse|equine)/i.test(normalized)) return { speciesEquine: true };
-  return { speciesExotic: true };
-}
-
-function inferGenderCheckboxes(gender: string | null | undefined): Partial<Record<HandwrittenVisitCheckboxId, boolean>> {
-  const normalized = String(gender ?? "").trim().toLowerCase();
-  if (normalized.startsWith("m")) return { genderMale: true };
-  if (normalized.startsWith("f")) return { genderFemale: true };
-  return {};
-}
-
 export function formatPrescriptionLines(
   items: Array<{
     medicine_name?: string | null;
@@ -244,9 +227,6 @@ export function createHandwrittenVisitSheetState(
   fields.ownerName = String(input.ownerName ?? "").trim();
   fields.mobile = String(input.mobile ?? "").trim();
   fields.date = String(input.date ?? "").trim();
-
-  Object.assign(checkboxes, inferSpeciesCheckboxes(input.species));
-  Object.assign(checkboxes, inferGenderCheckboxes(input.gender));
 
   return {
     version: HANDWRITTEN_VISIT_STATE_VERSION,

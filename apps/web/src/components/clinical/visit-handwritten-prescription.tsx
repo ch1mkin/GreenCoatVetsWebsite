@@ -7,10 +7,8 @@ import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-repor
 import { VisitHandwrittenHtmlSheet } from "@/components/clinical/visit-handwritten-html-sheet";
 import type {
   HandwrittenVisitCheckboxId,
-  HandwrittenVisitFieldId,
   HandwrittenVisitPoint,
   HandwrittenVisitSheetState,
-  HandwrittenVisitWordToken,
 } from "@/lib/visits/handwritten-visit-sheet";
 import {
   HANDWRITTEN_VISIT_SHEET_HEIGHT,
@@ -23,74 +21,10 @@ type ToolbarPosition = { x: number; y: number };
 type StrokeBounds = { x: number; y: number; width: number; height: number };
 type StrokeLike = { id: string; width: number; points: HandwrittenVisitPoint[] };
 type EditorSnapshot = HandwrittenVisitSheetState;
-type RecognitionTask = {
-  id: string;
-  fieldId: HandwrittenVisitFieldId;
-  stroke: StrokeLike;
-};
-type TesseractModule = typeof import("tesseract.js");
-type TesseractWorker = Awaited<ReturnType<TesseractModule["createWorker"]>>;
 
 const EXPORT_MIME = "image/jpeg";
 const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
 const TOOLBAR_MARGIN = 12;
-const OCR_PADDING = 22;
-const FIELD_PADDING = 6;
-
-const FIELD_IDS: HandwrittenVisitFieldId[] = [
-  "patientName",
-  "age",
-  "ownerName",
-  "mobile",
-  "date",
-  "ccHp",
-  "dewormingText",
-  "vaccinationText",
-  "rt",
-  "rr",
-  "hr",
-  "crt",
-  "allergic",
-  "bw",
-  "otherTests",
-  "physicalExamination",
-  "diagnosis",
-  "prescription",
-];
-
-const PREFILL_FIELD_IDS: HandwrittenVisitFieldId[] = ["patientName", "age", "ownerName", "mobile", "date"];
-const DRAWABLE_FIELD_IDS: HandwrittenVisitFieldId[] = FIELD_IDS.filter((fieldId) => !PREFILL_FIELD_IDS.includes(fieldId));
-
-const MULTILINE_FIELDS = new Set<HandwrittenVisitFieldId>([
-  "ccHp",
-  "physicalExamination",
-  "diagnosis",
-  "prescription",
-  "otherTests",
-  "dewormingText",
-  "vaccinationText",
-]);
-
-const WORD_FONT_SIZE_BY_FIELD: Partial<Record<HandwrittenVisitFieldId, number>> = {
-  patientName: 18,
-  age: 18,
-  ownerName: 18,
-  mobile: 18,
-  date: 18,
-  ccHp: 16,
-  dewormingText: 16,
-  vaccinationText: 16,
-  rt: 18,
-  rr: 18,
-  hr: 18,
-  crt: 18,
-  allergic: 18,
-  bw: 18,
-  otherTests: 17,
-  physicalExamination: 17,
-  diagnosis: 17,
-  prescription: 17,
-};
 
 function toolButtonClass(active: boolean) {
   return active
@@ -134,7 +68,7 @@ function cloneSheetState(state: HandwrittenVisitSheetState): HandwrittenVisitShe
     version: state.version,
     fields: { ...state.fields },
     checkboxes: { ...state.checkboxes },
-    wordTokens: state.wordTokens.map((token) => ({ ...token })),
+    wordTokens: [],
     highlights: state.highlights.map(cloneStroke),
     inkFallbacks: state.inkFallbacks.map(cloneStroke),
   };
@@ -165,74 +99,6 @@ function boundsIntersect(a: StrokeBounds, b: StrokeBounds) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
-function normalizeRecognizedText(fieldId: HandwrittenVisitFieldId, value: string) {
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (!compact) return "";
-  if (fieldId === "age") return compact.replace(/[^0-9a-zA-Z./ -]/g, "").trim();
-  if (fieldId === "mobile") return compact.replace(/[^0-9+() -]/g, "").trim();
-  if (fieldId === "date") return compact.replace(/[^0-9a-zA-Z/.: -]/g, "").trim();
-  if (["rt", "rr", "hr", "crt", "bw"].includes(fieldId)) {
-    return compact.replace(/[^0-9a-zA-Z./:% -]/g, "").trim();
-  }
-  if (MULTILINE_FIELDS.has(fieldId)) return compact;
-  return compact.replace(/[^0-9a-zA-Z,.;:/()&+ -]/g, "").trim();
-}
-
-function getCanvasMeasureContext(fontSize: number) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Text canvas could not be created.");
-  ctx.font = `700 ${fontSize}px "Times New Roman"`;
-  return ctx;
-}
-
-function getFieldRecognitionSettings(fieldId: HandwrittenVisitFieldId, tesseract: TesseractModule) {
-  if (fieldId === "age") {
-    return {
-      tessedit_pageseg_mode: tesseract.PSM.SINGLE_WORD,
-      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ./ -",
-    };
-  }
-  if (fieldId === "mobile") {
-    return {
-      tessedit_pageseg_mode: tesseract.PSM.SINGLE_LINE,
-      tessedit_char_whitelist: "0123456789+()- ",
-    };
-  }
-  if (fieldId === "date") {
-    return {
-      tessedit_pageseg_mode: tesseract.PSM.SINGLE_LINE,
-      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/.: -",
-    };
-  }
-  if (["rt", "rr", "hr", "crt", "bw"].includes(fieldId)) {
-    return {
-      tessedit_pageseg_mode: tesseract.PSM.SINGLE_WORD,
-      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ./:% -",
-    };
-  }
-  return {
-    tessedit_pageseg_mode: MULTILINE_FIELDS.has(fieldId)
-      ? tesseract.PSM.RAW_LINE
-      : tesseract.PSM.SINGLE_LINE,
-    tessedit_char_whitelist:
-      "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.;:/()&+-'\"% ",
-  };
-}
-
-async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Failed to encode visit image."));
-      },
-      type,
-      quality,
-    );
-  });
-}
-
 export function VisitHandwrittenPrescription({
   visitId,
   embed,
@@ -256,10 +122,7 @@ export function VisitHandwrittenPrescription({
   const studioRef = useRef<HTMLDivElement | null>(null);
   const fullscreenToolbarRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const overlayRef = useRef<SVGSVGElement | null>(null);
-  const fieldRefs = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLDivElement | null>>>({});
   const checkboxRefs = useRef<Partial<Record<HandwrittenVisitCheckboxId, HTMLInputElement | null>>>({});
-  const infoSectionRef = useRef<HTMLDivElement | null>(null);
   const activePointerId = useRef<number | null>(null);
   const activeStrokeRef = useRef<StrokeLike | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
@@ -267,10 +130,6 @@ export function VisitHandwrittenPrescription({
   const fullscreenToolbarPosRef = useRef<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
   const pendingToolbarPosRef = useRef<ToolbarPosition | null>(null);
   const toolbarDragRafRef = useRef<number | null>(null);
-  const recognitionQueueRef = useRef<RecognitionTask[]>([]);
-  const recognitionActiveRef = useRef(false);
-  const tesseractModuleRef = useRef<Promise<TesseractModule> | null>(null);
-  const ocrWorkerRef = useRef<Promise<TesseractWorker> | null>(null);
 
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
@@ -280,7 +139,6 @@ export function VisitHandwrittenPrescription({
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   const [pending, setPending] = useState(false);
-  const [recognizingCount, setRecognizingCount] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fullscreenActive, setFullscreenActive] = useState(false);
@@ -289,14 +147,8 @@ export function VisitHandwrittenPrescription({
 
   const scrollMode = tool === "scroll";
 
-  const registerFieldRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => {
-    fieldRefs.current[fieldId] = node;
-  }, []);
   const registerCheckboxRef = useCallback((checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => {
     checkboxRefs.current[checkboxId] = node;
-  }, []);
-  const registerInfoSectionRef = useCallback((node: HTMLDivElement | null) => {
-    infoSectionRef.current = node;
   }, []);
 
   const createSnapshot = useCallback(
@@ -408,13 +260,6 @@ export function VisitHandwrittenPrescription({
     };
   }, [toolbarDragActive]);
 
-  useEffect(() => {
-    return () => {
-      if (!ocrWorkerRef.current) return;
-      void ocrWorkerRef.current.then((worker) => worker.terminate());
-    };
-  }, []);
-
   const startToolbarDrag = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const rect = fullscreenToolbarRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -454,13 +299,6 @@ export function VisitHandwrittenPrescription({
     };
   }, []);
 
-  const getFieldBounds = useCallback((fieldId: HandwrittenVisitFieldId): StrokeBounds | null => {
-    const fieldNode = fieldRefs.current[fieldId];
-    return getNodeBounds(fieldNode ?? null);
-  }, [getNodeBounds]);
-
-  const getInfoSectionBounds = useCallback(() => getNodeBounds(infoSectionRef.current), [getNodeBounds]);
-
   const pointInBounds = useCallback((point: HandwrittenVisitPoint, bounds: StrokeBounds | null) => {
     if (!bounds) return false;
     return (
@@ -481,233 +319,6 @@ export function VisitHandwrittenPrescription({
     }
     return null;
   }, [getNodeBounds, pointInBounds]);
-
-  const buildPrefillTokensForField = useCallback(
-    (fieldId: HandwrittenVisitFieldId, text: string): HandwrittenVisitWordToken[] => {
-      const bounds = getFieldBounds(fieldId);
-      if (!bounds || !text.trim()) return [];
-      const fontSize = WORD_FONT_SIZE_BY_FIELD[fieldId] ?? 17;
-      const lineHeight = fontSize + 4;
-      const maxWidth = Math.max(16, bounds.width - FIELD_PADDING * 2);
-      const measure = getCanvasMeasureContext(fontSize);
-      const tokens: HandwrittenVisitWordToken[] = [];
-
-      let x = bounds.x + FIELD_PADDING;
-      let y = bounds.y + FIELD_PADDING;
-      let lineIndex = 0;
-      const lines = MULTILINE_FIELDS.has(fieldId) ? text.split(/\n+/) : [text];
-
-      lines.forEach((line, lineNumber) => {
-        const words = line.split(/\s+/).filter(Boolean);
-        if (!words.length) {
-          lineIndex += 1;
-          x = bounds.x + FIELD_PADDING;
-          y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
-          return;
-        }
-        words.forEach((word) => {
-          const width = Math.max(12, measure.measureText(word).width + 4);
-          if (x + width > bounds.x + FIELD_PADDING + maxWidth && MULTILINE_FIELDS.has(fieldId)) {
-            lineIndex += 1;
-            x = bounds.x + FIELD_PADDING;
-            y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
-          }
-          tokens.push({
-            id: crypto.randomUUID(),
-            fieldId,
-            text: word,
-            x,
-            y,
-            width,
-            height: lineHeight,
-            fontSize,
-          });
-          x += width + Math.max(6, fontSize * 0.18);
-        });
-        if (lineNumber < lines.length - 1) {
-          lineIndex += 1;
-          x = bounds.x + FIELD_PADDING;
-          y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
-        }
-      });
-
-      return tokens;
-    },
-    [getFieldBounds],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    const renderedPrefillFields = new Set(editorState.wordTokens.map((token) => token.fieldId));
-    const missingFields = PREFILL_FIELD_IDS.filter(
-      (fieldId) => editorState.fields[fieldId].trim() && !renderedPrefillFields.has(fieldId),
-    );
-    if (!missingFields.length) return;
-
-    const nextTokens = missingFields.flatMap((fieldId) => buildPrefillTokensForField(fieldId, editorState.fields[fieldId]));
-    if (!nextTokens.length) return;
-    setEditorState((prev) => ({
-      ...prev,
-      wordTokens: [...prev.wordTokens, ...nextTokens],
-    }));
-  }, [buildPrefillTokensForField, editorState.fields, editorState.wordTokens, open]);
-
-  const findClosestField = useCallback(
-    (point: HandwrittenVisitPoint) => {
-      let bestField: HandwrittenVisitFieldId | null = null;
-      let bestDistance = Number.POSITIVE_INFINITY;
-
-      for (const fieldId of DRAWABLE_FIELD_IDS) {
-        const bounds = getFieldBounds(fieldId);
-        if (!bounds) continue;
-        if (pointInBounds(point, bounds)) {
-          return fieldId;
-        }
-        const cx = bounds.x + bounds.width / 2;
-        const cy = bounds.y + bounds.height / 2;
-        const distance = Math.hypot(point.x - cx, point.y - cy);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestField = fieldId;
-        }
-      }
-
-      return bestDistance <= 160 ? bestField : null;
-    },
-    [getFieldBounds, pointInBounds],
-  );
-
-  const getTesseractModule = useCallback(async () => {
-    if (!tesseractModuleRef.current) {
-      tesseractModuleRef.current = import("tesseract.js");
-    }
-    return tesseractModuleRef.current;
-  }, []);
-
-  const getOcrWorker = useCallback(async () => {
-    if (!ocrWorkerRef.current) {
-      ocrWorkerRef.current = (async () => {
-        const tesseract = await getTesseractModule();
-        return tesseract.createWorker("eng", tesseract.OEM.LSTM_ONLY, {
-          logger: () => undefined,
-          errorHandler: () => undefined,
-        });
-      })();
-    }
-    return ocrWorkerRef.current;
-  }, [getTesseractModule]);
-
-  const buildStrokeCrop = useCallback(async (stroke: StrokeLike) => {
-    const bounds = getStrokeBounds(stroke.points);
-    if (!bounds) throw new Error("Nothing was drawn.");
-    const canvas = document.createElement("canvas");
-    const scale = 2;
-    canvas.width = Math.max(64, Math.ceil((bounds.width + OCR_PADDING * 2) * scale));
-    canvas.height = Math.max(64, Math.ceil((bounds.height + OCR_PADDING * 2) * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("OCR canvas could not be created.");
-    ctx.scale(scale, scale);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = "#111111";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.lineWidth = Math.max(8, stroke.width * 1.8);
-    ctx.beginPath();
-    stroke.points.forEach((point, index) => {
-      const x = point.x - bounds.x + OCR_PADDING;
-      const y = point.y - bounds.y + OCR_PADDING;
-      if (index === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.stroke();
-    return canvasToBlob(canvas, "image/png");
-  }, []);
-
-  const createWordTokenFromStroke = useCallback(
-    (fieldId: HandwrittenVisitFieldId, text: string, stroke: StrokeLike): HandwrittenVisitWordToken | null => {
-      const strokeBounds = getStrokeBounds(stroke.points);
-      const fieldBounds = getFieldBounds(fieldId);
-      if (!strokeBounds || !fieldBounds || !text) return null;
-      const fontSize = Math.max(14, Math.min(28, Math.round(Math.max(strokeBounds.height * 0.9, WORD_FONT_SIZE_BY_FIELD[fieldId] ?? 17))));
-      const measure = getCanvasMeasureContext(fontSize);
-      const measuredWidth = Math.max(14, measure.measureText(text).width + 4);
-      return {
-        id: stroke.id,
-        fieldId,
-        text,
-        x: Math.min(
-          Math.max(fieldBounds.x + FIELD_PADDING, strokeBounds.x - 2),
-          fieldBounds.x + fieldBounds.width - measuredWidth - FIELD_PADDING,
-        ),
-        y: Math.min(
-          Math.max(fieldBounds.y + FIELD_PADDING, strokeBounds.y - 2),
-          fieldBounds.y + fieldBounds.height - (fontSize + 6) - FIELD_PADDING,
-        ),
-        width: measuredWidth,
-        height: fontSize + 6,
-        fontSize,
-      };
-    },
-    [getFieldBounds],
-  );
-
-  const applyRecognizedText = useCallback(
-    (fieldId: HandwrittenVisitFieldId, text: string, stroke: StrokeLike) => {
-      const token = createWordTokenFromStroke(fieldId, text, stroke);
-      if (!token) return;
-      pushUndoSnapshot();
-      setEditorState((prev) => ({
-        ...prev,
-        wordTokens: [...prev.wordTokens, token],
-      }));
-    },
-    [createWordTokenFromStroke, pushUndoSnapshot],
-  );
-
-  const processRecognitionQueue = useCallback(async () => {
-    if (recognitionActiveRef.current) return;
-    recognitionActiveRef.current = true;
-
-    while (recognitionQueueRef.current.length) {
-      const task = recognitionQueueRef.current.shift();
-      if (!task) continue;
-
-      try {
-        const tesseract = await getTesseractModule();
-        const worker = await getOcrWorker();
-        await worker.setParameters({
-          preserve_interword_spaces: "1",
-          user_defined_dpi: "300",
-          ...getFieldRecognitionSettings(task.fieldId, tesseract),
-        });
-        const cropBlob = await buildStrokeCrop(task.stroke);
-        const result = await worker.recognize(cropBlob);
-        const text = normalizeRecognizedText(task.fieldId, result.data.text ?? "");
-        if (text) {
-          applyRecognizedText(task.fieldId, text, task.stroke);
-          setEditorState((prev) => ({
-            ...prev,
-            inkFallbacks: prev.inkFallbacks.filter((stroke) => stroke.id !== task.id),
-          }));
-        } else {
-          setError("Handwriting could not be recognized clearly. You can write the word again or edit it in emergency by double-clicking a placed word.");
-        }
-      } catch {
-        setError("Handwriting recognition failed. You can write again or edit a placed word by double-clicking it in emergency.");
-      } finally {
-        setRecognizingCount((count) => Math.max(0, count - 1));
-      }
-    }
-
-    recognitionActiveRef.current = false;
-  }, [applyRecognizedText, buildStrokeCrop, getOcrWorker, getTesseractModule]);
-
-  const enqueueRecognition = useCallback((fieldId: HandwrittenVisitFieldId, stroke: StrokeLike) => {
-    recognitionQueueRef.current.push({ id: stroke.id, fieldId, stroke: cloneStroke(stroke) });
-    setRecognizingCount((count) => count + 1);
-    void processRecognitionQueue();
-  }, [processRecognitionQueue]);
 
   const handleCheckboxChange = useCallback((checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => {
     pushUndoSnapshot();
@@ -736,42 +347,9 @@ export function VisitHandwrittenPrescription({
         const inkBounds = getStrokeBounds(ink.points);
         return !inkBounds || !boundsIntersect(bounds, inkBounds);
       });
-      nextState.wordTokens = nextState.wordTokens.filter((token) => {
-        const tokenBounds = {
-          x: token.x,
-          y: token.y,
-          width: token.width,
-          height: token.height,
-        };
-        return !boundsIntersect(bounds, tokenBounds);
-      });
       return nextState;
     });
   }, [pushUndoSnapshot]);
-
-  const handleWordDoubleClick = useCallback(
-    (token: HandwrittenVisitWordToken) => {
-      if (!scrollMode) return;
-      const nextText = window.prompt("Edit recognized word", token.text);
-      if (nextText === null) return;
-      const trimmed = nextText.trim();
-      pushUndoSnapshot();
-      setEditorState((prev) => ({
-        ...prev,
-        wordTokens: prev.wordTokens
-          .map((current) =>
-            current.id === token.id
-              ? {
-                  ...current,
-                  text: trimmed,
-                }
-              : current,
-          )
-          .filter((current) => current.text.trim()),
-      }));
-    },
-    [pushUndoSnapshot, scrollMode],
-  );
 
   const startStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (tool === "scroll") return;
@@ -781,25 +359,25 @@ export function VisitHandwrittenPrescription({
       handleCheckboxChange(checkboxId, !editorState.checkboxes[checkboxId]);
       return;
     }
-    if (pointInBounds(point, getInfoSectionBounds())) {
-      return;
-    }
+
     const stroke: StrokeLike = {
       id: crypto.randomUUID(),
       width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : Math.max(4, strokeWidth),
       points: [point],
     };
+
     activePointerId.current = event.pointerId;
     activeStrokeRef.current = stroke;
     setCurrentStroke(stroke);
     setError(null);
     setMessage(null);
+
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       /* noop */
     }
-  }, [editorState.checkboxes, getCheckboxAtPoint, getInfoSectionBounds, getStagePoint, handleCheckboxChange, pointInBounds, strokeWidth, tool]);
+  }, [editorState.checkboxes, getCheckboxAtPoint, getStagePoint, handleCheckboxChange, strokeWidth, tool]);
 
   const moveStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerId.current !== event.pointerId || !activeStrokeRef.current) return;
@@ -841,23 +419,12 @@ export function VisitHandwrittenPrescription({
       return;
     }
 
-    const bounds = getStrokeBounds(stroke.points);
-    if (!bounds) return;
-    const fieldId = findClosestField({
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    });
-    if (!fieldId) {
-      setError("Write inside one of the HTML form areas so the text can be converted.");
-      return;
-    }
-
+    pushUndoSnapshot();
     setEditorState((prev) => ({
       ...prev,
       inkFallbacks: [...prev.inkFallbacks, cloneStroke(stroke)],
     }));
-    enqueueRecognition(fieldId, stroke);
-  }, [enqueueRecognition, eraseAtStroke, findClosestField, pushUndoSnapshot, tool]);
+  }, [eraseAtStroke, pushUndoSnapshot, tool]);
 
   const undo = useCallback(() => {
     setUndoStack((prev) => {
@@ -920,7 +487,7 @@ export function VisitHandwrittenPrescription({
         cacheBust: true,
         backgroundColor: "#ffffff",
       });
-      if (!imageBlob) throw new Error("Failed to capture the HTML visit sheet.");
+      if (!imageBlob) throw new Error("Failed to capture the handwritten visit sheet.");
 
       const fd = new FormData();
       fd.set("visit_id", visitId);
@@ -933,7 +500,7 @@ export function VisitHandwrittenPrescription({
         return;
       }
 
-      setMessage("Interactive handwritten visit PDF saved.");
+      setMessage("Handwritten visit PDF saved.");
       router.refresh();
       setOpen(false);
     } finally {
@@ -1003,21 +570,15 @@ export function VisitHandwrittenPrescription({
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-800">Tips</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>Use Write to handwrite inside any sheet field and convert it into typed text.</li>
-          <li>Use Scroll / Edit to click checkboxes and manually change any HTML field.</li>
+          <li>Use Write to handwrite anywhere on the template.</li>
+          <li>Use Scroll / Edit to click checkboxes directly and move around the page safely.</li>
+          <li>In Write mode, tapping directly on a checkbox still toggles it.</li>
           <li>Highlight stays as marker strokes on top of the visit form.</li>
-          <li>Eraser removes highlight ink and deletes converted text from the target field.</li>
-          <li>Save exports the fixed HTML sheet exactly as the visit PDF.</li>
+          <li>Eraser removes handwritten and highlight strokes from the page.</li>
         </ul>
       </div>
 
-      {recognizingCount ? (
-        <p className="text-[11px] font-medium text-primary">
-          Recognizing handwriting{recognizingCount > 1 ? ` (${recognizingCount})` : ""}...
-        </p>
-      ) : null}
-
-      {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full interactive save.</p> : null}
+      {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full handwritten save.</p> : null}
     </>
   );
 
@@ -1106,15 +667,10 @@ export function VisitHandwrittenPrescription({
       <VisitHandwrittenHtmlSheet
         stageRef={stageRef}
         state={editorState}
-        registerFieldRef={registerFieldRef}
         registerCheckboxRef={registerCheckboxRef}
-        registerInfoSectionRef={registerInfoSectionRef}
         onCheckboxChange={handleCheckboxChange}
-        onWordDoubleClick={handleWordDoubleClick}
-        wordInteractionEnabled={scrollMode}
       />
       <svg
-        ref={overlayRef}
         viewBox={`0 0 ${HANDWRITTEN_VISIT_SHEET_WIDTH} ${HANDWRITTEN_VISIT_SHEET_HEIGHT}`}
         className={`absolute inset-0 h-full w-full ${overlayPointerClass}`}
         onPointerDown={startStroke}
@@ -1156,8 +712,8 @@ export function VisitHandwrittenPrescription({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-on-background">Interactive handwritten full visit sheet</p>
             <p className="text-[12px] text-on-surface-variant">
-              Use the fixed GreenCoatVets HTML visit form with checkboxes, editable fields, handwriting-to-text conversion,
-              highlight, erase, and PDF save.
+              Use the fixed GreenCoatVets HTML visit form with clickable checkboxes, free handwriting, highlight,
+              erase, and PDF save.
             </p>
             <p className="text-[11px] text-on-surface-variant">
               Patient: {petName || "—"} | Owner: {ownerName || "—"} | Doctor: {doctorName || "—"} | Clinic: {clinicName || "—"}
@@ -1175,7 +731,7 @@ export function VisitHandwrittenPrescription({
               </a>
             ) : null}
             <button type="button" className="btn-primary btn-compact text-xs" onClick={() => setOpen(true)}>
-              {hasSavedPdf ? "Edit interactive visit sheet" : "Open interactive visit sheet"}
+              {hasSavedPdf ? "Edit handwritten visit sheet" : "Open handwritten visit sheet"}
             </button>
           </div>
         </div>
@@ -1208,8 +764,7 @@ export function VisitHandwrittenPrescription({
                   <div>
                     <p className="font-headline text-base font-bold text-slate-900">Interactive handwritten full visit studio</p>
                     <p className="text-[12px] text-slate-600">
-                      Write inside the fixed HTML form to convert handwriting into text, or switch to Scroll / Edit to type
-                      and click checkboxes directly.
+                      Write freely on the fixed HTML form, then save the handwritten page exactly as a PDF.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1239,11 +794,11 @@ export function VisitHandwrittenPrescription({
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                       <div className="text-[12px] text-slate-600">
                         {scrollMode
-                          ? "Scroll / Edit mode is on. Click checkboxes, type into fields, and scroll safely."
-                          : "Write mode converts handwriting into typed text inside the fixed HTML form."}
+                          ? "Scroll / Edit mode is on. Click checkboxes and scroll safely."
+                          : "Write mode lets you handwrite anywhere on the template."}
                       </div>
                       <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
-                        {pending ? "Saving PDF…" : "Save interactive visit"}
+                        {pending ? "Saving PDF…" : "Save handwritten visit"}
                       </button>
                     </div>
                     <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto p-4">
