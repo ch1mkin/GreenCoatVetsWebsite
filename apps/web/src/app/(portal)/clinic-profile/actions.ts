@@ -4,12 +4,17 @@ import { revalidatePath } from "next/cache";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { createClient } from "@/lib/supabase/server";
 
+function canManageClinicProfile(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  if (isSuperAdmin) return true;
+  return role === "clinic_admin" || role === "branch_admin";
+}
+
 export async function updateClinicProfileImage(formData: FormData) {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
-  if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admin can update clinic profile image.");
+  if (!clinicId || !canManageClinicProfile(role, access.isSuperAdmin)) {
+    throw new Error("Only clinic admins or branch admins can update clinic profile image.");
   }
 
   const imageFile = formData.get("clinic_image");
@@ -41,8 +46,8 @@ export async function updateClinicHandwrittenVisitTemplate(formData: FormData) {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
-  if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admin can update the handwritten visit template.");
+  if (!clinicId || !canManageClinicProfile(role, access.isSuperAdmin)) {
+    throw new Error("Only clinic admins or branch admins can update the handwritten visit template.");
   }
 
   const uploaded = formData.get("template_image");
@@ -63,13 +68,24 @@ export async function updateClinicHandwrittenVisitTemplate(formData: FormData) {
   if (uploadError) throw new Error(uploadError.message);
 
   const { data: publicUrl } = supabase.storage.from("clinic-assets").getPublicUrl(path);
-  const { error } = await supabase
+  const nowIso = new Date().toISOString();
+  let { error } = await supabase
     .from("clinics")
     .update({
       handwritten_visit_template_url: publicUrl.publicUrl,
-      handwritten_visit_template_updated_at: new Date().toISOString(),
+      handwritten_visit_template_updated_at: nowIso,
     })
     .eq("id", clinicId);
+  if (error && /handwritten_visit_template_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("clinics")
+      .update({
+        prescription_template_url: publicUrl.publicUrl,
+        prescription_template_updated_at: nowIso,
+      })
+      .eq("id", clinicId);
+    error = fallback.error;
+  }
   if (error) throw new Error(error.message);
 
   revalidatePath("/clinic-profile");
@@ -82,18 +98,29 @@ export async function clearClinicHandwrittenVisitTemplate() {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
-  if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admin can update the handwritten visit template.");
+  if (!clinicId || !canManageClinicProfile(role, access.isSuperAdmin)) {
+    throw new Error("Only clinic admins or branch admins can update the handwritten visit template.");
   }
 
   const supabase = createClient();
-  const { error } = await supabase
+  const nowIso = new Date().toISOString();
+  let { error } = await supabase
     .from("clinics")
     .update({
       handwritten_visit_template_url: null,
-      handwritten_visit_template_updated_at: new Date().toISOString(),
+      handwritten_visit_template_updated_at: nowIso,
     })
     .eq("id", clinicId);
+  if (error && /handwritten_visit_template_/i.test(error.message)) {
+    const fallback = await supabase
+      .from("clinics")
+      .update({
+        prescription_template_url: null,
+        prescription_template_updated_at: nowIso,
+      })
+      .eq("id", clinicId);
+    error = fallback.error;
+  }
   if (error) throw new Error(error.message);
 
   revalidatePath("/clinic-profile");
@@ -106,8 +133,8 @@ export async function updateClinicBranchWebLicenseSettings(formData: FormData) {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";
   const clinicId = access.membership?.clinic_id ?? "";
-  if (!clinicId || role !== "clinic_admin") {
-    throw new Error("Only clinic admins can update branch web license pricing.");
+  if (!clinicId || !canManageClinicProfile(role, access.isSuperAdmin)) {
+    throw new Error("Only clinic admins or branch admins can update branch web license pricing.");
   }
 
   const priceRaw = String(formData.get("branch_web_license_price_inr") ?? "").trim();

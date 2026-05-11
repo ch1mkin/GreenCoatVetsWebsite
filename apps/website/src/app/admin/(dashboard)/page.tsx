@@ -54,6 +54,17 @@ export default async function AdminHomePage() {
         </li>
         <li>
           <Link
+            href="/admin/ai-prompts"
+            className="block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <h2 className="font-headline text-lg font-bold text-primary">Instagram AI prompts</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Generate trending post angles plus a Gemini-ready 2D illustration prompt for marketing creatives.
+            </p>
+          </Link>
+        </li>
+        <li>
+          <Link
             href="/admin/faqs"
             className="block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
           >

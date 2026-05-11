@@ -22,12 +22,12 @@ export async function regenerateVisitReportPdfAttachment(visitId: string, option
 
   const { data: visit, error: vErr } = await supabase
     .from("visits")
-    .select("pet_id, clinic_id, visit_report_pdf_source")
+    .select("*")
     .eq("id", visitId)
     .single();
 
   if (vErr || !visit) throw new Error(vErr?.message ?? "Visit not found.");
-  if (visit.visit_report_pdf_source === "handwritten" && !options?.force) {
+  if ((visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source === "handwritten" && !options?.force) {
     return;
   }
 
@@ -40,15 +40,28 @@ export async function regenerateVisitReportPdfAttachment(visitId: string, option
   });
   if (upErr) throw new Error(upErr.message);
 
-  const { error: upRow } = await supabase
+  const nowIso = new Date().toISOString();
+  let { error: upRow } = await supabase
     .from("visits")
     .update({
       visit_report_pdf_path: path,
-      visit_report_pdf_generated_at: new Date().toISOString(),
+      visit_report_pdf_generated_at: nowIso,
       visit_report_pdf_source: "generated",
     })
     .eq("id", visitId)
     .eq("clinic_id", visit.clinic_id as string);
+
+  if (upRow && /visit_report_pdf_source/i.test(upRow.message)) {
+    const fallback = await supabase
+      .from("visits")
+      .update({
+        visit_report_pdf_path: path,
+        visit_report_pdf_generated_at: nowIso,
+      })
+      .eq("id", visitId)
+      .eq("clinic_id", visit.clinic_id as string);
+    upRow = fallback.error;
+  }
 
   if (upRow) throw new Error(upRow.message);
 
@@ -110,15 +123,27 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
     });
     if (uploadError) return { ok: false, error: uploadError.message };
 
-    const { error: visitUpdateError } = await supabase
+    const nowIso = new Date().toISOString();
+    let { error: visitUpdateError } = await supabase
       .from("visits")
       .update({
         visit_report_pdf_path: path,
-        visit_report_pdf_generated_at: new Date().toISOString(),
+        visit_report_pdf_generated_at: nowIso,
         visit_report_pdf_source: "handwritten",
       })
       .eq("id", visitId)
       .eq("clinic_id", visit.clinic_id as string);
+    if (visitUpdateError && /visit_report_pdf_source/i.test(visitUpdateError.message)) {
+      const fallback = await supabase
+        .from("visits")
+        .update({
+          visit_report_pdf_path: path,
+          visit_report_pdf_generated_at: nowIso,
+        })
+        .eq("id", visitId)
+        .eq("clinic_id", visit.clinic_id as string);
+      visitUpdateError = fallback.error;
+    }
     if (visitUpdateError) return { ok: false, error: visitUpdateError.message };
 
     revalidatePath(`/visits/${visitId}`);

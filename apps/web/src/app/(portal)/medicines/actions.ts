@@ -65,7 +65,12 @@ export async function saveMedicineCatalogEntry(formData: FormData) {
     : supabase.from("medicine_catalog_entries").insert(payload);
 
   const { error } = await query;
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/medicine_catalog_entries/i.test(error.message)) {
+      throw new Error("Run the latest Supabase migrations first, then try saving the medicine catalog again.");
+    }
+    throw new Error(error.message);
+  }
 
   revalidatePath("/medicines");
   revalidatePath("/visits");
@@ -90,7 +95,12 @@ export async function archiveMedicineCatalogEntry(formData: FormData) {
     .eq("id", id)
     .eq("clinic_id", clinic_id);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/medicine_catalog_entries/i.test(error.message)) {
+      throw new Error("Run the latest Supabase migrations first, then try updating the medicine catalog again.");
+    }
+    throw new Error(error.message);
+  }
 
   revalidatePath("/medicines");
   revalidatePath("/visits");

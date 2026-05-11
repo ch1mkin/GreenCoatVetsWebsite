@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -21,6 +21,72 @@ export function LoginForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const invite = (searchParams.get("invite") ?? "").trim();
+  const oauthMode = searchParams.get("oauth") === "google";
+
+  useEffect(() => {
+    if (!oauthMode) return;
+    let cancelled = false;
+
+    (async () => {
+      setError(null);
+      setIsSubmitting(true);
+      const supabase = createClient();
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (cancelled) return;
+      if (sessionError || !session?.user) {
+        setIsSubmitting(false);
+        setError(sessionError ? mapAuthError(sessionError.message) : "Google sign-in could not be completed.");
+        return;
+      }
+
+      if (invite) {
+        const { error: inviteError } = await supabase.rpc("consume_clinic_role_invite", {
+          p_token: invite,
+          p_full_name: null,
+          p_phone: null,
+        });
+        if (cancelled) return;
+        if (inviteError) {
+          setIsSubmitting(false);
+          setError(mapAuthError(inviteError.message));
+          return;
+        }
+      }
+
+      router.replace("/dashboard");
+      router.refresh();
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [invite, oauthMode, router]);
+
+  async function onContinueWithGoogle() {
+    setError(null);
+    setIsSubmitting(true);
+
+    const supabase = createClient();
+    const nextPath = invite ? `/login?oauth=google&invite=${encodeURIComponent(invite)}` : "/dashboard";
+    const redirectTo = new URL("/auth/callback", window.location.origin);
+    redirectTo.searchParams.set("next", nextPath);
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: redirectTo.toString(),
+        queryParams: { prompt: "select_account" },
+      },
+    });
+
+    if (oauthError) {
+      setIsSubmitting(false);
+      setError(mapAuthError(oauthError.message));
+    }
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -121,6 +187,25 @@ export function LoginForm({
                   Invite detected. Your role assignment will be applied after sign in.
                 </p>
               ) : null}
+            </div>
+
+            <div className="mb-6 space-y-3">
+              <button
+                type="button"
+                onClick={onContinueWithGoogle}
+                disabled={isSubmitting}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-outline-variant/25 bg-white px-4 py-3.5 font-semibold text-on-background shadow-sm transition hover:border-primary/30 hover:bg-primary/5 disabled:opacity-60"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[13px] font-bold text-[#4285F4] shadow-sm">
+                  G
+                </span>
+                Continue with Google
+              </button>
+              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.24em] text-on-surface-variant/80">
+                <span className="h-px flex-1 bg-outline-variant/20" />
+                <span>Email and password</span>
+                <span className="h-px flex-1 bg-outline-variant/20" />
+              </div>
             </div>
 
             <div className="space-y-4">

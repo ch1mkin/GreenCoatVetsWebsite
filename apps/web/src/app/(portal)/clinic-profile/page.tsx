@@ -6,10 +6,15 @@ import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/web/submit-button";
 import { updateClinicBranchWebLicenseSettings, updateClinicProfileImage } from "./actions";
 
+function canAccessClinicProfile(role: string | null | undefined, isSuperAdmin: boolean): boolean {
+  if (isSuperAdmin) return true;
+  return role === "clinic_admin" || role === "branch_admin";
+}
+
 export default async function ClinicProfilePage() {
   const access = await getUserAccess();
   if (!access.membership) redirect("/dashboard");
-  if (access.membership.role !== "clinic_admin") redirect("/dashboard");
+  if (!canAccessClinicProfile(access.membership.role, access.isSuperAdmin)) redirect("/dashboard");
 
   const role = access.membership.role as
     | "super_admin"
@@ -25,7 +30,7 @@ export default async function ClinicProfilePage() {
   const supabase = createClient();
   const { data: clinic } = await supabase
     .from("clinics")
-    .select("id, name, slug, image_url, branch_web_license_price_paise, branch_web_license_period_days")
+    .select("*")
     .eq("id", access.membership.clinic_id)
     .maybeSingle();
 

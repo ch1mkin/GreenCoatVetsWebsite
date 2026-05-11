@@ -49,11 +49,18 @@ export default async function MedicinesPage() {
       .eq("clinic_id", clinic_id)
       .order("is_active", { ascending: false })
       .order("name", { ascending: true }),
-    supabase.from("clinics").select("name, handwritten_visit_template_url").eq("id", clinic_id).maybeSingle(),
+    supabase.from("clinics").select("*").eq("id", clinic_id).maybeSingle(),
   ]);
 
-  if (error) throw new Error(error.message);
-  const entries = (rows ?? []) as MedicineRow[];
+  const entries =
+    error && /medicine_catalog_entries/i.test(error.message) ? [] : ((rows ?? []) as MedicineRow[]);
+  if (error && !/medicine_catalog_entries/i.test(error.message)) throw new Error(error.message);
+  const templateUrl =
+    (clinic as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
+      ?.handwritten_visit_template_url ??
+    (clinic as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
+      ?.prescription_template_url ??
+    null;
 
   return (
     <AppShell
@@ -114,12 +121,18 @@ export default async function MedicinesPage() {
               <p className="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Clinic</p>
               <p className="font-headline text-base font-bold text-primary">{clinic?.name ?? "Clinic"}</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Handwritten visit template: {clinic?.handwritten_visit_template_url ? "uploaded" : "using built-in blank layout"}
+                Handwritten visit template: {templateUrl ? "uploaded" : "using built-in blank layout"}
               </p>
             </div>
           </div>
         </div>
       </section>
+      {error && /medicine_catalog_entries/i.test(error.message) ? (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          The medicine catalog table is not available on this database yet. Run the latest Supabase migrations to enable
+          admin-managed medicines here.
+        </div>
+      ) : null}
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">

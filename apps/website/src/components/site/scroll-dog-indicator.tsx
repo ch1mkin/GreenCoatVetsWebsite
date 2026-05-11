@@ -7,7 +7,7 @@ type IdlePose = "sit" | "sleep";
 
 /**
  * Decorative site-wide scroll tracker for the public website.
- * It does not replace the native scrollbar; it mirrors page scroll with a playful dog.
+ * It does not replace the native scrollbar; it mirrors page scroll with a playful paw marker.
  */
 export function ScrollDogIndicator() {
   const [visible, setVisible] = useState(false);
@@ -68,7 +68,7 @@ export function ScrollDogIndicator() {
         style={{ top: `calc(${(progress * 100).toFixed(2)}% - 1.5rem)` }}
       >
         <span className="scroll-dog-shadow" />
-        <span className="scroll-dog-emoji">{moving ? "🐕" : "🐶"}</span>
+        <span className="material-symbols-outlined scroll-dog-emoji scroll-paw-icon">pets</span>
         {moving ? (
           <span className="scroll-dog-arrow">{direction === "down" ? "↓" : "↑"}</span>
         ) : idlePose === "sleep" ? (

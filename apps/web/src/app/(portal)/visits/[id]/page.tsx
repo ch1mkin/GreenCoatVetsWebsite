@@ -62,6 +62,54 @@ function searchParamOne(
   return undefined;
 }
 
+async function loadMedicineCatalogOrFallback(
+  supabase: ReturnType<typeof createClient>,
+  clinicId: string,
+): Promise<MedicineCatalogEntry[]> {
+  const { data, error } = await supabase
+    .from("medicine_catalog_entries")
+    .select(
+      "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active",
+    )
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (!error) {
+    return ((data ?? []) as Array<Omit<MedicineCatalogEntry, "aliases"> & { aliases: string[] | null }>).map((row) => ({
+      ...row,
+      aliases: Array.isArray(row.aliases) ? row.aliases : [],
+    }));
+  }
+
+  if (!/medicine_catalog_entries/i.test(error.message)) {
+    throw new Error(error.message);
+  }
+
+  const { data: inventoryData, error: inventoryError } = await supabase
+    .from("inventory_items")
+    .select("id, name")
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .order("name", { ascending: true })
+    .limit(200);
+  if (inventoryError) throw new Error(inventoryError.message);
+
+  return ((inventoryData ?? []) as Array<{ id: string; name: string | null }>).map((row) => ({
+    id: row.id,
+    name: String(row.name ?? ""),
+    aliases: [],
+    form: null,
+    strength: null,
+    manufacturer: null,
+    default_dosage: null,
+    default_frequency: null,
+    default_duration: null,
+    notes: null,
+    is_active: true,
+  }));
+}
+
 export default async function VisitDetailsPage({
   params,
   searchParams,
@@ -95,7 +143,7 @@ export default async function VisitDetailsPage({
   const { data: visit, error } = await supabase
     .from("visits")
     .select(
-      "id, doctor_id, check_in_at, started_at, completed_at, symptoms, diagnosis, treatment_plan, follow_up_at, appointment_id, visit_report_pdf_path, visit_report_pdf_generated_at, visit_report_pdf_source, updated_at, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
+      "*, pets(id, name, species, breed, gender, date_of_birth, age_months, microchip_id, weight_kg), owners(first_name, last_name, full_name, phone, email), branches(id, name), staff_profiles(full_name), appointments(id, status, reason, notes, starts_at, owner_intake, doctor_id)"
     )
     .eq("id", resolvedParams.id)
     .eq("clinic_id", clinic_id)
@@ -157,8 +205,8 @@ export default async function VisitDetailsPage({
   const [
     { data: rxItems, error: rxItemsError },
     { data: attachments, error: attachmentsError },
-    { data: medicineCatalogRows, error: medicineCatalogError },
     { data: clinicRow, error: clinicRowError },
+    medicineCatalog,
   ] = await Promise.all([
     supabase
       .from("prescription_items")
@@ -166,34 +214,25 @@ export default async function VisitDetailsPage({
       .eq("prescription_id", prescriptionId)
       .order("created_at", { ascending: true }),
     supabase
-      .from("file_attachments")
-      .select("id, file_name, mime_type, storage_bucket, storage_path, created_at")
-      .eq("visit_id", visit.id)
-      .eq("clinic_id", clinic_id)
+    .from("file_attachments")
+    .select("id, file_name, mime_type, storage_bucket, storage_path, created_at")
+    .eq("visit_id", visit.id)
+    .eq("clinic_id", clinic_id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("medicine_catalog_entries")
-      .select(
-        "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active",
-      )
-      .eq("clinic_id", clinic_id)
-      .eq("is_active", true)
-      .order("name", { ascending: true }),
-    supabase.from("clinics").select("name, handwritten_visit_template_url").eq("id", clinic_id).maybeSingle(),
+    supabase.from("clinics").select("*").eq("id", clinic_id).maybeSingle(),
+    loadMedicineCatalogOrFallback(supabase, clinic_id),
   ]);
 
   if (rxItemsError) throw new Error(rxItemsError.message);
   if (attachmentsError) throw new Error(attachmentsError.message);
-  if (medicineCatalogError) throw new Error(medicineCatalogError.message);
   if (clinicRowError) throw new Error(clinicRowError.message);
-
-  const medicineCatalog = ((medicineCatalogRows ?? []) as Array<
-    Omit<MedicineCatalogEntry, "aliases"> & { aliases: string[] | null }
-  >).map((row) => ({
-    ...row,
-    aliases: Array.isArray(row.aliases) ? row.aliases : [],
-  }));
   const ownerName = ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string } | null);
+  const handwrittenTemplateUrl =
+    (clinicRow as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
+      ?.handwritten_visit_template_url ??
+    (clinicRow as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
+      ?.prescription_template_url ??
+    null;
 
   const petId = String(pet?.id ?? "");
   const branchId = String(branch?.id ?? "");
@@ -278,7 +317,7 @@ export default async function VisitDetailsPage({
             <VisitHandwrittenPrescription
               visitId={visit.id}
               embed={embed}
-              templateImageUrl={(clinicRow?.handwritten_visit_template_url as string | null | undefined) ?? null}
+              templateImageUrl={handwrittenTemplateUrl}
               hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
               clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
               petName={String(pet?.name ?? "Patient")}
@@ -615,7 +654,7 @@ export default async function VisitDetailsPage({
             name="treatment_plan"
             placeholder="Treatment plan"
             defaultValue={visit.treatment_plan ?? ""}
-          />
+            />
           </div>
         </VisitSection>
           {/*
@@ -628,7 +667,7 @@ export default async function VisitDetailsPage({
             </button>
             <button type="submit" id="visit-submit-complete" name="complete_visit" value="true" tabIndex={-1}>
               Complete visit
-            </button>
+          </button>
           </div>
         </form>
 

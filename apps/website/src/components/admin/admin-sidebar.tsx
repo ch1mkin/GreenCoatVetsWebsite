@@ -21,6 +21,7 @@ const SUPER_GROUPS: { title: string; items: { href: string; label: string }[] }[
     title: "Content",
     items: [
       { href: "/admin/blog", label: "Blog" },
+      { href: "/admin/ai-prompts", label: "AI prompts" },
       { href: "/admin/faqs", label: "FAQs" },
       { href: "/admin/reviews", label: "Reviews" },
       { href: "/admin/popups", label: "Popups" },

@@ -50,7 +50,12 @@ async function loadClinicMedicineCatalog(
     .order("name", { ascending: true })
     .limit(500);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (/medicine_catalog_entries/i.test(error.message)) {
+      return [];
+    }
+    throw new Error(error.message);
+  }
 
   return ((data ?? []) as MedicineCatalogRow[]).map((row) => ({
     ...row,
