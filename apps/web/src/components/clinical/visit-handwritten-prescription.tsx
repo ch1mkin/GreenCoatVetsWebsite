@@ -10,6 +10,8 @@ type Stroke = { id: string; tool: Tool; width: number; points: Point[] };
 
 const CANVAS_W = 1240;
 const CANVAS_H = 1754;
+const EXPORT_MIME = "image/jpeg";
+const EXPORT_QUALITY = 0.92;
 
 function toolButtonClass(active: boolean) {
   return active
@@ -127,6 +129,19 @@ async function loadTemplateImage(url: string): Promise<HTMLImageElement> {
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Failed to load template image."));
     img.src = url;
+  });
+}
+
+async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Failed to encode handwritten visit image."));
+      },
+      type,
+      quality,
+    );
   });
 }
 
@@ -287,14 +302,18 @@ export function VisitHandwrittenPrescription({
       const exportCanvas = document.createElement("canvas");
       exportCanvas.width = CANVAS_W;
       exportCanvas.height = CANVAS_H;
-      const exportCtx = exportCanvas.getContext("2d");
+      const exportCtx = exportCanvas.getContext("2d", { alpha: false });
       if (!exportCtx) throw new Error("Failed to prepare handwritten visit export.");
+      exportCtx.fillStyle = "#ffffff";
+      exportCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      exportCtx.imageSmoothingEnabled = true;
+      exportCtx.imageSmoothingQuality = "high";
       exportCtx.drawImage(templateCanvas, 0, 0);
       exportCtx.drawImage(drawingCanvas, 0, 0);
-      const imageDataUrl = exportCanvas.toDataURL("image/png");
+      const imageBlob = await canvasToBlob(exportCanvas, EXPORT_MIME, EXPORT_QUALITY);
       const fd = new FormData();
       fd.set("visit_id", visitId);
-      fd.set("image_data_url", imageDataUrl);
+      fd.set("image_file", new File([imageBlob], `visit-${visitId}.jpg`, { type: EXPORT_MIME }));
       const result = await saveHandwrittenVisitPdfAction(fd);
       if (!result.ok) {
         setError(result.error);

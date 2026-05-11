@@ -85,6 +85,23 @@ function decodeImageDataUrl(dataUrl: string): Uint8Array {
   return Uint8Array.from(Buffer.from(match[2] ?? "", "base64"));
 }
 
+async function readHandwrittenImageUpload(formData: FormData): Promise<Uint8Array> {
+  const uploaded = formData.get("image_file");
+  const file = uploaded instanceof File ? uploaded : null;
+  if (file && file.size > 0) {
+    if (!(file.type || "").startsWith("image/")) {
+      throw new Error("Handwritten visit upload must be an image.");
+    }
+    return new Uint8Array(await file.arrayBuffer());
+  }
+
+  const imageDataUrl = String(formData.get("image_data_url") ?? "").trim();
+  if (!imageDataUrl) {
+    throw new Error("Visit and handwritten image are required.");
+  }
+  return decodeImageDataUrl(imageDataUrl);
+}
+
 export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise<SaveHandwrittenVisitPdfResult> {
   try {
     const access = await getUserAccess();
@@ -93,8 +110,7 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
     }
 
     const visitId = String(formData.get("visit_id") ?? "").trim();
-    const imageDataUrl = String(formData.get("image_data_url") ?? "").trim();
-    if (!visitId || !imageDataUrl) {
+    if (!visitId) {
       return { ok: false, error: "Visit and handwritten image are required." };
     }
 
@@ -111,8 +127,9 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
       return { ok: false, error: visitError?.message ?? "Visit not found." };
     }
 
+    const uploadedImageBytes = await readHandwrittenImageUpload(formData);
     const pdfBytes = await buildHandwrittenCanvasPdfBytes({
-      imageBytes: decodeImageDataUrl(imageDataUrl),
+      imageBytes: uploadedImageBytes,
       footerText: `Handwritten visit sheet saved ${new Date().toLocaleString()}.`,
     });
     const path = `${visit.clinic_id}/pets/${visit.pet_id}/visits/${visitId}/visit-report-handwritten.pdf`;
