@@ -37,6 +37,71 @@ export async function updateClinicProfileImage(formData: FormData) {
   revalidatePath("/join-clinic");
 }
 
+export async function updateClinicPrescriptionTemplate(formData: FormData) {
+  const access = await getUserAccess();
+  const role = access.membership?.role ?? "";
+  const clinicId = access.membership?.clinic_id ?? "";
+  if (!clinicId || role !== "clinic_admin") {
+    throw new Error("Only clinic admin can update the prescription template.");
+  }
+
+  const uploaded = formData.get("template_image");
+  const file = uploaded instanceof File ? uploaded : null;
+  if (!file || file.size === 0) throw new Error("Template image is required.");
+  if (!(file.type || "").startsWith("image/")) {
+    throw new Error("Please upload an image file (PNG, JPG, or WebP).");
+  }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${clinicId}/prescription-templates/${Date.now()}-${safeName}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+
+  const supabase = createClient();
+  const { error: uploadError } = await supabase.storage
+    .from("clinic-assets")
+    .upload(path, bytes, { contentType: file.type || "application/octet-stream", upsert: true });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { data: publicUrl } = supabase.storage.from("clinic-assets").getPublicUrl(path);
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      prescription_template_url: publicUrl.publicUrl,
+      prescription_template_updated_at: new Date().toISOString(),
+    })
+    .eq("id", clinicId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/clinic-profile");
+  revalidatePath("/clinic-profile/prescription-template");
+  revalidatePath("/medicines");
+  revalidatePath("/visits");
+}
+
+export async function clearClinicPrescriptionTemplate() {
+  const access = await getUserAccess();
+  const role = access.membership?.role ?? "";
+  const clinicId = access.membership?.clinic_id ?? "";
+  if (!clinicId || role !== "clinic_admin") {
+    throw new Error("Only clinic admin can update the prescription template.");
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      prescription_template_url: null,
+      prescription_template_updated_at: new Date().toISOString(),
+    })
+    .eq("id", clinicId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/clinic-profile");
+  revalidatePath("/clinic-profile/prescription-template");
+  revalidatePath("/medicines");
+  revalidatePath("/visits");
+}
+
 export async function updateClinicBranchWebLicenseSettings(formData: FormData) {
   const access = await getUserAccess();
   const role = access.membership?.role ?? "";

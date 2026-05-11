@@ -39,6 +39,7 @@ const TAB_HREF_PRIORITY: Partial<Record<PrimaryTabId, string[]>> = {
     "/appointments",
     "/appointments/calendar",
     "/medical-records",
+    "/medicines",
     "/vaccinations",
     "/visits",
   ],
@@ -75,6 +76,7 @@ export function primaryTabFromHref(href: string): PrimaryTabId {
   if (path.startsWith("/reception")) return "clinical";
   if (path.startsWith("/appointments")) return "clinical";
   if (path.startsWith("/medical-records")) return "clinical";
+  if (path.startsWith("/medicines")) return "clinical";
   if (path.startsWith("/visits")) return "clinical";
   if (path.startsWith("/vaccinations")) return "clinical";
   if (path.startsWith("/invoices")) return "financial";
@@ -84,6 +86,7 @@ export function primaryTabFromHref(href: string): PrimaryTabId {
   if (path.startsWith("/super-admin")) return "admin";
   if (path.startsWith("/team")) return "admin";
   if (path.startsWith("/branches")) return "admin";
+  if (path.startsWith("/clinic-profile/prescription-template")) return "admin";
   if (path.startsWith("/clinic-profile/invoice-template")) return "financial";
   if (path.startsWith("/clinic-profile")) return "admin";
   if (path.startsWith("/invite-qrs")) return "admin";

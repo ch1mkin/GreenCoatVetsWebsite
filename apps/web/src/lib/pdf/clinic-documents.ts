@@ -728,3 +728,53 @@ export async function buildPrescriptionPdfBytes(opts: {
 
   return doc.save();
 }
+
+export async function buildHandwrittenPrescriptionPdfBytes(opts: {
+  imageBytes: Uint8Array;
+  footerText?: string | null;
+}): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([PAGE_W, PAGE_H]);
+  drawPrintPageFrame(page);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+
+  let image: PDFImage;
+  try {
+    image = await doc.embedPng(opts.imageBytes);
+  } catch {
+    image = await doc.embedJpg(opts.imageBytes);
+  }
+
+  const maxW = PAGE_W - BOX_INSET * 2 - 12;
+  const maxH = PAGE_H - BOX_INSET * 2 - 24;
+  const scale = Math.min(maxW / image.width, maxH / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  const x = (PAGE_W - width) / 2;
+  const y = BOX_INSET + (PAGE_H - BOX_INSET * 2 - height) / 2 + 8;
+
+  page.drawImage(image, { x, y, width, height });
+
+  const footer = sanitizePdfText(
+    opts.footerText?.trim() || "Handwritten prescription captured digitally and exported as a PDF record.",
+  );
+  page.drawRectangle({
+    x: BOX_INSET,
+    y: BOX_INSET,
+    width: PAGE_W - BOX_INSET * 2,
+    height: 22,
+    color: rgb(0.97, 0.98, 0.99),
+    borderColor: BOX_BORDER,
+    borderWidth: 0.35,
+  });
+  page.drawText(footer, {
+    x: L,
+    y: BOX_INSET + 8,
+    size: 7,
+    font,
+    color: TEXT_MUTED,
+    maxWidth: CONTENT_W,
+  });
+
+  return doc.save();
+}

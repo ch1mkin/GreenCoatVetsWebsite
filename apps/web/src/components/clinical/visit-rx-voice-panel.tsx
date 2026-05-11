@@ -24,11 +24,13 @@ export function VisitRxVoicePanel({
   visitId,
   lines,
   onInstructionsSaved,
+  onInsertMedicineName,
 }: {
   embed: boolean;
   visitId: string;
   lines: Line[];
   onInstructionsSaved?: (itemId: string, instructions: string | null) => void;
+  onInsertMedicineName?: (transcript: string) => void;
 }) {
   const panelId = useId();
   const [lang, setLang] = useState("en-IN");
@@ -158,6 +160,20 @@ export function VisitRxVoicePanel({
         <button type="button" className="btn-secondary btn-compact text-xs" onClick={clearLine} disabled={listening || !line}>
           Clear text
         </button>
+        {target === "new" ? (
+          <button
+            type="button"
+            className="btn-secondary btn-compact text-xs"
+            onClick={() => {
+              if (!line.trim()) return;
+              onInsertMedicineName?.(line);
+              clearLine();
+            }}
+            disabled={!line.trim() || listening}
+          >
+            Insert as medicine name
+          </button>
+        ) : null}
         <button type="button" className="btn-primary btn-compact text-xs" onClick={insertIntoField} disabled={!line.trim() || listening}>
           Insert into instructions
         </button>

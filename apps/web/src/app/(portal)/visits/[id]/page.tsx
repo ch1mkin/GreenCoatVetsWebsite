@@ -18,7 +18,9 @@ import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
 import { VisitSavePendingBanner } from "@/components/clinical/visit-save-pending";
 import { VisitSaveFooter } from "@/components/clinical/visit-save-footer";
+import type { MedicineCatalogEntry } from "@/lib/medicines/catalog";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
+import { resolveSignedImageUrl } from "@/lib/storage/resolve-signed-image-url";
 
 export const dynamic = "force-dynamic";
 
@@ -152,22 +154,54 @@ export default async function VisitDetailsPage({
 
   const canInvoice = canManageInvoices(access);
 
-  const { data: rxItems, error: rxItemsError } = await supabase
-    .from("prescription_items")
-    .select("id, medicine_name, dosage, frequency, duration, instructions")
-    .eq("prescription_id", prescriptionId)
-    .order("created_at", { ascending: true });
+  const [
+    { data: rxItems, error: rxItemsError },
+    { data: attachments, error: attachmentsError },
+    { data: medicineCatalogRows, error: medicineCatalogError },
+    { data: prescriptionRow, error: prescriptionRowError },
+    { data: clinicRow, error: clinicRowError },
+  ] = await Promise.all([
+    supabase
+      .from("prescription_items")
+      .select("id, medicine_name, dosage, frequency, duration, instructions")
+      .eq("prescription_id", prescriptionId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("file_attachments")
+      .select("id, file_name, mime_type, storage_bucket, storage_path, created_at")
+      .eq("visit_id", visit.id)
+      .eq("clinic_id", clinic_id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("medicine_catalog_entries")
+      .select(
+        "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active",
+      )
+      .eq("clinic_id", clinic_id)
+      .eq("is_active", true)
+      .order("name", { ascending: true }),
+    supabase.from("prescriptions").select("id, pdf_url, issued_at").eq("id", prescriptionId).maybeSingle(),
+    supabase.from("clinics").select("name, prescription_template_url").eq("id", clinic_id).maybeSingle(),
+  ]);
 
   if (rxItemsError) throw new Error(rxItemsError.message);
-
-  const { data: attachments, error: attachmentsError } = await supabase
-    .from("file_attachments")
-    .select("id, file_name, mime_type, storage_bucket, storage_path, created_at")
-    .eq("visit_id", visit.id)
-    .eq("clinic_id", clinic_id)
-    .order("created_at", { ascending: false });
-
   if (attachmentsError) throw new Error(attachmentsError.message);
+  if (medicineCatalogError) throw new Error(medicineCatalogError.message);
+  if (prescriptionRowError) throw new Error(prescriptionRowError.message);
+  if (clinicRowError) throw new Error(clinicRowError.message);
+
+  const medicineCatalog = ((medicineCatalogRows ?? []) as Array<
+    Omit<MedicineCatalogEntry, "aliases"> & { aliases: string[] | null }
+  >).map((row) => ({
+    ...row,
+    aliases: Array.isArray(row.aliases) ? row.aliases : [],
+  }));
+  const prescriptionPdfSignedUrl = await resolveSignedImageUrl(
+    supabase,
+    (prescriptionRow?.pdf_url as string | null | undefined) ?? null,
+    { bucket: "medical-files", expiresIn: 60 * 30 },
+  );
+  const ownerName = ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string } | null);
 
   const petId = String(pet?.id ?? "");
   const branchId = String(branch?.id ?? "");
@@ -608,6 +642,13 @@ export default async function VisitDetailsPage({
             visitId={visit.id}
             embed={embed}
             showVoiceDictation={showVoiceDictation}
+            medicineCatalog={medicineCatalog}
+            handwrittenPdfUrl={prescriptionPdfSignedUrl}
+            templateImageUrl={(clinicRow?.prescription_template_url as string | null | undefined) ?? null}
+            clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
+            petName={String(pet?.name ?? "Patient")}
+            ownerName={ownerName}
+            doctorName={doctorDisplayName ?? "Doctor"}
           />
         </VisitSection>
         </div>

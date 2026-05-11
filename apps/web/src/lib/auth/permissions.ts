@@ -73,6 +73,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           { href: "/appointments", label: "Appointments" },
           { href: "/appointments/calendar", label: "Calendar" },
           { href: "/medical-records", label: "Medical records" },
+          { href: "/medicines", label: "Medicine catalog" },
         ],
       },
       {
@@ -133,6 +134,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           items: [
             { href: "/appointments", label: "Appointments" },
             { href: "/appointments/calendar", label: "Calendar" },
+            { href: "/medicines", label: "Medicine catalog" },
           ],
         },
         {
@@ -188,6 +190,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           title: "Operations",
           items: [
             { href: "/inventory", label: "Inventory" },
+            { href: "/medicines", label: "Medicine catalog" },
             { href: "/ecommerce", label: "Store orders" },
             { href: "/invoices", label: "Invoices" },
             { href: "/billing/branch-portal", label: "Branch web access" },
@@ -209,6 +212,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
             { href: "/reception/walk-in", label: "Walk-in guest" },
             { href: "/appointments", label: "Appointments" },
             { href: "/medical-records", label: "Medical records" },
+            { href: "/medicines", label: "Medicine catalog" },
             { href: "/notifications-center", label: "Notifications" },
           ],
         },

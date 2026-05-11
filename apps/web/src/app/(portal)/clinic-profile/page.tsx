@@ -60,6 +60,18 @@ export default async function ClinicProfilePage() {
           </a>{" "}
           — reorder sections and footer for reception invoices.
         </p>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          <a className="font-semibold text-primary underline" href="/clinic-profile/prescription-template">
+            Handwritten prescription template
+          </a>{" "}
+          — upload the sheet doctors draw on when saving stylus/mouse prescriptions.
+        </p>
+        <p className="mt-2 text-sm text-on-surface-variant">
+          <a className="font-semibold text-primary underline" href="/medicines">
+            Medicine catalog
+          </a>{" "}
+          — manage the searchable drug list and spelling aliases used during prescription entry.
+        </p>
 
         <section className="mt-10 border-t border-outline-variant/15 pt-8">
           <h2 className="font-headline text-lg font-bold text-on-background">Branch web portal pricing</h2>
