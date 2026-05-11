@@ -1,23 +1,73 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toBlob as domToBlob } from "html-to-image";
 import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
+import { VisitHandwrittenHtmlSheet } from "@/components/clinical/visit-handwritten-html-sheet";
+import type {
+  HandwrittenVisitCheckboxId,
+  HandwrittenVisitFieldId,
+  HandwrittenVisitPoint,
+  HandwrittenVisitSheetState,
+} from "@/lib/visits/handwritten-visit-sheet";
+import {
+  HANDWRITTEN_VISIT_SHEET_HEIGHT,
+  HANDWRITTEN_VISIT_SHEET_WIDTH,
+} from "@/lib/visits/handwritten-visit-sheet";
 
-type Point = { x: number; y: number };
 type InkTool = "draw" | "erase" | "highlight";
 type Tool = InkTool | "scroll";
-type Stroke = { id: string; tool: InkTool; width: number; points: Point[] };
 type ToolbarPosition = { x: number; y: number };
-type ViewportSize = { width: number; height: number };
+type StrokeBounds = { x: number; y: number; width: number; height: number };
+type StrokeLike = { id: string; width: number; points: HandwrittenVisitPoint[] };
+type EditorSnapshot = {
+  state: HandwrittenVisitSheetState;
+  recognitionChunks: Record<HandwrittenVisitFieldId, string[]>;
+};
+type RecognitionTask = {
+  id: string;
+  fieldId: HandwrittenVisitFieldId;
+  stroke: StrokeLike;
+};
+type TesseractModule = typeof import("tesseract.js");
+type TesseractWorker = Awaited<ReturnType<TesseractModule["createWorker"]>>;
 
-const CANVAS_W = 1240;
-const CANVAS_H = 1754;
 const EXPORT_MIME = "image/jpeg";
-const EXPORT_QUALITY = 0.92;
 const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
 const TOOLBAR_MARGIN = 12;
-const FULLSCREEN_SHEET_MARGIN = 24;
+const OCR_PADDING = 22;
+
+const FIELD_IDS: HandwrittenVisitFieldId[] = [
+  "patientName",
+  "age",
+  "ownerName",
+  "mobile",
+  "date",
+  "ccHp",
+  "dewormingText",
+  "vaccinationText",
+  "rt",
+  "rr",
+  "hr",
+  "crt",
+  "allergic",
+  "bw",
+  "otherTests",
+  "physicalExamination",
+  "diagnosis",
+  "prescription",
+];
+
+const MULTILINE_FIELDS = new Set<HandwrittenVisitFieldId>([
+  "ccHp",
+  "physicalExamination",
+  "diagnosis",
+  "prescription",
+  "otherTests",
+  "dewormingText",
+  "vaccinationText",
+]);
 
 function toolButtonClass(active: boolean) {
   return active
@@ -48,117 +98,144 @@ function applyToolbarPosition(toolbar: HTMLDivElement | null, pos: ToolbarPositi
   toolbar.style.transform = `translate3d(${pos.x}px, ${pos.y}px, 0)`;
 }
 
-function drawBuiltInTemplate(
-  ctx: CanvasRenderingContext2D,
-  meta: { clinicName: string; petName: string; ownerName: string; doctorName: string },
-) {
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 42px Arial";
-  ctx.fillText(meta.clinicName || "Clinic", 86, 92);
-  ctx.font = "22px Arial";
-  ctx.fillStyle = "#475569";
-  ctx.fillText("Handwritten visit sheet", 88, 126);
-
-  ctx.strokeStyle = "#0f766e";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(80, 152);
-  ctx.lineTo(CANVAS_W - 80, 152);
-  ctx.stroke();
-
-  ctx.fillStyle = "#111827";
-  ctx.font = "20px Arial";
-  ctx.fillText(`Owner: ${meta.ownerName || "-"}`, 88, 212);
-  ctx.fillText(`Patient: ${meta.petName || "-"}`, 88, 252);
-  ctx.fillText(`Doctor: ${meta.doctorName || "-"}`, 720, 212);
-  ctx.fillText(`Date: ${new Date().toLocaleDateString()}`, 720, 252);
-
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 2;
-  const sections = [
-    { y: 330, title: "Complaint / History", height: 220 },
-    { y: 610, title: "Clinical Findings / Vitals", height: 240 },
-    { y: 910, title: "Diagnosis / Treatment / Prescription", height: 330 },
-    { y: 1300, title: "Advice / Follow-up / Signature", height: 300 },
-  ];
-
-  ctx.font = "bold 24px Arial";
-  ctx.fillStyle = "#0f172a";
-
-  for (const section of sections) {
-    ctx.fillText(section.title, 88, section.y - 16);
-    ctx.strokeRect(80, section.y, CANVAS_W - 160, section.height);
-  }
-
-  ctx.strokeStyle = "#e2e8f0";
-  ctx.lineWidth = 1;
-  for (let y = 380; y <= 510; y += 44) {
-    ctx.beginPath();
-    ctx.moveTo(105, y);
-    ctx.lineTo(CANVAS_W - 105, y);
-    ctx.stroke();
-  }
-  for (let y = 660; y <= 820; y += 44) {
-    ctx.beginPath();
-    ctx.moveTo(105, y);
-    ctx.lineTo(CANVAS_W - 105, y);
-    ctx.stroke();
-  }
-  for (let y = 960; y <= 1170; y += 44) {
-    ctx.beginPath();
-    ctx.moveTo(105, y);
-    ctx.lineTo(CANVAS_W - 105, y);
-    ctx.stroke();
-  }
-  for (let y = 1350; y <= 1530; y += 44) {
-    ctx.beginPath();
-    ctx.moveTo(105, y);
-    ctx.lineTo(CANVAS_W - 105, y);
-    ctx.stroke();
-  }
-
-  ctx.font = "18px Arial";
-  ctx.fillStyle = "#64748b";
-  ctx.fillText("Use draw for ink, highlight for marker, and erase to clear strokes.", 88, CANVAS_H - 88);
+function cloneStroke(stroke: StrokeLike): StrokeLike {
+  return {
+    id: stroke.id,
+    width: stroke.width,
+    points: stroke.points.map((point) => ({ ...point })),
+  };
 }
 
-function drawStroke(ctx: CanvasRenderingContext2D, stroke: Stroke) {
-  if (!stroke.points.length) return;
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.lineWidth = stroke.width;
-
-  if (stroke.tool === "erase") {
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.strokeStyle = "rgba(0,0,0,1)";
-  } else if (stroke.tool === "highlight") {
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "#facc15";
-  } else {
-    ctx.strokeStyle = "#111827";
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(stroke.points[0]!.x, stroke.points[0]!.y);
-  for (const point of stroke.points.slice(1)) {
-    ctx.lineTo(point.x, point.y);
-  }
-  ctx.stroke();
-  ctx.restore();
+function cloneSheetState(state: HandwrittenVisitSheetState): HandwrittenVisitSheetState {
+  return {
+    version: state.version,
+    fields: { ...state.fields },
+    checkboxes: { ...state.checkboxes },
+    highlights: state.highlights.map(cloneStroke),
+    inkFallbacks: state.inkFallbacks.map(cloneStroke),
+  };
 }
 
-async function loadTemplateImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Failed to load template image."));
-    img.src = url;
-  });
+function cloneRecognitionChunks(chunks: Record<HandwrittenVisitFieldId, string[]>) {
+  return FIELD_IDS.reduce(
+    (acc, fieldId) => {
+      acc[fieldId] = [...(chunks[fieldId] ?? [])];
+      return acc;
+    },
+    {} as Record<HandwrittenVisitFieldId, string[]>,
+  );
+}
+
+function createEmptyRecognitionChunks() {
+  return FIELD_IDS.reduce(
+    (acc, fieldId) => {
+      acc[fieldId] = [];
+      return acc;
+    },
+    {} as Record<HandwrittenVisitFieldId, string[]>,
+  );
+}
+
+function buildPath(points: HandwrittenVisitPoint[]) {
+  if (!points.length) return "";
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+}
+
+function getStrokeBounds(points: HandwrittenVisitPoint[]): StrokeBounds | null {
+  if (!points.length) return null;
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+function boundsIntersect(a: StrokeBounds, b: StrokeBounds) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function normalizeRecognizedText(fieldId: HandwrittenVisitFieldId, value: string) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  if (fieldId === "age") return compact.replace(/[^0-9a-zA-Z./ -]/g, "").trim();
+  if (fieldId === "mobile") return compact.replace(/[^0-9+() -]/g, "").trim();
+  if (fieldId === "date") return compact.replace(/[^0-9a-zA-Z/.: -]/g, "").trim();
+  if (["rt", "rr", "hr", "crt", "bw"].includes(fieldId)) {
+    return compact.replace(/[^0-9a-zA-Z./:% -]/g, "").trim();
+  }
+  if (MULTILINE_FIELDS.has(fieldId)) return compact;
+  return compact.replace(/[^0-9a-zA-Z,.;:/()&+ -]/g, "").trim();
+}
+
+function appendFieldText(current: string, fieldId: HandwrittenVisitFieldId, addition: string) {
+  if (!addition) return current;
+  if (!current.trim()) return addition;
+  return MULTILINE_FIELDS.has(fieldId) ? `${current.trimEnd()}\n${addition}` : `${current.trimEnd()} ${addition}`;
+}
+
+function removeLastChunkOrWord(current: string, chunks: string[]) {
+  const nextChunks = [...chunks];
+  while (nextChunks.length) {
+    const chunk = nextChunks.pop()?.trim();
+    if (!chunk) continue;
+    const lowerCurrent = current.toLowerCase();
+    const lowerChunk = chunk.toLowerCase();
+    const idx = lowerCurrent.lastIndexOf(lowerChunk);
+    if (idx >= 0) {
+      const before = current.slice(0, idx).replace(/[ \t]+$/g, "");
+      const after = current.slice(idx + chunk.length);
+      if (!after.trim() || /^[\s.,;:/-]*$/.test(after)) {
+        return {
+          text: before.replace(/\n{3,}/g, "\n\n").trimEnd(),
+          chunks: nextChunks,
+        };
+      }
+    }
+  }
+
+  const nextText = current.replace(/\s*\S+\s*$/, "").replace(/\n{3,}/g, "\n\n").trimEnd();
+  return { text: nextText, chunks };
+}
+
+function getFieldRecognitionSettings(fieldId: HandwrittenVisitFieldId, tesseract: TesseractModule) {
+  if (fieldId === "age") {
+    return {
+      tessedit_pageseg_mode: tesseract.PSM.SINGLE_WORD,
+      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ./ -",
+    };
+  }
+  if (fieldId === "mobile") {
+    return {
+      tessedit_pageseg_mode: tesseract.PSM.SINGLE_LINE,
+      tessedit_char_whitelist: "0123456789+()- ",
+    };
+  }
+  if (fieldId === "date") {
+    return {
+      tessedit_pageseg_mode: tesseract.PSM.SINGLE_LINE,
+      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/.: -",
+    };
+  }
+  if (["rt", "rr", "hr", "crt", "bw"].includes(fieldId)) {
+    return {
+      tessedit_pageseg_mode: tesseract.PSM.SINGLE_WORD,
+      tessedit_char_whitelist: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ./:% -",
+    };
+  }
+  return {
+    tessedit_pageseg_mode: MULTILINE_FIELDS.has(fieldId)
+      ? tesseract.PSM.RAW_LINE
+      : tesseract.PSM.SINGLE_LINE,
+    tessedit_char_whitelist:
+      "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ,.;:/()&+-'\"% ",
+  };
 }
 
 async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
@@ -166,7 +243,7 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: n
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);
-        else reject(new Error("Failed to encode handwritten visit image."));
+        else reject(new Error("Failed to encode visit image."));
       },
       type,
       quality,
@@ -177,118 +254,79 @@ async function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: n
 export function VisitHandwrittenPrescription({
   visitId,
   embed,
-  templateImageUrl,
   hasSavedPdf,
   clinicName,
   petName,
   ownerName,
   doctorName,
+  initialState,
 }: {
   visitId: string;
   embed: boolean;
-  templateImageUrl: string | null;
   hasSavedPdf: boolean;
   clinicName: string;
   petName: string;
   ownerName: string;
   doctorName: string;
+  initialState: HandwrittenVisitSheetState;
 }) {
   const router = useRouter();
   const studioRef = useRef<HTMLDivElement | null>(null);
   const fullscreenToolbarRef = useRef<HTMLDivElement | null>(null);
-  const templateCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const overlayRef = useRef<SVGSVGElement | null>(null);
+  const fieldRefs = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLDivElement | null>>>({});
   const activePointerId = useRef<number | null>(null);
+  const activeStrokeRef = useRef<StrokeLike | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
-  const toolbarDragOffset = useRef<Point | null>(null);
+  const toolbarDragOffset = useRef<HandwrittenVisitPoint | null>(null);
   const fullscreenToolbarPosRef = useRef<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
   const pendingToolbarPosRef = useRef<ToolbarPosition | null>(null);
   const toolbarDragRafRef = useRef<number | null>(null);
-  const [templateImage, setTemplateImage] = useState<HTMLImageElement | null>(null);
+  const recognitionQueueRef = useRef<RecognitionTask[]>([]);
+  const recognitionActiveRef = useRef(false);
+  const tesseractModuleRef = useRef<Promise<TesseractModule> | null>(null);
+  const ocrWorkerRef = useRef<Promise<TesseractWorker> | null>(null);
+  const recognitionChunksRef = useRef(createEmptyRecognitionChunks());
+
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
-  const [strokeWidth, setStrokeWidth] = useState(4);
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [redoStack, setRedoStack] = useState<Stroke[]>([]);
+  const [strokeWidth, setStrokeWidth] = useState(5);
+  const [editorState, setEditorState] = useState<HandwrittenVisitSheetState>(() => cloneSheetState(initialState));
+  const [currentStroke, setCurrentStroke] = useState<StrokeLike | null>(null);
+  const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<EditorSnapshot[]>([]);
   const [pending, setPending] = useState(false);
+  const [recognizingCount, setRecognizingCount] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [fullscreenToolbarPos, setFullscreenToolbarPos] = useState<ToolbarPosition>(TOOLBAR_DEFAULT_POS);
   const [toolbarDragActive, setToolbarDragActive] = useState(false);
-  const [viewportSize, setViewportSize] = useState<ViewportSize>({ width: CANVAS_W, height: CANVAS_H });
 
-  const meta = useMemo(
-    () => ({ clinicName, petName, ownerName, doctorName }),
-    [clinicName, doctorName, ownerName, petName],
-  );
   const scrollMode = tool === "scroll";
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!open || !templateImageUrl) {
-      setTemplateImage(null);
-      return;
-    }
-    loadTemplateImage(templateImageUrl)
-      .then((img) => {
-        if (!cancelled) setTemplateImage(img);
-      })
-      .catch(() => {
-        if (!cancelled) setTemplateImage(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, templateImageUrl]);
+  const registerFieldRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => {
+    fieldRefs.current[fieldId] = node;
+  }, []);
 
-  const redrawTemplate = useCallback(() => {
-    const canvas = templateCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const createSnapshot = useCallback(
+    (): EditorSnapshot => ({
+      state: cloneSheetState(editorState),
+      recognitionChunks: cloneRecognitionChunks(recognitionChunksRef.current),
+    }),
+    [editorState],
+  );
 
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  const restoreSnapshot = useCallback((snapshot: EditorSnapshot) => {
+    setEditorState(cloneSheetState(snapshot.state));
+    recognitionChunksRef.current = cloneRecognitionChunks(snapshot.recognitionChunks);
+  }, []);
 
-    if (templateImage) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      ctx.drawImage(templateImage, 0, 0, CANVAS_W, CANVAS_H);
-    } else {
-      drawBuiltInTemplate(ctx, meta);
-    }
-  }, [meta, templateImage]);
-
-  const redrawStrokes = useCallback(() => {
-    const canvas = drawingCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-    for (const stroke of strokes) drawStroke(ctx, stroke);
-  }, [strokes]);
-
-  useEffect(() => {
-    if (!open) return;
-    redrawTemplate();
-  }, [open, redrawTemplate]);
-
-  useEffect(() => {
-    if (!open) return;
-    redrawStrokes();
-  }, [open, redrawStrokes]);
-
-  useEffect(() => {
-    if (!open) return;
-    const redrawAll = () => {
-      redrawTemplate();
-      redrawStrokes();
-    };
-    const raf = window.requestAnimationFrame(redrawAll);
-    return () => window.cancelAnimationFrame(raf);
-  }, [open, fullscreenActive, redrawTemplate, redrawStrokes]);
+  const pushUndoSnapshot = useCallback(() => {
+    setUndoStack((prev) => [...prev, createSnapshot()]);
+    setRedoStack([]);
+  }, [createSnapshot]);
 
   useEffect(() => {
     if (!open) {
@@ -328,74 +366,6 @@ export function VisitHandwrittenPrescription({
     fullscreenToolbarPosRef.current = fullscreenToolbarPos;
     applyToolbarPosition(fullscreenToolbarRef.current, fullscreenToolbarPos);
   }, [fullscreenToolbarPos]);
-
-  useEffect(() => {
-    if (!open) return;
-    const updateViewportSize = () => {
-      setViewportSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    updateViewportSize();
-    window.addEventListener("resize", updateViewportSize);
-    return () => {
-      window.removeEventListener("resize", updateViewportSize);
-    };
-  }, [open]);
-
-  const pointFromEvent = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const scaleX = CANVAS_W / rect.width;
-    const scaleY = CANVAS_H / rect.height;
-    return {
-      x: (event.clientX - rect.left) * scaleX,
-      y: (event.clientY - rect.top) * scaleY,
-    };
-  }, []);
-
-  const startStroke = useCallback(
-    (event: React.PointerEvent<HTMLCanvasElement>) => {
-      if (tool === "scroll") return;
-      const point = pointFromEvent(event);
-      activePointerId.current = event.pointerId;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setError(null);
-      setMessage(null);
-      setRedoStack([]);
-      setStrokes((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), tool, width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : tool === "erase" ? Math.max(16, strokeWidth * 4) : strokeWidth, points: [point] },
-      ]);
-    },
-    [pointFromEvent, strokeWidth, tool],
-  );
-
-  const moveStroke = useCallback(
-    (event: React.PointerEvent<HTMLCanvasElement>) => {
-      if (activePointerId.current !== event.pointerId) return;
-      const point = pointFromEvent(event);
-      setStrokes((prev) => {
-        if (!prev.length) return prev;
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (!last) return prev;
-        next[next.length - 1] = { ...last, points: [...last.points, point] };
-        return next;
-      });
-    },
-    [pointFromEvent],
-  );
-
-  const endStroke = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (activePointerId.current !== event.pointerId) return;
-    activePointerId.current = null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      /* noop */
-    }
-  }, []);
 
   useEffect(() => {
     if (!toolbarDragActive) return;
@@ -453,7 +423,14 @@ export function VisitHandwrittenPrescription({
     };
   }, [toolbarDragActive]);
 
-  const startToolbarDrag = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
+  useEffect(() => {
+    return () => {
+      if (!ocrWorkerRef.current) return;
+      void ocrWorkerRef.current.then((worker) => worker.terminate());
+    };
+  }, []);
+
+  const startToolbarDrag = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const rect = fullscreenToolbarRef.current?.getBoundingClientRect();
     if (!rect) return;
     event.preventDefault();
@@ -469,6 +446,328 @@ export function VisitHandwrittenPrescription({
     };
     setToolbarDragActive(true);
   }, []);
+
+  const getStagePoint = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * HANDWRITTEN_VISIT_SHEET_WIDTH,
+      y: ((event.clientY - rect.top) / rect.height) * HANDWRITTEN_VISIT_SHEET_HEIGHT,
+    };
+  }, []);
+
+  const getFieldBounds = useCallback((fieldId: HandwrittenVisitFieldId): StrokeBounds | null => {
+    const fieldNode = fieldRefs.current[fieldId];
+    const stageNode = stageRef.current;
+    if (!fieldNode || !stageNode) return null;
+    const fieldRect = fieldNode.getBoundingClientRect();
+    const stageRect = stageNode.getBoundingClientRect();
+    return {
+      x: fieldRect.left - stageRect.left,
+      y: fieldRect.top - stageRect.top,
+      width: fieldRect.width,
+      height: fieldRect.height,
+    };
+  }, []);
+
+  const findClosestField = useCallback(
+    (point: HandwrittenVisitPoint) => {
+      let bestField: HandwrittenVisitFieldId | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      for (const fieldId of FIELD_IDS) {
+        const bounds = getFieldBounds(fieldId);
+        if (!bounds) continue;
+        if (
+          point.x >= bounds.x &&
+          point.x <= bounds.x + bounds.width &&
+          point.y >= bounds.y &&
+          point.y <= bounds.y + bounds.height
+        ) {
+          return fieldId;
+        }
+        const cx = bounds.x + bounds.width / 2;
+        const cy = bounds.y + bounds.height / 2;
+        const distance = Math.hypot(point.x - cx, point.y - cy);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestField = fieldId;
+        }
+      }
+
+      return bestDistance <= 160 ? bestField : null;
+    },
+    [getFieldBounds],
+  );
+
+  const getTesseractModule = useCallback(async () => {
+    if (!tesseractModuleRef.current) {
+      tesseractModuleRef.current = import("tesseract.js");
+    }
+    return tesseractModuleRef.current;
+  }, []);
+
+  const getOcrWorker = useCallback(async () => {
+    if (!ocrWorkerRef.current) {
+      ocrWorkerRef.current = (async () => {
+        const tesseract = await getTesseractModule();
+        return tesseract.createWorker("eng", tesseract.OEM.LSTM_ONLY, {
+          logger: () => undefined,
+          errorHandler: () => undefined,
+        });
+      })();
+    }
+    return ocrWorkerRef.current;
+  }, [getTesseractModule]);
+
+  const buildStrokeCrop = useCallback(async (stroke: StrokeLike) => {
+    const bounds = getStrokeBounds(stroke.points);
+    if (!bounds) throw new Error("Nothing was drawn.");
+    const canvas = document.createElement("canvas");
+    const scale = 2;
+    canvas.width = Math.max(64, Math.ceil((bounds.width + OCR_PADDING * 2) * scale));
+    canvas.height = Math.max(64, Math.ceil((bounds.height + OCR_PADDING * 2) * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("OCR canvas could not be created.");
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#111111";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(8, stroke.width * 1.8);
+    ctx.beginPath();
+    stroke.points.forEach((point, index) => {
+      const x = point.x - bounds.x + OCR_PADDING;
+      const y = point.y - bounds.y + OCR_PADDING;
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    return canvasToBlob(canvas, "image/png");
+  }, []);
+
+  const applyRecognizedText = useCallback((fieldId: HandwrittenVisitFieldId, text: string) => {
+    if (!text) return;
+    pushUndoSnapshot();
+    setEditorState((prev) => ({
+      ...prev,
+      fields: {
+        ...prev.fields,
+        [fieldId]: appendFieldText(prev.fields[fieldId], fieldId, text),
+      },
+    }));
+    recognitionChunksRef.current[fieldId] = [...recognitionChunksRef.current[fieldId], text];
+  }, [pushUndoSnapshot]);
+
+  const processRecognitionQueue = useCallback(async () => {
+    if (recognitionActiveRef.current) return;
+    recognitionActiveRef.current = true;
+
+    while (recognitionQueueRef.current.length) {
+      const task = recognitionQueueRef.current.shift();
+      if (!task) continue;
+
+      try {
+        const tesseract = await getTesseractModule();
+        const worker = await getOcrWorker();
+        await worker.setParameters({
+          preserve_interword_spaces: "1",
+          user_defined_dpi: "300",
+          ...getFieldRecognitionSettings(task.fieldId, tesseract),
+        });
+        const cropBlob = await buildStrokeCrop(task.stroke);
+        const result = await worker.recognize(cropBlob);
+        const text = normalizeRecognizedText(task.fieldId, result.data.text ?? "");
+        if (text) {
+          applyRecognizedText(task.fieldId, text);
+          setEditorState((prev) => ({
+            ...prev,
+            inkFallbacks: prev.inkFallbacks.filter((stroke) => stroke.id !== task.id),
+          }));
+        } else {
+          setError("Handwriting could not be recognized clearly. You can edit the field manually or write again.");
+        }
+      } catch {
+        setError("Handwriting recognition failed. You can still edit the HTML fields manually.");
+      } finally {
+        setRecognizingCount((count) => Math.max(0, count - 1));
+      }
+    }
+
+    recognitionActiveRef.current = false;
+  }, [applyRecognizedText, buildStrokeCrop, getOcrWorker, getTesseractModule]);
+
+  const enqueueRecognition = useCallback((fieldId: HandwrittenVisitFieldId, stroke: StrokeLike) => {
+    recognitionQueueRef.current.push({ id: stroke.id, fieldId, stroke: cloneStroke(stroke) });
+    setRecognizingCount((count) => count + 1);
+    void processRecognitionQueue();
+  }, [processRecognitionQueue]);
+
+  const handleFieldChange = useCallback((fieldId: HandwrittenVisitFieldId, value: string) => {
+    setEditorState((prev) => ({
+      ...prev,
+      fields: {
+        ...prev.fields,
+        [fieldId]: value,
+      },
+    }));
+  }, []);
+
+  const handleCheckboxChange = useCallback((checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => {
+    pushUndoSnapshot();
+    setEditorState((prev) => ({
+      ...prev,
+      checkboxes: {
+        ...prev.checkboxes,
+        [checkboxId]: checked,
+      },
+    }));
+  }, [pushUndoSnapshot]);
+
+  const eraseAtStroke = useCallback((stroke: StrokeLike) => {
+    const bounds = getStrokeBounds(stroke.points);
+    if (!bounds) return;
+
+    pushUndoSnapshot();
+    setEditorState((prev) => {
+      const nextState = cloneSheetState(prev);
+      nextState.highlights = nextState.highlights.filter((highlight) => {
+        const highlightBounds = getStrokeBounds(highlight.points);
+        return !highlightBounds || !boundsIntersect(bounds, highlightBounds);
+      });
+      nextState.inkFallbacks = nextState.inkFallbacks.filter((ink) => {
+        if (ink.id === stroke.id) return false;
+        const inkBounds = getStrokeBounds(ink.points);
+        return !inkBounds || !boundsIntersect(bounds, inkBounds);
+      });
+      return nextState;
+    });
+
+    const center = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    };
+    const fieldId = findClosestField(center);
+    if (!fieldId) return;
+    setEditorState((prev) => {
+      const removal = removeLastChunkOrWord(prev.fields[fieldId], recognitionChunksRef.current[fieldId]);
+      recognitionChunksRef.current[fieldId] = removal.chunks;
+      return {
+        ...prev,
+        fields: {
+          ...prev.fields,
+          [fieldId]: removal.text,
+        },
+      };
+    });
+  }, [findClosestField, pushUndoSnapshot]);
+
+  const startStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (tool === "scroll") return;
+    const point = getStagePoint(event);
+    const stroke: StrokeLike = {
+      id: crypto.randomUUID(),
+      width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : Math.max(4, strokeWidth),
+      points: [point],
+    };
+    activePointerId.current = event.pointerId;
+    activeStrokeRef.current = stroke;
+    setCurrentStroke(stroke);
+    setError(null);
+    setMessage(null);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      /* noop */
+    }
+  }, [getStagePoint, strokeWidth, tool]);
+
+  const moveStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (activePointerId.current !== event.pointerId || !activeStrokeRef.current) return;
+    const point = getStagePoint(event);
+    const nextStroke = {
+      ...activeStrokeRef.current,
+      points: [...activeStrokeRef.current.points, point],
+    };
+    activeStrokeRef.current = nextStroke;
+    setCurrentStroke(nextStroke);
+  }, [getStagePoint]);
+
+  const endStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
+    if (activePointerId.current !== event.pointerId || !activeStrokeRef.current) return;
+    const stroke = activeStrokeRef.current;
+    activePointerId.current = null;
+    activeStrokeRef.current = null;
+    setCurrentStroke(null);
+
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      /* noop */
+    }
+
+    if (stroke.points.length < 2) return;
+
+    if (tool === "highlight") {
+      pushUndoSnapshot();
+      setEditorState((prev) => ({
+        ...prev,
+        highlights: [...prev.highlights, cloneStroke(stroke)],
+      }));
+      return;
+    }
+
+    if (tool === "erase") {
+      eraseAtStroke(stroke);
+      return;
+    }
+
+    const bounds = getStrokeBounds(stroke.points);
+    if (!bounds) return;
+    const fieldId = findClosestField({
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    });
+    if (!fieldId) {
+      setError("Write inside one of the HTML form areas so the text can be converted.");
+      return;
+    }
+
+    setEditorState((prev) => ({
+      ...prev,
+      inkFallbacks: [...prev.inkFallbacks, cloneStroke(stroke)],
+    }));
+    enqueueRecognition(fieldId, stroke);
+  }, [enqueueRecognition, eraseAtStroke, findClosestField, pushUndoSnapshot, tool]);
+
+  const undo = useCallback(() => {
+    setUndoStack((prev) => {
+      const snapshot = prev[prev.length - 1];
+      if (!snapshot) return prev;
+      setRedoStack((current) => [...current, createSnapshot()]);
+      restoreSnapshot(snapshot);
+      return prev.slice(0, -1);
+    });
+  }, [createSnapshot, restoreSnapshot]);
+
+  const redo = useCallback(() => {
+    setRedoStack((prev) => {
+      const snapshot = prev[prev.length - 1];
+      if (!snapshot) return prev;
+      setUndoStack((current) => [...current, createSnapshot()]);
+      restoreSnapshot(snapshot);
+      return prev.slice(0, -1);
+    });
+  }, [createSnapshot, restoreSnapshot]);
+
+  const clearAnnotations = useCallback(() => {
+    pushUndoSnapshot();
+    setEditorState((prev) => ({
+      ...prev,
+      highlights: [],
+      inkFallbacks: [],
+    }));
+  }, [pushUndoSnapshot]);
 
   async function toggleFullscreen() {
     if (!studioRef.current) return;
@@ -487,34 +786,35 @@ export function VisitHandwrittenPrescription({
   }
 
   async function savePdf() {
-    const templateCanvas = templateCanvasRef.current;
-    const drawingCanvas = drawingCanvasRef.current;
-    if (!templateCanvas || !drawingCanvas) return;
+    if (!stageRef.current) return;
     setPending(true);
     setError(null);
     setMessage(null);
+
     try {
-      const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = CANVAS_W;
-      exportCanvas.height = CANVAS_H;
-      const exportCtx = exportCanvas.getContext("2d", { alpha: false });
-      if (!exportCtx) throw new Error("Failed to prepare handwritten visit export.");
-      exportCtx.fillStyle = "#ffffff";
-      exportCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      exportCtx.imageSmoothingEnabled = true;
-      exportCtx.imageSmoothingQuality = "high";
-      exportCtx.drawImage(templateCanvas, 0, 0);
-      exportCtx.drawImage(drawingCanvas, 0, 0);
-      const imageBlob = await canvasToBlob(exportCanvas, EXPORT_MIME, EXPORT_QUALITY);
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+
+      const imageBlob = await domToBlob(stageRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: "#ffffff",
+      });
+      if (!imageBlob) throw new Error("Failed to capture the HTML visit sheet.");
+
       const fd = new FormData();
       fd.set("visit_id", visitId);
+      fd.set("editor_state_json", JSON.stringify(editorState));
       fd.set("image_file", new File([imageBlob], `visit-${visitId}.jpg`, { type: EXPORT_MIME }));
+
       const result = await saveHandwrittenVisitPdfAction(fd);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      setMessage("Handwritten visit PDF saved.");
+
+      setMessage("Interactive handwritten visit PDF saved.");
       router.refresh();
       setOpen(false);
     } finally {
@@ -522,22 +822,14 @@ export function VisitHandwrittenPrescription({
     }
   }
 
-  const sheetCanvasClass = fullscreenActive
-    ? "pointer-events-none block w-full bg-white"
-    : "pointer-events-none block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner";
-  const writingCanvasClass = fullscreenActive
-    ? `absolute inset-0 w-full ${scrollMode ? "pointer-events-none" : "touch-none"}`
-    : `absolute inset-0 w-full rounded-[18px] ${scrollMode ? "pointer-events-none" : "touch-none"}`;
-  const fullscreenSheetStyle = useMemo(() => {
-    if (!fullscreenActive) return undefined;
-    const maxWidth = Math.max(320, viewportSize.width - FULLSCREEN_SHEET_MARGIN * 2);
-    const maxHeight = Math.max(320, viewportSize.height - FULLSCREEN_SHEET_MARGIN * 2);
-    const scale = Math.min(maxWidth / CANVAS_W, maxHeight / CANVAS_H);
-    return {
-      width: `${Math.max(320, Math.floor(CANVAS_W * scale))}px`,
-      height: `${Math.max(452, Math.floor(CANVAS_H * scale))}px`,
-    };
-  }, [fullscreenActive, viewportSize.height, viewportSize.width]);
+  const overlayPointerClass = scrollMode ? "pointer-events-none" : "pointer-events-auto touch-none";
+  const renderedStrokes = useMemo(
+    () => [
+      ...editorState.highlights.map((stroke) => ({ ...stroke, color: "#facc15", opacity: 0.35 })),
+      ...editorState.inkFallbacks.map((stroke) => ({ ...stroke, color: "#111827", opacity: 0.9 })),
+    ],
+    [editorState.highlights, editorState.inkFallbacks],
+  );
 
   const toolbarBody = (
     <>
@@ -545,7 +837,7 @@ export function VisitHandwrittenPrescription({
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tools</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button type="button" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
-            Draw
+            Write
           </button>
           <button type="button" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
             Highlight
@@ -554,7 +846,7 @@ export function VisitHandwrittenPrescription({
             Erase
           </button>
           <button type="button" className={toolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
-            Scroll
+            Scroll / Edit
           </button>
         </div>
       </div>
@@ -567,74 +859,53 @@ export function VisitHandwrittenPrescription({
           max={12}
           step={1}
           value={strokeWidth}
-          onChange={(e) => setStrokeWidth(Number(e.target.value))}
+          onChange={(event) => setStrokeWidth(Number(event.target.value))}
           className="mt-2 w-full"
         />
       </label>
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="btn-secondary btn-compact text-xs"
-          disabled={!strokes.length}
-          onClick={() => {
-            setStrokes((prev) => {
-              const next = [...prev];
-              const removed = next.pop();
-              if (removed) setRedoStack((redo) => [...redo, removed]);
-              return next;
-            });
-          }}
-        >
+        <button type="button" className="btn-secondary btn-compact text-xs" disabled={!undoStack.length} onClick={undo}>
           Undo
         </button>
-        <button
-          type="button"
-          className="btn-secondary btn-compact text-xs"
-          disabled={!redoStack.length}
-          onClick={() => {
-            setRedoStack((prev) => {
-              const next = [...prev];
-              const restored = next.pop();
-              if (restored) setStrokes((current) => [...current, restored]);
-              return next;
-            });
-          }}
-        >
+        <button type="button" className="btn-secondary btn-compact text-xs" disabled={!redoStack.length} onClick={redo}>
           Redo
         </button>
         <button
           type="button"
           className="btn-secondary btn-compact text-xs"
-          disabled={!strokes.length}
-          onClick={() => {
-            setRedoStack([]);
-            setStrokes([]);
-          }}
+          disabled={!editorState.highlights.length && !editorState.inkFallbacks.length}
+          onClick={clearAnnotations}
         >
-          Clear
+          Clear ink
         </button>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-800">Tips</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>Stylus works automatically where supported.</li>
-          <li>Highlight uses a transparent yellow marker.</li>
-          <li>Erase only removes your handwriting and keeps the uploaded template untouched.</li>
-          <li>Use Scroll mode when you want to move through the page without adding ink.</li>
-          <li>Save writes the visit PDF that owners can open from visit reports.</li>
+          <li>Use Write to handwrite inside any sheet field and convert it into typed text.</li>
+          <li>Use Scroll / Edit to click checkboxes and manually change any HTML field.</li>
+          <li>Highlight stays as marker strokes on top of the visit form.</li>
+          <li>Eraser removes highlight ink and deletes converted text from the target field.</li>
+          <li>Save exports the fixed HTML sheet exactly as the visit PDF.</li>
         </ul>
       </div>
 
-      {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full handwriting save.</p> : null}
+      {recognizingCount ? (
+        <p className="text-[11px] font-medium text-primary">
+          Recognizing handwriting{recognizingCount > 1 ? ` (${recognizingCount})` : ""}...
+        </p>
+      ) : null}
+
+      {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full interactive save.</p> : null}
     </>
   );
 
   const fullscreenToolbar = (
     <div
       ref={fullscreenToolbarRef}
-      className="absolute left-0 top-0 z-20 w-[110px] will-change-transform rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
+      className="absolute left-0 top-0 z-20 w-[122px] will-change-transform rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
       style={{ transform: `translate3d(${fullscreenToolbarPos.x}px, ${fullscreenToolbarPos.y}px, 0)` }}
     >
       <button
@@ -646,7 +917,7 @@ export function VisitHandwrittenPrescription({
       </button>
       <div className="space-y-2">
         <button type="button" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
-          Draw
+          Write
         </button>
         <button type="button" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
           Mark
@@ -655,7 +926,7 @@ export function VisitHandwrittenPrescription({
           Erase
         </button>
         <button type="button" className={compactToolButtonClass(tool === "scroll")} onClick={() => setTool("scroll")}>
-          Scroll
+          Edit
         </button>
 
         <label className="block rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
@@ -666,49 +937,22 @@ export function VisitHandwrittenPrescription({
             max={12}
             step={1}
             value={strokeWidth}
-            onChange={(e) => setStrokeWidth(Number(e.target.value))}
+            onChange={(event) => setStrokeWidth(Number(event.target.value))}
             className="mt-1 w-full"
           />
         </label>
 
-        <button
-          type="button"
-          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
-          disabled={!strokes.length}
-          onClick={() => {
-            setStrokes((prev) => {
-              const next = [...prev];
-              const removed = next.pop();
-              if (removed) setRedoStack((redo) => [...redo, removed]);
-              return next;
-            });
-          }}
-        >
+        <button type="button" className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50" disabled={!undoStack.length} onClick={undo}>
           Undo
         </button>
-        <button
-          type="button"
-          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
-          disabled={!redoStack.length}
-          onClick={() => {
-            setRedoStack((prev) => {
-              const next = [...prev];
-              const restored = next.pop();
-              if (restored) setStrokes((current) => [...current, restored]);
-              return next;
-            });
-          }}
-        >
+        <button type="button" className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50" disabled={!redoStack.length} onClick={redo}>
           Redo
         </button>
         <button
           type="button"
           className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
-          disabled={!strokes.length}
-          onClick={() => {
-            setRedoStack([]);
-            setStrokes([]);
-          }}
+          disabled={!editorState.highlights.length && !editorState.inkFallbacks.length}
+          onClick={clearAnnotations}
         >
           Clear
         </button>
@@ -738,18 +982,64 @@ export function VisitHandwrittenPrescription({
     </div>
   );
 
+  const sheetStage = (
+    <div className="relative inline-block">
+      <VisitHandwrittenHtmlSheet
+        stageRef={stageRef}
+        state={editorState}
+        interactiveEnabled={scrollMode}
+        registerFieldRef={registerFieldRef}
+        onFieldChange={handleFieldChange}
+        onCheckboxChange={handleCheckboxChange}
+      />
+      <svg
+        ref={overlayRef}
+        viewBox={`0 0 ${HANDWRITTEN_VISIT_SHEET_WIDTH} ${HANDWRITTEN_VISIT_SHEET_HEIGHT}`}
+        className={`absolute inset-0 h-full w-full ${overlayPointerClass}`}
+        onPointerDown={startStroke}
+        onPointerMove={moveStroke}
+        onPointerUp={endStroke}
+        onPointerCancel={endStroke}
+      >
+        {renderedStrokes.map((stroke) => (
+          <path
+            key={stroke.id}
+            d={buildPath(stroke.points)}
+            fill="none"
+            stroke={stroke.color}
+            strokeWidth={stroke.width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={stroke.opacity}
+          />
+        ))}
+        {currentStroke ? (
+          <path
+            d={buildPath(currentStroke.points)}
+            fill="none"
+            stroke={tool === "highlight" ? "#facc15" : tool === "erase" ? "#ef4444" : "#111827"}
+            strokeWidth={currentStroke.width}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={tool === "highlight" ? 0.35 : 0.9}
+          />
+        ) : null}
+      </svg>
+    </div>
+  );
+
   return (
     <>
       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-on-background">Handwritten full visit sheet</p>
+            <p className="text-sm font-semibold text-on-background">Interactive handwritten full visit sheet</p>
             <p className="text-[12px] text-on-surface-variant">
-              Open a full-page writing studio for mouse or stylus input. The saved sheet becomes the visit PDF used for
-              report download and owner-facing visit records.
+              Use the fixed GreenCoatVets HTML visit form with checkboxes, editable fields, handwriting-to-text conversion,
+              highlight, erase, and PDF save.
             </p>
             <p className="text-[11px] text-on-surface-variant">
-              Background: {templateImageUrl ? "clinic full-visit template image" : "built-in blank visit sheet"}
+              Patient: {petName || "—"} | Owner: {ownerName || "—"} | Doctor: {doctorName || "—"} | Clinic: {clinicName || "—"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -764,7 +1054,7 @@ export function VisitHandwrittenPrescription({
               </a>
             ) : null}
             <button type="button" className="btn-primary btn-compact text-xs" onClick={() => setOpen(true)}>
-              {hasSavedPdf ? "Edit handwritten visit PDF" : "Open handwriting studio"}
+              {hasSavedPdf ? "Edit interactive visit sheet" : "Open interactive visit sheet"}
             </button>
           </div>
         </div>
@@ -787,37 +1077,18 @@ export function VisitHandwrittenPrescription({
             {fullscreenActive ? (
               <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
                 {fullscreenToolbar}
-                <div className="h-full overflow-x-auto overflow-y-scroll bg-slate-950">
-                  <div className="flex min-h-full items-start justify-center p-3">
-                    <div className="relative shrink-0 bg-white shadow-2xl" style={fullscreenSheetStyle}>
-                      <canvas
-                        ref={templateCanvasRef}
-                        width={CANVAS_W}
-                        height={CANVAS_H}
-                        className={sheetCanvasClass}
-                        aria-hidden="true"
-                      />
-                      <canvas
-                        ref={drawingCanvasRef}
-                        width={CANVAS_W}
-                        height={CANVAS_H}
-                        className={writingCanvasClass}
-                        onPointerDown={startStroke}
-                        onPointerMove={moveStroke}
-                        onPointerUp={endStroke}
-                        onPointerCancel={endStroke}
-                      />
-                    </div>
-                  </div>
+                <div className="h-full overflow-x-auto overflow-y-auto bg-slate-950 p-4">
+                  <div className="flex min-h-full items-start justify-center">{sheetStage}</div>
                 </div>
               </div>
             ) : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                   <div>
-                    <p className="font-headline text-base font-bold text-slate-900">Handwritten full visit studio</p>
+                    <p className="font-headline text-base font-bold text-slate-900">Interactive handwritten full visit studio</p>
                     <p className="text-[12px] text-slate-600">
-                      Draw on the whole visit template, then save it as the visit PDF for {petName || "this patient"}.
+                      Write inside the fixed HTML form to convert handwriting into text, or switch to Scroll / Edit to type
+                      and click checkboxes directly.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -838,7 +1109,7 @@ export function VisitHandwrittenPrescription({
                   </div>
                 </div>
 
-                <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[280px_minmax(0,1fr)]">
+                <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[300px_minmax(0,1fr)]">
                   <aside className="border-b border-slate-200 bg-white p-4 lg:border-b-0 lg:border-r">
                     <div className="space-y-3">{toolbarBody}</div>
                   </aside>
@@ -847,37 +1118,15 @@ export function VisitHandwrittenPrescription({
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                       <div className="text-[12px] text-slate-600">
                         {scrollMode
-                          ? "Scroll mode is on. Use the scrollbar or wheel to move through the sheet safely."
-                          : templateImageUrl
-                            ? "Full visit template image loaded."
-                            : "Using built-in blank visit sheet."}
+                          ? "Scroll / Edit mode is on. Click checkboxes, type into fields, and scroll safely."
+                          : "Write mode converts handwriting into typed text inside the fixed HTML form."}
                       </div>
                       <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
-                        {pending ? "Saving PDF…" : "Save handwritten full visit"}
+                        {pending ? "Saving PDF…" : "Save interactive visit"}
                       </button>
                     </div>
-                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-scroll p-4">
-                      <div className="mx-auto max-w-[980px] rounded-[24px] bg-white p-3 shadow-xl">
-                        <div className="relative">
-                          <canvas
-                            ref={templateCanvasRef}
-                            width={CANVAS_W}
-                            height={CANVAS_H}
-                            className={sheetCanvasClass}
-                            aria-hidden="true"
-                          />
-                          <canvas
-                            ref={drawingCanvasRef}
-                            width={CANVAS_W}
-                            height={CANVAS_H}
-                            className={writingCanvasClass}
-                            onPointerDown={startStroke}
-                            onPointerMove={moveStroke}
-                            onPointerUp={endStroke}
-                            onPointerCancel={endStroke}
-                          />
-                        </div>
-                      </div>
+                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto p-4">
+                      <div className="mx-auto rounded-[24px] bg-white p-3 shadow-xl">{sheetStage}</div>
                     </div>
                   </div>
                 </div>

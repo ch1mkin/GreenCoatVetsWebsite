@@ -21,6 +21,12 @@ import { VisitSavePendingBanner } from "@/components/clinical/visit-save-pending
 import { VisitSaveFooter } from "@/components/clinical/visit-save-footer";
 import type { MedicineCatalogEntry } from "@/lib/medicines/catalog";
 import { formatSpeciesDisplay } from "@/lib/pets/species-labels";
+import {
+  buildHandwrittenVisitStatePath,
+  createHandwrittenVisitSheetState,
+  formatPrescriptionLines,
+  normalizeHandwrittenVisitSheetState,
+} from "@/lib/visits/handwritten-visit-sheet";
 
 export const dynamic = "force-dynamic";
 
@@ -227,15 +233,69 @@ export default async function VisitDetailsPage({
   if (attachmentsError) throw new Error(attachmentsError.message);
   if (clinicRowError) throw new Error(clinicRowError.message);
   const ownerName = ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string } | null);
-  const handwrittenTemplateUrl =
-    (clinicRow as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
-      ?.handwritten_visit_template_url ??
-    (clinicRow as { handwritten_visit_template_url?: string | null; prescription_template_url?: string | null } | null)
-      ?.prescription_template_url ??
-    null;
-
   const petId = String(pet?.id ?? "");
   const branchId = String(branch?.id ?? "");
+  const visitDate = new Date(String((visit as { started_at?: string | null }).started_at ?? appt?.starts_at ?? Date.now()));
+  const handwrittenPrefillState = createHandwrittenVisitSheetState({
+    patientName: evaluation?.patient_name ?? String(pet?.name ?? ""),
+    patientAge:
+      evaluation?.patient_age ??
+      patientAgeLabel(pet as { date_of_birth?: string | null; age_months?: number | null }),
+    ownerName: evaluation?.owner_name ?? ownerName,
+    mobile: ic("contact_phone") || String(owner?.phone ?? ""),
+    date: Number.isNaN(visitDate.getTime()) ? "" : visitDate.toLocaleDateString(),
+    species: evaluation?.species_class ?? species,
+    gender: evaluation?.patient_gender ?? String(pet?.gender ?? ""),
+    ccHp:
+      evaluation?.cc_hp ??
+      [
+        ic("chief_complaint"),
+        String(appt?.notes ?? "").trim(),
+        ic("current_medications") ? `Current medications: ${ic("current_medications")}` : "",
+        ic("allergies") ? `Allergies: ${ic("allergies")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    dewormingText: evaluation?.section_deworming ?? "",
+    vaccinationText: evaluation?.section_vaccination ?? "",
+    rt: evaluation?.param_rt ?? "",
+    rr: evaluation?.param_rr ?? "",
+    hr: evaluation?.param_hr ?? "",
+    crt: evaluation?.param_crt ?? "",
+    allergic: evaluation?.param_allergic ?? "",
+    bw: evaluation?.param_bw ?? String(pet?.weight_kg ?? ""),
+    testsReferred: Array.isArray(evaluation?.tests_referred) ? (evaluation.tests_referred as string[]) : [],
+    otherTests: evaluation?.tests_other ?? "",
+    physicalExamination: evaluation?.physical_examination ?? "",
+    diagnosis: String(visit.diagnosis ?? ""),
+    prescription:
+      formatPrescriptionLines(
+        (rxItems ?? []) as Array<{
+          medicine_name?: string | null;
+          dosage?: string | null;
+          frequency?: string | null;
+          duration?: string | null;
+          instructions?: string | null;
+        }>,
+      ) ||
+      String(visit.treatment_plan ?? "").trim() ||
+      ic("current_medications"),
+  });
+  let initialHandwrittenState = handwrittenPrefillState;
+  if (petId) {
+    const statePath = buildHandwrittenVisitStatePath(clinic_id, petId, visit.id);
+    const { data: stateFile } = await supabase.storage.from("medical-files").download(statePath);
+    if (stateFile) {
+      try {
+        initialHandwrittenState = normalizeHandwrittenVisitSheetState(
+          JSON.parse(await stateFile.text()),
+          handwrittenPrefillState,
+        );
+      } catch {
+        initialHandwrittenState = handwrittenPrefillState;
+      }
+    }
+  }
 
   const { data: previousVisitsRaw } = await supabase
     .from("visits")
@@ -317,12 +377,12 @@ export default async function VisitDetailsPage({
             <VisitHandwrittenPrescription
               visitId={visit.id}
               embed={embed}
-              templateImageUrl={handwrittenTemplateUrl}
               hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
               clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
               petName={String(pet?.name ?? "Patient")}
               ownerName={ownerName}
               doctorName={doctorDisplayName ?? "Doctor"}
+              initialState={initialHandwrittenState}
             />
           </VisitSection>
           {previousVisits.length > 0 ? (

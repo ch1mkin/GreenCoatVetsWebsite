@@ -1,0 +1,329 @@
+import { REFERRED_TEST_OPTIONS } from "@/lib/clinical/referred-tests";
+
+export const HANDWRITTEN_VISIT_SHEET_WIDTH = 1000;
+export const HANDWRITTEN_VISIT_SHEET_HEIGHT = 1414;
+export const HANDWRITTEN_VISIT_STATE_VERSION = 1;
+
+export type HandwrittenVisitPoint = { x: number; y: number };
+
+export type HandwrittenVisitHighlightStroke = {
+  id: string;
+  width: number;
+  points: HandwrittenVisitPoint[];
+};
+
+export type HandwrittenVisitFieldId =
+  | "patientName"
+  | "age"
+  | "ownerName"
+  | "mobile"
+  | "date"
+  | "ccHp"
+  | "dewormingText"
+  | "vaccinationText"
+  | "rt"
+  | "rr"
+  | "hr"
+  | "crt"
+  | "allergic"
+  | "bw"
+  | "otherTests"
+  | "physicalExamination"
+  | "diagnosis"
+  | "prescription";
+
+export type HandwrittenVisitCheckboxId =
+  | "speciesCanine"
+  | "speciesFeline"
+  | "speciesExotic"
+  | "speciesAvian"
+  | "speciesEquine"
+  | "genderMale"
+  | "genderFemale"
+  | "deworming"
+  | "vaccination"
+  | "testCBC"
+  | "testNSAID6"
+  | "testCHEM17"
+  | "testCHEM15"
+  | "testCHEM10"
+  | "testSDMA"
+  | "testTT4"
+  | "testFRU"
+  | "testPHBR"
+  | "testUPC"
+  | "testCRP"
+  | "testP4"
+  | "testSnap4Dx"
+  | "testParvo"
+  | "testXRay"
+  | "testUSG";
+
+export type HandwrittenVisitSheetState = {
+  version: number;
+  fields: Record<HandwrittenVisitFieldId, string>;
+  checkboxes: Record<HandwrittenVisitCheckboxId, boolean>;
+  highlights: HandwrittenVisitHighlightStroke[];
+  inkFallbacks: HandwrittenVisitHighlightStroke[];
+};
+
+export type HandwrittenVisitInitialStateInput = {
+  patientName?: string | null;
+  patientAge?: string | null;
+  ownerName?: string | null;
+  mobile?: string | null;
+  date?: string | null;
+  species?: string | null;
+  gender?: string | null;
+  ccHp?: string | null;
+  dewormingText?: string | null;
+  vaccinationText?: string | null;
+  rt?: string | null;
+  rr?: string | null;
+  hr?: string | null;
+  crt?: string | null;
+  allergic?: string | null;
+  bw?: string | null;
+  testsReferred?: string[] | null;
+  otherTests?: string | null;
+  physicalExamination?: string | null;
+  diagnosis?: string | null;
+  prescription?: string | null;
+};
+
+const TEXT_FIELD_IDS: HandwrittenVisitFieldId[] = [
+  "patientName",
+  "age",
+  "ownerName",
+  "mobile",
+  "date",
+  "ccHp",
+  "dewormingText",
+  "vaccinationText",
+  "rt",
+  "rr",
+  "hr",
+  "crt",
+  "allergic",
+  "bw",
+  "otherTests",
+  "physicalExamination",
+  "diagnosis",
+  "prescription",
+];
+
+const CHECKBOX_IDS: HandwrittenVisitCheckboxId[] = [
+  "speciesCanine",
+  "speciesFeline",
+  "speciesExotic",
+  "speciesAvian",
+  "speciesEquine",
+  "genderMale",
+  "genderFemale",
+  "deworming",
+  "vaccination",
+  "testCBC",
+  "testNSAID6",
+  "testCHEM17",
+  "testCHEM15",
+  "testCHEM10",
+  "testSDMA",
+  "testTT4",
+  "testFRU",
+  "testPHBR",
+  "testUPC",
+  "testCRP",
+  "testP4",
+  "testSnap4Dx",
+  "testParvo",
+  "testXRay",
+  "testUSG",
+];
+
+const TEST_CHECKBOX_MAP: Record<string, HandwrittenVisitCheckboxId> = {
+  CBC: "testCBC",
+  "NSAID 6": "testNSAID6",
+  "CHEM 17": "testCHEM17",
+  "CHEM 15": "testCHEM15",
+  "CHEM 10": "testCHEM10",
+  SDMA: "testSDMA",
+  TT4: "testTT4",
+  FRU: "testFRU",
+  PHBR: "testPHBR",
+  UPC: "testUPC",
+  CRP: "testCRP",
+  P4: "testP4",
+  "Snap 4Dx": "testSnap4Dx",
+  Parvo: "testParvo",
+  "X ray": "testXRay",
+  USG: "testUSG",
+};
+
+function createEmptyFields(): Record<HandwrittenVisitFieldId, string> {
+  return TEXT_FIELD_IDS.reduce(
+    (acc, fieldId) => {
+      acc[fieldId] = "";
+      return acc;
+    },
+    {} as Record<HandwrittenVisitFieldId, string>,
+  );
+}
+
+function createEmptyCheckboxes(): Record<HandwrittenVisitCheckboxId, boolean> {
+  return CHECKBOX_IDS.reduce(
+    (acc, checkboxId) => {
+      acc[checkboxId] = false;
+      return acc;
+    },
+    {} as Record<HandwrittenVisitCheckboxId, boolean>,
+  );
+}
+
+function inferSpeciesCheckboxes(species: string | null | undefined): Partial<Record<HandwrittenVisitCheckboxId, boolean>> {
+  const normalized = String(species ?? "").trim().toLowerCase();
+  if (!normalized) return {};
+  if (/(dog|canine)/i.test(normalized)) return { speciesCanine: true };
+  if (/(cat|feline)/i.test(normalized)) return { speciesFeline: true };
+  if (/(bird|avian)/i.test(normalized)) return { speciesAvian: true };
+  if (/(horse|equine)/i.test(normalized)) return { speciesEquine: true };
+  return { speciesExotic: true };
+}
+
+function inferGenderCheckboxes(gender: string | null | undefined): Partial<Record<HandwrittenVisitCheckboxId, boolean>> {
+  const normalized = String(gender ?? "").trim().toLowerCase();
+  if (normalized.startsWith("m")) return { genderMale: true };
+  if (normalized.startsWith("f")) return { genderFemale: true };
+  return {};
+}
+
+export function formatPrescriptionLines(
+  items: Array<{
+    medicine_name?: string | null;
+    dosage?: string | null;
+    frequency?: string | null;
+    duration?: string | null;
+    instructions?: string | null;
+  }>,
+): string {
+  return items
+    .map((item) => {
+      const name = String(item.medicine_name ?? "").trim();
+      if (!name) return "";
+      const parts = [
+        String(item.dosage ?? "").trim(),
+        String(item.frequency ?? "").trim(),
+        String(item.duration ?? "").trim(),
+      ].filter(Boolean);
+      const instructions = String(item.instructions ?? "").trim();
+      return `${name}${parts.length ? ` - ${parts.join("; ")}` : ""}${instructions ? `. ${instructions}` : ""}`.trim();
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function createHandwrittenVisitSheetState(
+  input: HandwrittenVisitInitialStateInput,
+): HandwrittenVisitSheetState {
+  const fields = createEmptyFields();
+  const checkboxes = createEmptyCheckboxes();
+
+  fields.patientName = String(input.patientName ?? "").trim();
+  fields.age = String(input.patientAge ?? "").trim();
+  fields.ownerName = String(input.ownerName ?? "").trim();
+  fields.mobile = String(input.mobile ?? "").trim();
+  fields.date = String(input.date ?? "").trim();
+  fields.ccHp = String(input.ccHp ?? "").trim();
+  fields.dewormingText = String(input.dewormingText ?? "").trim();
+  fields.vaccinationText = String(input.vaccinationText ?? "").trim();
+  fields.rt = String(input.rt ?? "").trim();
+  fields.rr = String(input.rr ?? "").trim();
+  fields.hr = String(input.hr ?? "").trim();
+  fields.crt = String(input.crt ?? "").trim();
+  fields.allergic = String(input.allergic ?? "").trim();
+  fields.bw = String(input.bw ?? "").trim();
+  fields.otherTests = String(input.otherTests ?? "").trim();
+  fields.physicalExamination = String(input.physicalExamination ?? "").trim();
+  fields.diagnosis = String(input.diagnosis ?? "").trim();
+  fields.prescription = String(input.prescription ?? "").trim();
+
+  Object.assign(checkboxes, inferSpeciesCheckboxes(input.species));
+  Object.assign(checkboxes, inferGenderCheckboxes(input.gender));
+  if (fields.dewormingText) checkboxes.deworming = true;
+  if (fields.vaccinationText) checkboxes.vaccination = true;
+
+  for (const code of input.testsReferred ?? []) {
+    const checkboxId = TEST_CHECKBOX_MAP[code];
+    if (checkboxId) checkboxes[checkboxId] = true;
+  }
+
+  return {
+    version: HANDWRITTEN_VISIT_STATE_VERSION,
+    fields,
+    checkboxes,
+    highlights: [],
+    inkFallbacks: [],
+  };
+}
+
+export function normalizeHandwrittenVisitSheetState(
+  raw: unknown,
+  fallback: HandwrittenVisitSheetState,
+): HandwrittenVisitSheetState {
+  if (!raw || typeof raw !== "object") return fallback;
+  const value = raw as Partial<HandwrittenVisitSheetState>;
+  const fields = createEmptyFields();
+  const checkboxes = createEmptyCheckboxes();
+
+  for (const fieldId of TEXT_FIELD_IDS) {
+    fields[fieldId] = typeof value.fields?.[fieldId] === "string" ? value.fields[fieldId] : fallback.fields[fieldId];
+  }
+  for (const checkboxId of CHECKBOX_IDS) {
+    checkboxes[checkboxId] =
+      typeof value.checkboxes?.[checkboxId] === "boolean" ? value.checkboxes[checkboxId] : fallback.checkboxes[checkboxId];
+  }
+
+  const highlights = Array.isArray(value.highlights)
+    ? value.highlights.filter(
+        (stroke): stroke is HandwrittenVisitHighlightStroke =>
+          Boolean(stroke) &&
+          typeof stroke === "object" &&
+          typeof stroke.id === "string" &&
+          typeof stroke.width === "number" &&
+          Array.isArray(stroke.points),
+      )
+    : fallback.highlights;
+  const inkFallbacks = Array.isArray(value.inkFallbacks)
+    ? value.inkFallbacks.filter(
+        (stroke): stroke is HandwrittenVisitHighlightStroke =>
+          Boolean(stroke) &&
+          typeof stroke === "object" &&
+          typeof stroke.id === "string" &&
+          typeof stroke.width === "number" &&
+          Array.isArray(stroke.points),
+      )
+    : fallback.inkFallbacks;
+
+  return {
+    version:
+      typeof value.version === "number" && Number.isFinite(value.version)
+        ? value.version
+        : HANDWRITTEN_VISIT_STATE_VERSION,
+    fields,
+    checkboxes,
+    highlights,
+    inkFallbacks,
+  };
+}
+
+export function buildHandwrittenVisitStatePath(clinicId: string, petId: string, visitId: string) {
+  return `${clinicId}/pets/${petId}/visits/${visitId}/visit-report-handwritten-state.json`;
+}
+
+export function listCheckedReferredTests(
+  checkboxes: Record<HandwrittenVisitCheckboxId, boolean>,
+): string[] {
+  return REFERRED_TEST_OPTIONS.filter((code) => {
+    const checkboxId = TEST_CHECKBOX_MAP[code];
+    return checkboxId ? Boolean(checkboxes[checkboxId]) : false;
+  });
+}

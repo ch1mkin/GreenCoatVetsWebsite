@@ -5,6 +5,7 @@ import { getUserAccess } from "@/lib/auth/get-user-access";
 import { buildHandwrittenCanvasPdfBytes } from "@/lib/pdf/clinic-documents";
 import { createClient } from "@/lib/supabase/server";
 import { buildVisitReportPdfForVisit } from "@/lib/pdf/visit-report-pdf";
+import { buildHandwrittenVisitStatePath } from "@/lib/visits/handwritten-visit-sheet";
 import { assertVisitReportAccess } from "@/lib/visits/visit-report-access";
 
 const BUCKET = "medical-files";
@@ -133,12 +134,27 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
       footerText: `Handwritten visit sheet saved ${new Date().toLocaleString()}.`,
     });
     const path = `${visit.clinic_id}/pets/${visit.pet_id}/visits/${visitId}/visit-report-handwritten.pdf`;
+    const stateJson = String(formData.get("editor_state_json") ?? "").trim();
 
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, pdfBytes, {
       contentType: "application/pdf",
       upsert: true,
     });
     if (uploadError) return { ok: false, error: uploadError.message };
+
+    if (stateJson) {
+      const statePath = buildHandwrittenVisitStatePath(
+        String(visit.clinic_id),
+        String(visit.pet_id),
+        visitId,
+      );
+      const stateBytes = new TextEncoder().encode(stateJson);
+      const { error: stateUploadError } = await supabase.storage.from(BUCKET).upload(statePath, stateBytes, {
+        contentType: "application/json",
+        upsert: true,
+      });
+      if (stateUploadError) return { ok: false, error: stateUploadError.message };
+    }
 
     const nowIso = new Date().toISOString();
     let { error: visitUpdateError } = await supabase
