@@ -191,6 +191,13 @@ function createEmptyCheckboxes(): Record<HandwrittenVisitCheckboxId, boolean> {
   );
 }
 
+function inferGenderCheckboxes(gender: string | null | undefined): Partial<Record<HandwrittenVisitCheckboxId, boolean>> {
+  const normalized = String(gender ?? "").trim().toLowerCase();
+  if (normalized.startsWith("m")) return { genderMale: true };
+  if (normalized.startsWith("f")) return { genderFemale: true };
+  return {};
+}
+
 export function formatPrescriptionLines(
   items: Array<{
     medicine_name?: string | null;
@@ -227,6 +234,7 @@ export function createHandwrittenVisitSheetState(
   fields.ownerName = String(input.ownerName ?? "").trim();
   fields.mobile = String(input.mobile ?? "").trim();
   fields.date = String(input.date ?? "").trim();
+  Object.assign(checkboxes, inferGenderCheckboxes(input.gender));
 
   return {
     version: HANDWRITTEN_VISIT_STATE_VERSION,

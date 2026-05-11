@@ -13,8 +13,18 @@ type Props = {
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
 };
 
-function StaticFieldArea({ className }: { className: string }) {
-  return <div className={className} />;
+function StaticFieldArea({
+  className,
+  value,
+}: {
+  className: string;
+  value?: string;
+}) {
+  return (
+    <div className={className}>
+      {value ? <span className="field-value">{value}</span> : null}
+    </div>
+  );
 }
 
 function SheetCheckbox({
@@ -44,7 +54,7 @@ export function VisitHandwrittenHtmlSheet({
   registerCheckboxRef,
   onCheckboxChange,
 }: Props) {
-  const { checkboxes } = state;
+  const { checkboxes, fields } = state;
 
   return (
     <div className="sheet-shell">
@@ -56,6 +66,7 @@ export function VisitHandwrittenHtmlSheet({
               className="top-logo"
               src="https://gnnybhybyzkovcpuyoiy.supabase.co/storage/v1/object/public/clinic-assets/platform/branding/logo.png"
               alt="GreenCoatVets logo"
+              crossOrigin="anonymous"
             />
           </div>
 
@@ -101,10 +112,10 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-large">
             <div className="item">
-              Patient Name : <StaticFieldArea className="dotted-line patient-line" />
+              Patient Name : <StaticFieldArea className="dotted-line patient-line" value={fields.patientName} />
             </div>
             <div className="item">
-              Age : <StaticFieldArea className="dotted-line age-line" />
+              Age : <StaticFieldArea className="dotted-line age-line" value={fields.age} />
             </div>
             <div className="item gender-item">
               Gender : M{" "}
@@ -115,13 +126,13 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-medium">
             <div className="item">
-              Owner Name : <StaticFieldArea className="dotted-line owner-line" />
+              Owner Name : <StaticFieldArea className="dotted-line owner-line" value={fields.ownerName} />
             </div>
             <div className="item">
-              Mobile : <StaticFieldArea className="dotted-line mobile-line" />
+              Mobile : <StaticFieldArea className="dotted-line mobile-line" value={fields.mobile} />
             </div>
             <div className="item">
-              Date : <StaticFieldArea className="dotted-line date-line" />
+              Date : <StaticFieldArea className="dotted-line date-line" value={fields.date} />
             </div>
           </div>
         </div>
@@ -149,6 +160,7 @@ export function VisitHandwrittenHtmlSheet({
             className="watermark"
             src="https://gnnybhybyzkovcpuyoiy.supabase.co/storage/v1/object/public/clinic-assets/platform/branding/logo.png"
             alt=""
+            crossOrigin="anonymous"
           />
 
           <div className="left">
@@ -413,6 +425,18 @@ export function VisitHandwrittenHtmlSheet({
           border-bottom: 2px dotted #6b6b6b;
           min-height: 22px;
           flex: 0 0 auto;
+          position: relative;
+          display: flex;
+          align-items: flex-end;
+          padding: 0 2px;
+        }
+
+        .field-value {
+          color: #2b2b2b;
+          font-size: 18px;
+          font-weight: 700;
+          line-height: 1.1;
+          white-space: nowrap;
         }
 
         .patient-line {

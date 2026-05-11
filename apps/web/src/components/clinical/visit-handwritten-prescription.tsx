@@ -26,6 +26,28 @@ const EXPORT_MIME = "image/jpeg";
 const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
 const TOOLBAR_MARGIN = 12;
 
+async function waitForImages(root: HTMLElement) {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete && image.naturalWidth > 0) {
+            resolve();
+            return;
+          }
+          const done = () => {
+            image.removeEventListener("load", done);
+            image.removeEventListener("error", done);
+            resolve();
+          };
+          image.addEventListener("load", done, { once: true });
+          image.addEventListener("error", done, { once: true });
+        }),
+    ),
+  );
+}
+
 function toolButtonClass(active: boolean) {
   return active
     ? "rounded-xl border border-primary bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm"
@@ -121,6 +143,7 @@ export function VisitHandwrittenPrescription({
   const router = useRouter();
   const studioRef = useRef<HTMLDivElement | null>(null);
   const fullscreenToolbarRef = useRef<HTMLDivElement | null>(null);
+  const captureRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const checkboxRefs = useRef<Partial<Record<HandwrittenVisitCheckboxId, HTMLInputElement | null>>>({});
   const activePointerId = useRef<number | null>(null);
@@ -472,7 +495,7 @@ export function VisitHandwrittenPrescription({
   }
 
   async function savePdf() {
-    if (!stageRef.current) return;
+    if (!captureRef.current) return;
     setPending(true);
     setError(null);
     setMessage(null);
@@ -482,7 +505,9 @@ export function VisitHandwrittenPrescription({
         document.activeElement.blur();
       }
 
-      const imageBlob = await domToBlob(stageRef.current, {
+      await waitForImages(captureRef.current);
+
+      const imageBlob = await domToBlob(captureRef.current, {
         pixelRatio: 2,
         cacheBust: true,
         backgroundColor: "#ffffff",
@@ -663,7 +688,7 @@ export function VisitHandwrittenPrescription({
   );
 
   const sheetStage = (
-    <div className="relative inline-block">
+    <div ref={captureRef} className="relative inline-block">
       <VisitHandwrittenHtmlSheet
         stageRef={stageRef}
         state={editorState}
