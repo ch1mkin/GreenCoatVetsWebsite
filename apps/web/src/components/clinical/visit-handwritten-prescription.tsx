@@ -10,6 +10,7 @@ import type {
   HandwrittenVisitFieldId,
   HandwrittenVisitPoint,
   HandwrittenVisitSheetState,
+  HandwrittenVisitWordToken,
 } from "@/lib/visits/handwritten-visit-sheet";
 import {
   HANDWRITTEN_VISIT_SHEET_HEIGHT,
@@ -21,10 +22,7 @@ type Tool = InkTool | "scroll";
 type ToolbarPosition = { x: number; y: number };
 type StrokeBounds = { x: number; y: number; width: number; height: number };
 type StrokeLike = { id: string; width: number; points: HandwrittenVisitPoint[] };
-type EditorSnapshot = {
-  state: HandwrittenVisitSheetState;
-  recognitionChunks: Record<HandwrittenVisitFieldId, string[]>;
-};
+type EditorSnapshot = HandwrittenVisitSheetState;
 type RecognitionTask = {
   id: string;
   fieldId: HandwrittenVisitFieldId;
@@ -37,6 +35,7 @@ const EXPORT_MIME = "image/jpeg";
 const TOOLBAR_DEFAULT_POS: ToolbarPosition = { x: 20, y: 20 };
 const TOOLBAR_MARGIN = 12;
 const OCR_PADDING = 22;
+const FIELD_PADDING = 6;
 
 const FIELD_IDS: HandwrittenVisitFieldId[] = [
   "patientName",
@@ -68,6 +67,27 @@ const MULTILINE_FIELDS = new Set<HandwrittenVisitFieldId>([
   "dewormingText",
   "vaccinationText",
 ]);
+
+const WORD_FONT_SIZE_BY_FIELD: Partial<Record<HandwrittenVisitFieldId, number>> = {
+  patientName: 18,
+  age: 18,
+  ownerName: 18,
+  mobile: 18,
+  date: 18,
+  ccHp: 16,
+  dewormingText: 16,
+  vaccinationText: 16,
+  rt: 18,
+  rr: 18,
+  hr: 18,
+  crt: 18,
+  allergic: 18,
+  bw: 18,
+  otherTests: 17,
+  physicalExamination: 17,
+  diagnosis: 17,
+  prescription: 17,
+};
 
 function toolButtonClass(active: boolean) {
   return active
@@ -111,29 +131,10 @@ function cloneSheetState(state: HandwrittenVisitSheetState): HandwrittenVisitShe
     version: state.version,
     fields: { ...state.fields },
     checkboxes: { ...state.checkboxes },
+    wordTokens: state.wordTokens.map((token) => ({ ...token })),
     highlights: state.highlights.map(cloneStroke),
     inkFallbacks: state.inkFallbacks.map(cloneStroke),
   };
-}
-
-function cloneRecognitionChunks(chunks: Record<HandwrittenVisitFieldId, string[]>) {
-  return FIELD_IDS.reduce(
-    (acc, fieldId) => {
-      acc[fieldId] = [...(chunks[fieldId] ?? [])];
-      return acc;
-    },
-    {} as Record<HandwrittenVisitFieldId, string[]>,
-  );
-}
-
-function createEmptyRecognitionChunks() {
-  return FIELD_IDS.reduce(
-    (acc, fieldId) => {
-      acc[fieldId] = [];
-      return acc;
-    },
-    {} as Record<HandwrittenVisitFieldId, string[]>,
-  );
 }
 
 function buildPath(points: HandwrittenVisitPoint[]) {
@@ -174,34 +175,12 @@ function normalizeRecognizedText(fieldId: HandwrittenVisitFieldId, value: string
   return compact.replace(/[^0-9a-zA-Z,.;:/()&+ -]/g, "").trim();
 }
 
-function appendFieldText(current: string, fieldId: HandwrittenVisitFieldId, addition: string) {
-  if (!addition) return current;
-  if (!current.trim()) return addition;
-  return MULTILINE_FIELDS.has(fieldId) ? `${current.trimEnd()}\n${addition}` : `${current.trimEnd()} ${addition}`;
-}
-
-function removeLastChunkOrWord(current: string, chunks: string[]) {
-  const nextChunks = [...chunks];
-  while (nextChunks.length) {
-    const chunk = nextChunks.pop()?.trim();
-    if (!chunk) continue;
-    const lowerCurrent = current.toLowerCase();
-    const lowerChunk = chunk.toLowerCase();
-    const idx = lowerCurrent.lastIndexOf(lowerChunk);
-    if (idx >= 0) {
-      const before = current.slice(0, idx).replace(/[ \t]+$/g, "");
-      const after = current.slice(idx + chunk.length);
-      if (!after.trim() || /^[\s.,;:/-]*$/.test(after)) {
-        return {
-          text: before.replace(/\n{3,}/g, "\n\n").trimEnd(),
-          chunks: nextChunks,
-        };
-      }
-    }
-  }
-
-  const nextText = current.replace(/\s*\S+\s*$/, "").replace(/\n{3,}/g, "\n\n").trimEnd();
-  return { text: nextText, chunks };
+function getCanvasMeasureContext(fontSize: number) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Text canvas could not be created.");
+  ctx.font = `700 ${fontSize}px "Times New Roman"`;
+  return ctx;
 }
 
 function getFieldRecognitionSettings(fieldId: HandwrittenVisitFieldId, tesseract: TesseractModule) {
@@ -276,6 +255,7 @@ export function VisitHandwrittenPrescription({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<SVGSVGElement | null>(null);
   const fieldRefs = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLDivElement | null>>>({});
+  const checkboxRefs = useRef<Partial<Record<HandwrittenVisitCheckboxId, HTMLInputElement | null>>>({});
   const activePointerId = useRef<number | null>(null);
   const activeStrokeRef = useRef<StrokeLike | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
@@ -287,7 +267,6 @@ export function VisitHandwrittenPrescription({
   const recognitionActiveRef = useRef(false);
   const tesseractModuleRef = useRef<Promise<TesseractModule> | null>(null);
   const ocrWorkerRef = useRef<Promise<TesseractWorker> | null>(null);
-  const recognitionChunksRef = useRef(createEmptyRecognitionChunks());
 
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
@@ -309,18 +288,17 @@ export function VisitHandwrittenPrescription({
   const registerFieldRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => {
     fieldRefs.current[fieldId] = node;
   }, []);
+  const registerCheckboxRef = useCallback((checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => {
+    checkboxRefs.current[checkboxId] = node;
+  }, []);
 
   const createSnapshot = useCallback(
-    (): EditorSnapshot => ({
-      state: cloneSheetState(editorState),
-      recognitionChunks: cloneRecognitionChunks(recognitionChunksRef.current),
-    }),
+    (): EditorSnapshot => cloneSheetState(editorState),
     [editorState],
   );
 
   const restoreSnapshot = useCallback((snapshot: EditorSnapshot) => {
-    setEditorState(cloneSheetState(snapshot.state));
-    recognitionChunksRef.current = cloneRecognitionChunks(snapshot.recognitionChunks);
+    setEditorState(cloneSheetState(snapshot));
   }, []);
 
   const pushUndoSnapshot = useCallback(() => {
@@ -469,6 +447,99 @@ export function VisitHandwrittenPrescription({
     };
   }, []);
 
+  const getCheckboxAtPoint = useCallback((point: HandwrittenVisitPoint): HandwrittenVisitCheckboxId | null => {
+    for (const checkboxId of Object.keys(checkboxRefs.current) as HandwrittenVisitCheckboxId[]) {
+      const node = checkboxRefs.current[checkboxId];
+      const stageNode = stageRef.current;
+      if (!node || !stageNode) continue;
+      const checkboxRect = node.getBoundingClientRect();
+      const stageRect = stageNode.getBoundingClientRect();
+      const bounds = {
+        x: checkboxRect.left - stageRect.left,
+        y: checkboxRect.top - stageRect.top,
+        width: checkboxRect.width,
+        height: checkboxRect.height,
+      };
+      if (
+        point.x >= bounds.x &&
+        point.x <= bounds.x + bounds.width &&
+        point.y >= bounds.y &&
+        point.y <= bounds.y + bounds.height
+      ) {
+        return checkboxId;
+      }
+    }
+    return null;
+  }, []);
+
+  const buildPrefillTokensForField = useCallback(
+    (fieldId: HandwrittenVisitFieldId, text: string): HandwrittenVisitWordToken[] => {
+      const bounds = getFieldBounds(fieldId);
+      if (!bounds || !text.trim()) return [];
+      const fontSize = WORD_FONT_SIZE_BY_FIELD[fieldId] ?? 17;
+      const lineHeight = fontSize + 4;
+      const maxWidth = Math.max(16, bounds.width - FIELD_PADDING * 2);
+      const measure = getCanvasMeasureContext(fontSize);
+      const tokens: HandwrittenVisitWordToken[] = [];
+
+      let x = bounds.x + FIELD_PADDING;
+      let y = bounds.y + FIELD_PADDING;
+      let lineIndex = 0;
+      const lines = MULTILINE_FIELDS.has(fieldId) ? text.split(/\n+/) : [text];
+
+      lines.forEach((line, lineNumber) => {
+        const words = line.split(/\s+/).filter(Boolean);
+        if (!words.length) {
+          lineIndex += 1;
+          x = bounds.x + FIELD_PADDING;
+          y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
+          return;
+        }
+        words.forEach((word) => {
+          const width = Math.max(12, measure.measureText(word).width + 4);
+          if (x + width > bounds.x + FIELD_PADDING + maxWidth && MULTILINE_FIELDS.has(fieldId)) {
+            lineIndex += 1;
+            x = bounds.x + FIELD_PADDING;
+            y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
+          }
+          tokens.push({
+            id: crypto.randomUUID(),
+            fieldId,
+            text: word,
+            x,
+            y,
+            width,
+            height: lineHeight,
+            fontSize,
+          });
+          x += width + Math.max(6, fontSize * 0.18);
+        });
+        if (lineNumber < lines.length - 1) {
+          lineIndex += 1;
+          x = bounds.x + FIELD_PADDING;
+          y = bounds.y + FIELD_PADDING + lineIndex * lineHeight;
+        }
+      });
+
+      return tokens;
+    },
+    [getFieldBounds],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    if (editorState.wordTokens.length > 0) return;
+    const hasFieldsToConvert = FIELD_IDS.some((fieldId) => editorState.fields[fieldId].trim());
+    if (!hasFieldsToConvert) return;
+
+    const nextTokens = FIELD_IDS.flatMap((fieldId) => buildPrefillTokensForField(fieldId, editorState.fields[fieldId]));
+    if (!nextTokens.length) return;
+    setEditorState((prev) => ({
+      ...prev,
+      wordTokens: nextTokens,
+    }));
+  }, [buildPrefillTokensForField, editorState.fields, editorState.wordTokens.length, open]);
+
   const findClosestField = useCallback(
     (point: HandwrittenVisitPoint) => {
       let bestField: HandwrittenVisitFieldId | null = null;
@@ -546,18 +617,46 @@ export function VisitHandwrittenPrescription({
     return canvasToBlob(canvas, "image/png");
   }, []);
 
-  const applyRecognizedText = useCallback((fieldId: HandwrittenVisitFieldId, text: string) => {
-    if (!text) return;
-    pushUndoSnapshot();
-    setEditorState((prev) => ({
-      ...prev,
-      fields: {
-        ...prev.fields,
-        [fieldId]: appendFieldText(prev.fields[fieldId], fieldId, text),
-      },
-    }));
-    recognitionChunksRef.current[fieldId] = [...recognitionChunksRef.current[fieldId], text];
-  }, [pushUndoSnapshot]);
+  const createWordTokenFromStroke = useCallback(
+    (fieldId: HandwrittenVisitFieldId, text: string, stroke: StrokeLike): HandwrittenVisitWordToken | null => {
+      const strokeBounds = getStrokeBounds(stroke.points);
+      const fieldBounds = getFieldBounds(fieldId);
+      if (!strokeBounds || !fieldBounds || !text) return null;
+      const fontSize = Math.max(14, Math.min(28, Math.round(Math.max(strokeBounds.height * 0.9, WORD_FONT_SIZE_BY_FIELD[fieldId] ?? 17))));
+      const measure = getCanvasMeasureContext(fontSize);
+      const measuredWidth = Math.max(14, measure.measureText(text).width + 4);
+      return {
+        id: stroke.id,
+        fieldId,
+        text,
+        x: Math.min(
+          Math.max(fieldBounds.x + FIELD_PADDING, strokeBounds.x - 2),
+          fieldBounds.x + fieldBounds.width - measuredWidth - FIELD_PADDING,
+        ),
+        y: Math.min(
+          Math.max(fieldBounds.y + FIELD_PADDING, strokeBounds.y - 2),
+          fieldBounds.y + fieldBounds.height - (fontSize + 6) - FIELD_PADDING,
+        ),
+        width: measuredWidth,
+        height: fontSize + 6,
+        fontSize,
+      };
+    },
+    [getFieldBounds],
+  );
+
+  const applyRecognizedText = useCallback(
+    (fieldId: HandwrittenVisitFieldId, text: string, stroke: StrokeLike) => {
+      const token = createWordTokenFromStroke(fieldId, text, stroke);
+      if (!token) return;
+      pushUndoSnapshot();
+      setEditorState((prev) => ({
+        ...prev,
+        wordTokens: [...prev.wordTokens, token],
+      }));
+    },
+    [createWordTokenFromStroke, pushUndoSnapshot],
+  );
 
   const processRecognitionQueue = useCallback(async () => {
     if (recognitionActiveRef.current) return;
@@ -579,16 +678,16 @@ export function VisitHandwrittenPrescription({
         const result = await worker.recognize(cropBlob);
         const text = normalizeRecognizedText(task.fieldId, result.data.text ?? "");
         if (text) {
-          applyRecognizedText(task.fieldId, text);
+          applyRecognizedText(task.fieldId, text, task.stroke);
           setEditorState((prev) => ({
             ...prev,
             inkFallbacks: prev.inkFallbacks.filter((stroke) => stroke.id !== task.id),
           }));
         } else {
-          setError("Handwriting could not be recognized clearly. You can edit the field manually or write again.");
+          setError("Handwriting could not be recognized clearly. You can write the word again or edit it in emergency by double-clicking a placed word.");
         }
       } catch {
-        setError("Handwriting recognition failed. You can still edit the HTML fields manually.");
+        setError("Handwriting recognition failed. You can write again or edit a placed word by double-clicking it in emergency.");
       } finally {
         setRecognizingCount((count) => Math.max(0, count - 1));
       }
@@ -602,16 +701,6 @@ export function VisitHandwrittenPrescription({
     setRecognizingCount((count) => count + 1);
     void processRecognitionQueue();
   }, [processRecognitionQueue]);
-
-  const handleFieldChange = useCallback((fieldId: HandwrittenVisitFieldId, value: string) => {
-    setEditorState((prev) => ({
-      ...prev,
-      fields: {
-        ...prev.fields,
-        [fieldId]: value,
-      },
-    }));
-  }, []);
 
   const handleCheckboxChange = useCallback((checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => {
     pushUndoSnapshot();
@@ -640,31 +729,51 @@ export function VisitHandwrittenPrescription({
         const inkBounds = getStrokeBounds(ink.points);
         return !inkBounds || !boundsIntersect(bounds, inkBounds);
       });
+      nextState.wordTokens = nextState.wordTokens.filter((token) => {
+        const tokenBounds = {
+          x: token.x,
+          y: token.y,
+          width: token.width,
+          height: token.height,
+        };
+        return !boundsIntersect(bounds, tokenBounds);
+      });
       return nextState;
     });
+  }, [pushUndoSnapshot]);
 
-    const center = {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    };
-    const fieldId = findClosestField(center);
-    if (!fieldId) return;
-    setEditorState((prev) => {
-      const removal = removeLastChunkOrWord(prev.fields[fieldId], recognitionChunksRef.current[fieldId]);
-      recognitionChunksRef.current[fieldId] = removal.chunks;
-      return {
+  const handleWordDoubleClick = useCallback(
+    (token: HandwrittenVisitWordToken) => {
+      if (!scrollMode) return;
+      const nextText = window.prompt("Edit recognized word", token.text);
+      if (nextText === null) return;
+      const trimmed = nextText.trim();
+      pushUndoSnapshot();
+      setEditorState((prev) => ({
         ...prev,
-        fields: {
-          ...prev.fields,
-          [fieldId]: removal.text,
-        },
-      };
-    });
-  }, [findClosestField, pushUndoSnapshot]);
+        wordTokens: prev.wordTokens
+          .map((current) =>
+            current.id === token.id
+              ? {
+                  ...current,
+                  text: trimmed,
+                }
+              : current,
+          )
+          .filter((current) => current.text.trim()),
+      }));
+    },
+    [pushUndoSnapshot, scrollMode],
+  );
 
   const startStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (tool === "scroll") return;
     const point = getStagePoint(event);
+    const checkboxId = getCheckboxAtPoint(point);
+    if (checkboxId) {
+      handleCheckboxChange(checkboxId, !editorState.checkboxes[checkboxId]);
+      return;
+    }
     const stroke: StrokeLike = {
       id: crypto.randomUUID(),
       width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : Math.max(4, strokeWidth),
@@ -680,7 +789,7 @@ export function VisitHandwrittenPrescription({
     } catch {
       /* noop */
     }
-  }, [getStagePoint, strokeWidth, tool]);
+  }, [editorState.checkboxes, getCheckboxAtPoint, getStagePoint, handleCheckboxChange, strokeWidth, tool]);
 
   const moveStroke = useCallback((event: ReactPointerEvent<SVGSVGElement>) => {
     if (activePointerId.current !== event.pointerId || !activeStrokeRef.current) return;
@@ -987,10 +1096,11 @@ export function VisitHandwrittenPrescription({
       <VisitHandwrittenHtmlSheet
         stageRef={stageRef}
         state={editorState}
-        interactiveEnabled={scrollMode}
         registerFieldRef={registerFieldRef}
-        onFieldChange={handleFieldChange}
+        registerCheckboxRef={registerCheckboxRef}
         onCheckboxChange={handleCheckboxChange}
+        onWordDoubleClick={handleWordDoubleClick}
+        wordInteractionEnabled={scrollMode}
       />
       <svg
         ref={overlayRef}

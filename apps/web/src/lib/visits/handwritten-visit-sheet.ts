@@ -12,6 +12,17 @@ export type HandwrittenVisitHighlightStroke = {
   points: HandwrittenVisitPoint[];
 };
 
+export type HandwrittenVisitWordToken = {
+  id: string;
+  fieldId: HandwrittenVisitFieldId;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fontSize: number;
+};
+
 export type HandwrittenVisitFieldId =
   | "patientName"
   | "age"
@@ -63,6 +74,7 @@ export type HandwrittenVisitSheetState = {
   version: number;
   fields: Record<HandwrittenVisitFieldId, string>;
   checkboxes: Record<HandwrittenVisitCheckboxId, boolean>;
+  wordTokens: HandwrittenVisitWordToken[];
   highlights: HandwrittenVisitHighlightStroke[];
   inkFallbacks: HandwrittenVisitHighlightStroke[];
 };
@@ -260,6 +272,7 @@ export function createHandwrittenVisitSheetState(
     version: HANDWRITTEN_VISIT_STATE_VERSION,
     fields,
     checkboxes,
+    wordTokens: [],
     highlights: [],
     inkFallbacks: [],
   };
@@ -292,6 +305,21 @@ export function normalizeHandwrittenVisitSheetState(
           Array.isArray(stroke.points),
       )
     : fallback.highlights;
+  const wordTokens = Array.isArray(value.wordTokens)
+    ? value.wordTokens.filter(
+        (token): token is HandwrittenVisitWordToken =>
+          Boolean(token) &&
+          typeof token === "object" &&
+          typeof token.id === "string" &&
+          typeof token.fieldId === "string" &&
+          typeof token.text === "string" &&
+          typeof token.x === "number" &&
+          typeof token.y === "number" &&
+          typeof token.width === "number" &&
+          typeof token.height === "number" &&
+          typeof token.fontSize === "number",
+      )
+    : [];
   const inkFallbacks = Array.isArray(value.inkFallbacks)
     ? value.inkFallbacks.filter(
         (stroke): stroke is HandwrittenVisitHighlightStroke =>
@@ -310,6 +338,7 @@ export function normalizeHandwrittenVisitSheetState(
         : HANDWRITTEN_VISIT_STATE_VERSION,
     fields,
     checkboxes,
+    wordTokens,
     highlights,
     inkFallbacks,
   };

@@ -5,101 +5,49 @@ import type {
   HandwrittenVisitCheckboxId,
   HandwrittenVisitFieldId,
   HandwrittenVisitSheetState,
+  HandwrittenVisitWordToken,
 } from "@/lib/visits/handwritten-visit-sheet";
 
 type Props = {
   stageRef: RefObject<HTMLDivElement>;
   state: HandwrittenVisitSheetState;
-  interactiveEnabled: boolean;
   registerFieldRef: (fieldId: HandwrittenVisitFieldId, node: HTMLDivElement | null) => void;
-  onFieldChange: (fieldId: HandwrittenVisitFieldId, value: string) => void;
+  registerCheckboxRef: (checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => void;
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
+  onWordDoubleClick: (token: HandwrittenVisitWordToken) => void;
+  wordInteractionEnabled: boolean;
 };
 
-function LineField({
+function StaticFieldArea({
   fieldId,
-  value,
-  widthClass,
-  interactiveEnabled,
+  className,
   registerFieldRef,
-  onFieldChange,
 }: {
   fieldId: HandwrittenVisitFieldId;
-  value: string;
-  widthClass: string;
-  interactiveEnabled: boolean;
+  className: string;
   registerFieldRef: Props["registerFieldRef"];
-  onFieldChange: Props["onFieldChange"];
 }) {
   return (
-    <div ref={(node) => registerFieldRef(fieldId, node)} className={`dotted-line ${widthClass}`}>
-      <input
-        className="line-input"
-        value={value}
-        readOnly={!interactiveEnabled}
-        spellCheck={false}
-        onChange={(event) => onFieldChange(fieldId, event.target.value)}
-      />
-    </div>
-  );
-}
-
-function BoxField({
-  fieldId,
-  value,
-  className = "",
-  multiline = false,
-  interactiveEnabled,
-  registerFieldRef,
-  onFieldChange,
-}: {
-  fieldId: HandwrittenVisitFieldId;
-  value: string;
-  className?: string;
-  multiline?: boolean;
-  interactiveEnabled: boolean;
-  registerFieldRef: Props["registerFieldRef"];
-  onFieldChange: Props["onFieldChange"];
-}) {
-  return (
-    <div ref={(node) => registerFieldRef(fieldId, node)} className={`sheet-field-box ${className}`}>
-      {multiline ? (
-        <textarea
-          className="sheet-textarea"
-          value={value}
-          readOnly={!interactiveEnabled}
-          spellCheck={false}
-          onChange={(event) => onFieldChange(fieldId, event.target.value)}
-        />
-      ) : (
-        <input
-          className="sheet-input"
-          value={value}
-          readOnly={!interactiveEnabled}
-          spellCheck={false}
-          onChange={(event) => onFieldChange(fieldId, event.target.value)}
-        />
-      )}
-    </div>
+    <div ref={(node) => registerFieldRef(fieldId, node)} className={className} />
   );
 }
 
 function SheetCheckbox({
   checkboxId,
   checked,
-  interactiveEnabled,
+  registerCheckboxRef,
   onCheckboxChange,
 }: {
   checkboxId: HandwrittenVisitCheckboxId;
   checked: boolean;
-  interactiveEnabled: boolean;
+  registerCheckboxRef: Props["registerCheckboxRef"];
   onCheckboxChange: Props["onCheckboxChange"];
 }) {
   return (
     <input
+      ref={(node) => registerCheckboxRef(checkboxId, node)}
       type="checkbox"
       checked={checked}
-      disabled={!interactiveEnabled}
       onChange={(event) => onCheckboxChange(checkboxId, event.target.checked)}
     />
   );
@@ -108,12 +56,13 @@ function SheetCheckbox({
 export function VisitHandwrittenHtmlSheet({
   stageRef,
   state,
-  interactiveEnabled,
   registerFieldRef,
-  onFieldChange,
+  registerCheckboxRef,
   onCheckboxChange,
+  onWordDoubleClick,
+  wordInteractionEnabled,
 }: Props) {
-  const { fields, checkboxes } = state;
+  const { checkboxes, wordTokens } = state;
 
   return (
     <div className="sheet-shell">
@@ -152,85 +101,50 @@ export function VisitHandwrittenHtmlSheet({
         <div className="info">
           <div className="row species-row">
             <div className="item">
-              Canine <SheetCheckbox checkboxId="speciesCanine" checked={checkboxes.speciesCanine} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              Canine <SheetCheckbox checkboxId="speciesCanine" checked={checkboxes.speciesCanine} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
             <div className="item">
-              Feline <SheetCheckbox checkboxId="speciesFeline" checked={checkboxes.speciesFeline} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              Feline <SheetCheckbox checkboxId="speciesFeline" checked={checkboxes.speciesFeline} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
             <div className="item">
-              Exotic <SheetCheckbox checkboxId="speciesExotic" checked={checkboxes.speciesExotic} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              Exotic <SheetCheckbox checkboxId="speciesExotic" checked={checkboxes.speciesExotic} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
             <div className="item">
-              Avian <SheetCheckbox checkboxId="speciesAvian" checked={checkboxes.speciesAvian} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              Avian <SheetCheckbox checkboxId="speciesAvian" checked={checkboxes.speciesAvian} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
             <div className="item">
-              Equine <SheetCheckbox checkboxId="speciesEquine" checked={checkboxes.speciesEquine} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              Equine <SheetCheckbox checkboxId="speciesEquine" checked={checkboxes.speciesEquine} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
           </div>
 
           <div className="row row-gap-large">
             <div className="item">
               Patient Name :{" "}
-              <LineField
-                fieldId="patientName"
-                value={fields.patientName}
-                widthClass="patient-line"
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="patientName" className="dotted-line patient-line" registerFieldRef={registerFieldRef} />
             </div>
             <div className="item">
               Age :{" "}
-              <LineField
-                fieldId="age"
-                value={fields.age}
-                widthClass="age-line"
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="age" className="dotted-line age-line" registerFieldRef={registerFieldRef} />
             </div>
             <div className="item gender-item">
               Gender : M{" "}
-              <SheetCheckbox checkboxId="genderMale" checked={checkboxes.genderMale} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /> F{" "}
-              <SheetCheckbox checkboxId="genderFemale" checked={checkboxes.genderFemale} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
+              <SheetCheckbox checkboxId="genderMale" checked={checkboxes.genderMale} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /> F{" "}
+              <SheetCheckbox checkboxId="genderFemale" checked={checkboxes.genderFemale} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
             </div>
           </div>
 
           <div className="row row-gap-medium">
             <div className="item">
               Owner Name :{" "}
-              <LineField
-                fieldId="ownerName"
-                value={fields.ownerName}
-                widthClass="owner-line"
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="ownerName" className="dotted-line owner-line" registerFieldRef={registerFieldRef} />
             </div>
             <div className="item">
               Mobile :{" "}
-              <LineField
-                fieldId="mobile"
-                value={fields.mobile}
-                widthClass="mobile-line"
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="mobile" className="dotted-line mobile-line" registerFieldRef={registerFieldRef} />
             </div>
             <div className="item">
               Date :
-              <LineField
-                fieldId="date"
-                value={fields.date}
-                widthClass="date-line"
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="date" className="dotted-line date-line" registerFieldRef={registerFieldRef} />
             </div>
           </div>
         </div>
@@ -238,39 +152,17 @@ export function VisitHandwrittenHtmlSheet({
         <div className="small-fields">
           <div className="row">
             <div className="small-label">CC / HP / :</div>
-            <BoxField
-              fieldId="ccHp"
-              value={fields.ccHp}
-              className="small-row-field"
-              multiline
-              interactiveEnabled={interactiveEnabled}
-              registerFieldRef={registerFieldRef}
-              onFieldChange={onFieldChange}
-            />
+            <StaticFieldArea fieldId="ccHp" className="small-row-field" registerFieldRef={registerFieldRef} />
           </div>
           <div className="row">
             <div className="small-label">Deworming :</div>
-            <SheetCheckbox checkboxId="deworming" checked={checkboxes.deworming} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
-            <BoxField
-              fieldId="dewormingText"
-              value={fields.dewormingText}
-              className="small-checkbox-field"
-              interactiveEnabled={interactiveEnabled}
-              registerFieldRef={registerFieldRef}
-              onFieldChange={onFieldChange}
-            />
+            <SheetCheckbox checkboxId="deworming" checked={checkboxes.deworming} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
+            <StaticFieldArea fieldId="dewormingText" className="small-checkbox-field" registerFieldRef={registerFieldRef} />
           </div>
           <div className="row row-last">
             <div className="small-label">Vaccination :</div>
-            <SheetCheckbox checkboxId="vaccination" checked={checkboxes.vaccination} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} />
-            <BoxField
-              fieldId="vaccinationText"
-              value={fields.vaccinationText}
-              className="small-checkbox-field"
-              interactiveEnabled={interactiveEnabled}
-              registerFieldRef={registerFieldRef}
-              onFieldChange={onFieldChange}
-            />
+            <SheetCheckbox checkboxId="vaccination" checked={checkboxes.vaccination} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
+            <StaticFieldArea fieldId="vaccinationText" className="small-checkbox-field" registerFieldRef={registerFieldRef} />
           </div>
         </div>
 
@@ -287,101 +179,90 @@ export function VisitHandwrittenHtmlSheet({
 
             <div className="param-row">
               <div className="param">RT :</div>
-              <BoxField fieldId="rt" value={fields.rt} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="rt" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
             <div className="param-row">
               <div className="param">RR :</div>
-              <BoxField fieldId="rr" value={fields.rr} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="rr" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
             <div className="param-row">
               <div className="param">HR :</div>
-              <BoxField fieldId="hr" value={fields.hr} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="hr" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
             <div className="param-row">
               <div className="param">CRT :</div>
-              <BoxField fieldId="crt" value={fields.crt} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="crt" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
             <div className="param-row">
               <div className="param">ALLERGIC :</div>
-              <BoxField fieldId="allergic" value={fields.allergic} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="allergic" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
             <div className="param-row">
               <div className="param">B/W</div>
-              <BoxField fieldId="bw" value={fields.bw} className="param-value" interactiveEnabled={interactiveEnabled} registerFieldRef={registerFieldRef} onFieldChange={onFieldChange} />
+              <StaticFieldArea fieldId="bw" className="param-value" registerFieldRef={registerFieldRef} />
             </div>
 
             <div className="test-title">TEST REFERRED</div>
             <div className="test-grid">
-              <div className="test">CBC <SheetCheckbox checkboxId="testCBC" checked={checkboxes.testCBC} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">NSAID 6 <SheetCheckbox checkboxId="testNSAID6" checked={checkboxes.testNSAID6} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Chem 17 <SheetCheckbox checkboxId="testCHEM17" checked={checkboxes.testCHEM17} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Chem 15 <SheetCheckbox checkboxId="testCHEM15" checked={checkboxes.testCHEM15} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Chem 10 <SheetCheckbox checkboxId="testCHEM10" checked={checkboxes.testCHEM10} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">SDMA <SheetCheckbox checkboxId="testSDMA" checked={checkboxes.testSDMA} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">TT4 <SheetCheckbox checkboxId="testTT4" checked={checkboxes.testTT4} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Fru <SheetCheckbox checkboxId="testFRU" checked={checkboxes.testFRU} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Phbr <SheetCheckbox checkboxId="testPHBR" checked={checkboxes.testPHBR} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">UPC <SheetCheckbox checkboxId="testUPC" checked={checkboxes.testUPC} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">CRP <SheetCheckbox checkboxId="testCRP" checked={checkboxes.testCRP} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">P4 <SheetCheckbox checkboxId="testP4" checked={checkboxes.testP4} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Snap 4Dx <SheetCheckbox checkboxId="testSnap4Dx" checked={checkboxes.testSnap4Dx} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">Parvo <SheetCheckbox checkboxId="testParvo" checked={checkboxes.testParvo} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">X-Ray <SheetCheckbox checkboxId="testXRay" checked={checkboxes.testXRay} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
-              <div className="test">USG <SheetCheckbox checkboxId="testUSG" checked={checkboxes.testUSG} interactiveEnabled={interactiveEnabled} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">CBC <SheetCheckbox checkboxId="testCBC" checked={checkboxes.testCBC} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">NSAID 6 <SheetCheckbox checkboxId="testNSAID6" checked={checkboxes.testNSAID6} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Chem 17 <SheetCheckbox checkboxId="testCHEM17" checked={checkboxes.testCHEM17} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Chem 15 <SheetCheckbox checkboxId="testCHEM15" checked={checkboxes.testCHEM15} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Chem 10 <SheetCheckbox checkboxId="testCHEM10" checked={checkboxes.testCHEM10} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">SDMA <SheetCheckbox checkboxId="testSDMA" checked={checkboxes.testSDMA} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">TT4 <SheetCheckbox checkboxId="testTT4" checked={checkboxes.testTT4} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Fru <SheetCheckbox checkboxId="testFRU" checked={checkboxes.testFRU} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Phbr <SheetCheckbox checkboxId="testPHBR" checked={checkboxes.testPHBR} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">UPC <SheetCheckbox checkboxId="testUPC" checked={checkboxes.testUPC} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">CRP <SheetCheckbox checkboxId="testCRP" checked={checkboxes.testCRP} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">P4 <SheetCheckbox checkboxId="testP4" checked={checkboxes.testP4} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Snap 4Dx <SheetCheckbox checkboxId="testSnap4Dx" checked={checkboxes.testSnap4Dx} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">Parvo <SheetCheckbox checkboxId="testParvo" checked={checkboxes.testParvo} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">X-Ray <SheetCheckbox checkboxId="testXRay" checked={checkboxes.testXRay} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
+              <div className="test">USG <SheetCheckbox checkboxId="testUSG" checked={checkboxes.testUSG} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} /></div>
             </div>
 
             <div className="other">
               <div>Any other tests</div>
-              <BoxField
-                fieldId="otherTests"
-                value={fields.otherTests}
-                className="other-tests-field"
-                multiline
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="otherTests" className="other-tests-field" registerFieldRef={registerFieldRef} />
             </div>
           </div>
 
           <div className="right">
             <div className="physical">
               <span>Physical Examination :</span>
-              <BoxField
-                fieldId="physicalExamination"
-                value={fields.physicalExamination}
-                className="physical-field"
-                multiline
-                interactiveEnabled={interactiveEnabled}
-                registerFieldRef={registerFieldRef}
-                onFieldChange={onFieldChange}
-              />
+              <StaticFieldArea fieldId="physicalExamination" className="physical-field" registerFieldRef={registerFieldRef} />
             </div>
             <div className="diagnosis">
               <div className="dx">Dx</div>
             </div>
-            <BoxField
-              fieldId="diagnosis"
-              value={fields.diagnosis}
-              className="diagnosis-field"
-              multiline
-              interactiveEnabled={interactiveEnabled}
-              registerFieldRef={registerFieldRef}
-              onFieldChange={onFieldChange}
-            />
+            <StaticFieldArea fieldId="diagnosis" className="diagnosis-field" registerFieldRef={registerFieldRef} />
             <div className="rx">
               R<sub>x</sub>
             </div>
-            <BoxField
-              fieldId="prescription"
-              value={fields.prescription}
-              className="prescription-field"
-              multiline
-              interactiveEnabled={interactiveEnabled}
-              registerFieldRef={registerFieldRef}
-              onFieldChange={onFieldChange}
-            />
+            <StaticFieldArea fieldId="prescription" className="prescription-field" registerFieldRef={registerFieldRef} />
           </div>
+        </div>
+
+        <div className={`token-layer ${wordInteractionEnabled ? "token-layer-active" : ""}`}>
+          {wordTokens.map((token) => (
+            <button
+              key={token.id}
+              type="button"
+              className="word-token"
+              style={{
+                left: `${token.x}px`,
+                top: `${token.y}px`,
+                minWidth: `${Math.max(12, token.width)}px`,
+                minHeight: `${Math.max(14, token.height)}px`,
+                fontSize: `${token.fontSize}px`,
+                lineHeight: `${Math.max(token.fontSize + 2, token.height)}px`,
+              }}
+              onDoubleClick={() => onWordDoubleClick(token)}
+            >
+              {token.text}
+            </button>
+          ))}
         </div>
 
         <div className="bottom">
@@ -578,8 +459,6 @@ export function VisitHandwrittenHtmlSheet({
         .dotted-line {
           border-bottom: 2px dotted #6b6b6b;
           min-height: 22px;
-          display: flex;
-          align-items: flex-end;
         }
 
         .patient-line {
@@ -602,19 +481,6 @@ export function VisitHandwrittenHtmlSheet({
           width: 280px;
         }
 
-        .line-input {
-          width: 100%;
-          border: 0;
-          outline: none;
-          background: transparent;
-          font-size: 18px;
-          font-weight: 700;
-          font-family: "Times New Roman", serif;
-          color: #2b2b2b;
-          line-height: 1.2;
-          padding: 0 2px;
-        }
-
         .small-fields {
           padding-top: 10px;
           padding-bottom: 8px;
@@ -628,24 +494,16 @@ export function VisitHandwrittenHtmlSheet({
           font-weight: 700;
         }
 
-        .sheet-field-box {
+        .small-row-field,
+        .small-checkbox-field,
+        .param-value,
+        .other-tests-field,
+        .physical-field,
+        .diagnosis-field,
+        .prescription-field {
           border: 2px solid #777;
           background: #fff;
-        }
-
-        .sheet-input,
-        .sheet-textarea {
-          width: 100%;
-          height: 100%;
-          border: 0;
-          outline: none;
-          background: transparent;
-          font-family: "Times New Roman", serif;
-          color: #2b2b2b;
-          padding: 4px 6px;
-          resize: none;
-          font-size: 17px;
-          line-height: 1.25;
+          position: relative;
         }
 
         .small-row-field {
@@ -830,6 +688,32 @@ export function VisitHandwrittenHtmlSheet({
           color: #24386f;
           font-size: 16px;
           font-weight: 700;
+        }
+
+        .token-layer {
+          position: absolute;
+          inset: 0;
+          z-index: 3;
+          pointer-events: none;
+        }
+
+        .token-layer-active {
+          pointer-events: auto;
+        }
+
+        .word-token {
+          pointer-events: auto;
+          position: absolute;
+          border: 0;
+          padding: 0 2px;
+          margin: 0;
+          background: transparent;
+          color: #111827;
+          font-family: "Times New Roman", serif;
+          font-weight: 700;
+          text-align: left;
+          white-space: pre;
+          cursor: text;
         }
       `}</style>
     </div>
