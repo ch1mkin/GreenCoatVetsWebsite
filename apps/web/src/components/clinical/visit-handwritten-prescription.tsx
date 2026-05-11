@@ -150,7 +150,8 @@ export function VisitHandwrittenPrescription({
   doctorName: string;
 }) {
   const router = useRouter();
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const templateCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const activePointerId = useRef<number | null>(null);
   const [templateImage, setTemplateImage] = useState<HTMLImageElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -185,8 +186,8 @@ export function VisitHandwrittenPrescription({
     };
   }, [open, templateImageUrl]);
 
-  const redraw = useCallback(() => {
-    const canvas = canvasRef.current;
+  const redrawTemplate = useCallback(() => {
+    const canvas = templateCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -200,14 +201,28 @@ export function VisitHandwrittenPrescription({
     } else {
       drawBuiltInTemplate(ctx, meta);
     }
+  }, [meta, templateImage]);
+
+  const redrawStrokes = useCallback(() => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
     for (const stroke of strokes) drawStroke(ctx, stroke);
-  }, [meta, strokes, templateImage]);
+  }, [strokes]);
 
   useEffect(() => {
     if (!open) return;
-    redraw();
-  }, [open, redraw]);
+    redrawTemplate();
+  }, [open, redrawTemplate]);
+
+  useEffect(() => {
+    if (!open) return;
+    redrawStrokes();
+  }, [open, redrawStrokes]);
 
   const pointFromEvent = useCallback((event: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -262,13 +277,21 @@ export function VisitHandwrittenPrescription({
   }, []);
 
   async function savePdf() {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const templateCanvas = templateCanvasRef.current;
+    const drawingCanvas = drawingCanvasRef.current;
+    if (!templateCanvas || !drawingCanvas) return;
     setPending(true);
     setError(null);
     setMessage(null);
     try {
-      const imageDataUrl = canvas.toDataURL("image/png");
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = CANVAS_W;
+      exportCanvas.height = CANVAS_H;
+      const exportCtx = exportCanvas.getContext("2d");
+      if (!exportCtx) throw new Error("Failed to prepare handwritten visit export.");
+      exportCtx.drawImage(templateCanvas, 0, 0);
+      exportCtx.drawImage(drawingCanvas, 0, 0);
+      const imageDataUrl = exportCanvas.toDataURL("image/png");
       const fd = new FormData();
       fd.set("visit_id", visitId);
       fd.set("image_data_url", imageDataUrl);
@@ -426,6 +449,7 @@ export function VisitHandwrittenPrescription({
                     <ul className="mt-2 list-disc space-y-1 pl-4">
                       <li>Stylus works automatically where supported.</li>
                       <li>Highlight uses a transparent yellow marker.</li>
+                      <li>Erase only removes your handwriting and keeps the uploaded template untouched.</li>
                       <li>Save writes the visit PDF that owners can open from visit reports.</li>
                     </ul>
                   </div>
@@ -445,16 +469,25 @@ export function VisitHandwrittenPrescription({
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto p-4">
                   <div className="mx-auto max-w-[980px] rounded-[24px] bg-white p-3 shadow-xl">
-                    <canvas
-                      ref={canvasRef}
-                      width={CANVAS_W}
-                      height={CANVAS_H}
-                      className="touch-none w-full rounded-[18px] border border-slate-200 bg-white shadow-inner"
-                      onPointerDown={startStroke}
-                      onPointerMove={moveStroke}
-                      onPointerUp={endStroke}
-                      onPointerCancel={endStroke}
-                    />
+                    <div className="relative">
+                      <canvas
+                        ref={templateCanvasRef}
+                        width={CANVAS_W}
+                        height={CANVAS_H}
+                        className="block w-full rounded-[18px] border border-slate-200 bg-white shadow-inner"
+                        aria-hidden="true"
+                      />
+                      <canvas
+                        ref={drawingCanvasRef}
+                        width={CANVAS_W}
+                        height={CANVAS_H}
+                        className="absolute inset-0 touch-none w-full rounded-[18px]"
+                        onPointerDown={startStroke}
+                        onPointerMove={moveStroke}
+                        onPointerUp={endStroke}
+                        onPointerCancel={endStroke}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
