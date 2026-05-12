@@ -88,10 +88,19 @@ async function getQrFonts(): Promise<{ medium: Font; bold: Font } | null> {
 
 function fitTextSize(font: Font, text: string, preferredSize: number, minSize: number, maxWidth: number): number {
   let size = preferredSize;
-  while (size > minSize && font.getAdvanceWidth(text, size, { kerning: true }) > maxWidth) {
+  while (size > minSize && measureTextWidth(font, text, size) > maxWidth) {
     size -= 1;
   }
   return size;
+}
+
+function measureTextWidth(font: Font, text: string, fontSize: number): number {
+  const scale = fontSize / font.unitsPerEm;
+  let width = 0;
+  for (const character of text) {
+    width += font.charToGlyph(character).advanceWidth * scale;
+  }
+  return width;
 }
 
 function renderTextPath({
@@ -111,10 +120,21 @@ function renderTextPath({
   fill: string;
   anchor?: "start" | "middle" | "end";
 }) {
-  const width = font.getAdvanceWidth(text, fontSize, { kerning: true });
-  const startX = anchor === "middle" ? x - width / 2 : anchor === "end" ? x - width : x;
-  const pathData = font.getPath(text, startX, y, fontSize, { kerning: true }).toPathData(2);
-  return `<path d="${pathData}" fill="${fill}" />`;
+  const width = measureTextWidth(font, text, fontSize);
+  let cursorX = anchor === "middle" ? x - width / 2 : anchor === "end" ? x - width : x;
+  const scale = fontSize / font.unitsPerEm;
+  const paths: string[] = [];
+
+  for (const character of text) {
+    const glyph = font.charToGlyph(character);
+    const pathData = glyph.getPath(cursorX, y, fontSize).toPathData(2);
+    if (pathData) {
+      paths.push(`<path d="${pathData}" fill="${fill}" />`);
+    }
+    cursorX += glyph.advanceWidth * scale;
+  }
+
+  return paths.join("");
 }
 
 function renderTextElement({
