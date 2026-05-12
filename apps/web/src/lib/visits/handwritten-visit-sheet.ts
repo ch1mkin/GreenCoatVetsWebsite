@@ -31,6 +31,7 @@ export type HandwrittenVisitWritableRegionState = {
   text: string;
   ocrText: string;
   fabricJson: Record<string, unknown> | null;
+  ocrFabricJson: Record<string, unknown> | null;
   inkBounds: HandwrittenVisitRect | null;
   textBox: HandwrittenVisitRect | null;
   fontSize: number | null;
@@ -203,6 +204,7 @@ function createEmptyWritableRegions(): Record<HandwrittenVisitFieldId, Handwritt
         text: "",
         ocrText: "",
         fabricJson: null,
+        ocrFabricJson: null,
         inkBounds: null,
         textBox: null,
         fontSize: null,
@@ -299,6 +301,10 @@ export function normalizeHandwrittenVisitSheetState(
       fabricJson:
         rawRegion?.fabricJson && typeof rawRegion.fabricJson === "object" && !Array.isArray(rawRegion.fabricJson)
           ? rawRegion.fabricJson
+          : null,
+      ocrFabricJson:
+        rawRegion?.ocrFabricJson && typeof rawRegion.ocrFabricJson === "object" && !Array.isArray(rawRegion.ocrFabricJson)
+          ? rawRegion.ocrFabricJson
           : null,
       inkBounds:
         rawRegion?.inkBounds &&

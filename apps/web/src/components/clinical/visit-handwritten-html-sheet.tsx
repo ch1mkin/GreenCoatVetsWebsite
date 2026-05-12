@@ -434,6 +434,8 @@ export function VisitHandwrittenHtmlSheet({
           position: relative;
           vertical-align: middle;
           flex: 0 0 auto;
+          z-index: 8;
+          pointer-events: auto;
         }
 
         input[type="checkbox"]:checked {

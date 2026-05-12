@@ -24,7 +24,7 @@ import {
   HANDWRITTEN_VISIT_SHEET_WIDTH,
 } from "@/lib/visits/handwritten-visit-sheet";
 
-type InkTool = "draw" | "erase" | "highlight";
+type InkTool = "draw" | "ocr" | "erase" | "highlight";
 type Tool = InkTool | "scroll";
 type ToolbarPosition = { x: number; y: number };
 type StrokeBounds = HandwrittenVisitRect;
@@ -100,6 +100,17 @@ function ToolIcon({ tool }: { tool: Tool }) {
       </svg>
     );
   }
+  if (tool === "ocr") {
+    return (
+      <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
+        <rect x="4" y="5" width="16" height="14" rx="2.5" />
+        <path d="M8 9h3" />
+        <path d="M8 15h8" />
+        <path d="M12 9l2.5 6" />
+        <path d="M17 8v8" />
+      </svg>
+    );
+  }
   if (tool === "highlight") {
     return (
       <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
@@ -160,6 +171,7 @@ function createEmptyWritableRegionState(): HandwrittenVisitWritableRegionState {
     text: "",
     ocrText: "",
     fabricJson: null,
+    ocrFabricJson: null,
     inkBounds: null,
     textBox: null,
     fontSize: null,
@@ -302,12 +314,17 @@ export function VisitHandwrittenPrescription({
   const captureRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const checkboxRefs = useRef<Partial<Record<HandwrittenVisitCheckboxId, HTMLInputElement | null>>>({});
-  const regionCanvasElementsRef = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLCanvasElement | null>>>({});
-  const regionCanvasesRef = useRef<RegionCanvasMap>({});
+  const drawCanvasElementsRef = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLCanvasElement | null>>>({});
+  const ocrCanvasElementsRef = useRef<Partial<Record<HandwrittenVisitFieldId, HTMLCanvasElement | null>>>({});
+  const drawCanvasesRef = useRef<RegionCanvasMap>({});
+  const ocrCanvasesRef = useRef<RegionCanvasMap>({});
+  const ocrIdleTimersRef = useRef<Partial<Record<HandwrittenVisitFieldId, number>>>({});
   const fabricModuleRef = useRef<typeof import("fabric") | null>(null);
   const syncingWritableCanvasesRef = useRef(false);
   const editorStateRef = useRef<HandwrittenVisitSheetState>(cloneSheetState(initialState));
   const textEditSnapshotFieldRef = useRef<HandwrittenVisitFieldId | null>(null);
+  const textEditSnapshotTokenRef = useRef<string | null>(null);
+  const convertPendingOcrRegionRef = useRef<(fieldId: HandwrittenVisitFieldId) => void>(() => undefined);
   const activePointerId = useRef<number | null>(null);
   const activeStrokeRef = useRef<StrokeLike | null>(null);
   const toolbarDragPointerId = useRef<number | null>(null);
@@ -331,8 +348,8 @@ export function VisitHandwrittenPrescription({
   const [toolbarDragActive, setToolbarDragActive] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState<HandwrittenVisitFieldId>("prescription");
   const [ocrPendingFieldId, setOcrPendingFieldId] = useState<HandwrittenVisitFieldId | null>(null);
-  const [ocrAllPending, setOcrAllPending] = useState(false);
   const [capturingPdf, setCapturingPdf] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   const scrollMode = tool === "scroll";
 
@@ -340,8 +357,12 @@ export function VisitHandwrittenPrescription({
     checkboxRefs.current[checkboxId] = node;
   }, []);
 
-  const registerRegionCanvasRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLCanvasElement | null) => {
-    regionCanvasElementsRef.current[fieldId] = node;
+  const registerDrawCanvasRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLCanvasElement | null) => {
+    drawCanvasElementsRef.current[fieldId] = node;
+  }, []);
+
+  const registerOcrCanvasRef = useCallback((fieldId: HandwrittenVisitFieldId, node: HTMLCanvasElement | null) => {
+    ocrCanvasElementsRef.current[fieldId] = node;
   }, []);
 
   useEffect(() => {
@@ -349,6 +370,14 @@ export function VisitHandwrittenPrescription({
   }, [editorState]);
 
   const createSnapshot = useCallback((): EditorSnapshot => cloneSheetState(editorStateRef.current), []);
+
+  const clearOcrIdleTimer = useCallback((fieldId: HandwrittenVisitFieldId) => {
+    const timer = ocrIdleTimersRef.current[fieldId];
+    if (timer) {
+      window.clearTimeout(timer);
+      delete ocrIdleTimersRef.current[fieldId];
+    }
+  }, []);
 
   const ensureFabricModule = useCallback(async () => {
     if (!fabricModuleRef.current) {
@@ -364,10 +393,16 @@ export function VisitHandwrittenPrescription({
       syncingWritableCanvasesRef.current = true;
       try {
         for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-          const canvas = regionCanvasesRef.current[fieldId];
-          if (!canvas) continue;
-          await canvas.loadFromJSON(regions[fieldId]?.fabricJson ?? EMPTY_FABRIC_JSON);
-          canvas.requestRenderAll();
+          const drawCanvas = drawCanvasesRef.current[fieldId];
+          const ocrCanvas = ocrCanvasesRef.current[fieldId];
+          if (drawCanvas) {
+            await drawCanvas.loadFromJSON(regions[fieldId]?.fabricJson ?? EMPTY_FABRIC_JSON);
+            drawCanvas.requestRenderAll();
+          }
+          if (ocrCanvas) {
+            await ocrCanvas.loadFromJSON(regions[fieldId]?.ocrFabricJson ?? EMPTY_FABRIC_JSON);
+            ocrCanvas.requestRenderAll();
+          }
         }
       } finally {
         syncingWritableCanvasesRef.current = false;
@@ -380,18 +415,36 @@ export function VisitHandwrittenPrescription({
     if (!open) return;
     const fabric = await ensureFabricModule();
     for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-      const canvas = regionCanvasesRef.current[fieldId];
-      if (!canvas) continue;
-      const brush =
-        canvas.freeDrawingBrush instanceof fabric.PencilBrush ? canvas.freeDrawingBrush : new fabric.PencilBrush(canvas);
-      brush.color = "#111827";
-      brush.width = Math.max(0.8, strokeWidth);
-      brush.decimate = 0.4;
-      canvas.freeDrawingBrush = brush;
-      canvas.isDrawingMode = tool === "draw" && editorStateRef.current.ocrRegions[fieldId]?.mode !== "ocr";
-      canvas.selection = false;
-      canvas.skipTargetFind = true;
-      canvas.requestRenderAll();
+      const drawCanvas = drawCanvasesRef.current[fieldId];
+      const ocrCanvas = ocrCanvasesRef.current[fieldId];
+      if (drawCanvas) {
+        const drawBrush =
+          drawCanvas.freeDrawingBrush instanceof fabric.PencilBrush
+            ? drawCanvas.freeDrawingBrush
+            : new fabric.PencilBrush(drawCanvas);
+        drawBrush.color = "#111827";
+        drawBrush.width = Math.max(0.8, strokeWidth);
+        drawBrush.decimate = 0.4;
+        drawCanvas.freeDrawingBrush = drawBrush;
+        drawCanvas.isDrawingMode = tool === "draw";
+        drawCanvas.selection = false;
+        drawCanvas.skipTargetFind = true;
+        drawCanvas.requestRenderAll();
+      }
+      if (ocrCanvas) {
+        const ocrBrush =
+          ocrCanvas.freeDrawingBrush instanceof fabric.PencilBrush
+            ? ocrCanvas.freeDrawingBrush
+            : new fabric.PencilBrush(ocrCanvas);
+        ocrBrush.color = "#111827";
+        ocrBrush.width = Math.max(0.8, strokeWidth);
+        ocrBrush.decimate = 0.4;
+        ocrCanvas.freeDrawingBrush = ocrBrush;
+        ocrCanvas.isDrawingMode = tool === "ocr";
+        ocrCanvas.selection = false;
+        ocrCanvas.skipTargetFind = true;
+        ocrCanvas.requestRenderAll();
+      }
     }
   }, [ensureFabricModule, open, strokeWidth, tool]);
 
@@ -459,49 +512,91 @@ export function VisitHandwrittenPrescription({
       if (cancelled) return;
 
       for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-        const node = regionCanvasElementsRef.current[fieldId];
-        if (!node || regionCanvasesRef.current[fieldId]) continue;
-        const rect = node.parentElement?.getBoundingClientRect() ?? node.getBoundingClientRect();
-        const width = Math.max(24, Math.round(rect.width || node.clientWidth || 24));
-        const height = Math.max(20, Math.round(rect.height || node.clientHeight || 20));
-        const canvas = new fabric.Canvas(node, {
-          width,
-          height,
-          selection: false,
-          skipTargetFind: true,
-          isDrawingMode: false,
-          backgroundColor: "rgba(255,255,255,0)",
-        });
-        const brush = new fabric.PencilBrush(canvas);
-        brush.color = "#111827";
-        brush.width = Math.max(0.8, strokeWidth);
-        brush.decimate = 0.4;
-        canvas.freeDrawingBrush = brush;
-        canvas.on("mouse:down", () => {
-          setSelectedFieldId(fieldId);
-        });
-        canvas.on("path:created", () => {
-          if (syncingWritableCanvasesRef.current) return;
-          pushUndoSnapshot();
-          const nextCanvas = regionCanvasesRef.current[fieldId];
-          if (!nextCanvas) return;
-          const inkBounds = getCanvasInkBounds(nextCanvas);
-          setEditorState((prev) => {
-            const next = cloneSheetState(prev);
-            next.ocrRegions[fieldId] = {
-              mode: "ink",
-              text: "",
-              ocrText: "",
-              fabricJson: serializeRegionCanvas(nextCanvas),
-              inkBounds,
-              textBox: null,
-              fontSize: null,
-            };
-            editorStateRef.current = next;
-            return next;
+        const drawNode = drawCanvasElementsRef.current[fieldId];
+        const ocrNode = ocrCanvasElementsRef.current[fieldId];
+        if ((!drawNode && !ocrNode) || (drawCanvasesRef.current[fieldId] && ocrCanvasesRef.current[fieldId])) continue;
+        const measureNode = drawNode ?? ocrNode;
+        if (!measureNode) continue;
+        const rect = measureNode.parentElement?.getBoundingClientRect() ?? measureNode.getBoundingClientRect();
+        const width = Math.max(24, Math.round(rect.width || measureNode.clientWidth || 24));
+        const height = Math.max(20, Math.round(rect.height || measureNode.clientHeight || 20));
+        if (drawNode && !drawCanvasesRef.current[fieldId]) {
+          const drawCanvas = new fabric.Canvas(drawNode, {
+            width,
+            height,
+            selection: false,
+            skipTargetFind: true,
+            isDrawingMode: false,
+            backgroundColor: "rgba(255,255,255,0)",
           });
-        });
-        regionCanvasesRef.current[fieldId] = canvas;
+          const drawBrush = new fabric.PencilBrush(drawCanvas);
+          drawBrush.color = "#111827";
+          drawBrush.width = Math.max(0.8, strokeWidth);
+          drawBrush.decimate = 0.4;
+          drawCanvas.freeDrawingBrush = drawBrush;
+          drawCanvas.on("mouse:down", () => {
+            setSelectedFieldId(fieldId);
+          });
+          drawCanvas.on("path:created", () => {
+            if (syncingWritableCanvasesRef.current) return;
+            pushUndoSnapshot();
+            const nextCanvas = drawCanvasesRef.current[fieldId];
+            if (!nextCanvas) return;
+            const inkBounds = getCanvasInkBounds(nextCanvas);
+            setEditorState((prev) => {
+              const next = cloneSheetState(prev);
+              next.ocrRegions[fieldId] = {
+                ...next.ocrRegions[fieldId],
+                mode: "ink",
+                fabricJson: serializeRegionCanvas(nextCanvas),
+                inkBounds,
+              };
+              editorStateRef.current = next;
+              return next;
+            });
+          });
+          drawCanvasesRef.current[fieldId] = drawCanvas;
+        }
+        if (ocrNode && !ocrCanvasesRef.current[fieldId]) {
+          const ocrCanvas = new fabric.Canvas(ocrNode, {
+            width,
+            height,
+            selection: false,
+            skipTargetFind: true,
+            isDrawingMode: false,
+            backgroundColor: "rgba(255,255,255,0)",
+          });
+          const ocrBrush = new fabric.PencilBrush(ocrCanvas);
+          ocrBrush.color = "#111827";
+          ocrBrush.width = Math.max(0.8, strokeWidth);
+          ocrBrush.decimate = 0.4;
+          ocrCanvas.freeDrawingBrush = ocrBrush;
+          ocrCanvas.on("mouse:down", () => {
+            setSelectedFieldId(fieldId);
+            clearOcrIdleTimer(fieldId);
+          });
+          ocrCanvas.on("path:created", () => {
+            if (syncingWritableCanvasesRef.current) return;
+            pushUndoSnapshot();
+            const nextCanvas = ocrCanvasesRef.current[fieldId];
+            if (!nextCanvas) return;
+            setEditorState((prev) => {
+              const next = cloneSheetState(prev);
+              next.ocrRegions[fieldId] = {
+                ...next.ocrRegions[fieldId],
+                mode: "ocr",
+                ocrFabricJson: serializeRegionCanvas(nextCanvas),
+              };
+              editorStateRef.current = next;
+              return next;
+            });
+            clearOcrIdleTimer(fieldId);
+            ocrIdleTimersRef.current[fieldId] = window.setTimeout(() => {
+              convertPendingOcrRegionRef.current(fieldId);
+            }, 2000);
+          });
+          ocrCanvasesRef.current[fieldId] = ocrCanvas;
+        }
       }
 
       await syncWritableCanvases(editorStateRef.current.ocrRegions);
@@ -511,11 +606,14 @@ export function VisitHandwrittenPrescription({
     return () => {
       cancelled = true;
       for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-        regionCanvasesRef.current[fieldId]?.dispose();
+        clearOcrIdleTimer(fieldId);
+        drawCanvasesRef.current[fieldId]?.dispose();
+        ocrCanvasesRef.current[fieldId]?.dispose();
       }
-      regionCanvasesRef.current = {};
+      drawCanvasesRef.current = {};
+      ocrCanvasesRef.current = {};
     };
-  }, [applyWritableCanvasSettings, ensureFabricModule, open, pushUndoSnapshot, strokeWidth, syncWritableCanvases]);
+  }, [applyWritableCanvasSettings, clearOcrIdleTimer, ensureFabricModule, open, pushUndoSnapshot, strokeWidth, syncWritableCanvases]);
 
   useEffect(() => {
     void applyWritableCanvasSettings();
@@ -691,56 +789,78 @@ export function VisitHandwrittenPrescription({
 
   const clearAnnotations = useCallback(() => {
     pushUndoSnapshot();
+    textEditSnapshotFieldRef.current = null;
+    textEditSnapshotTokenRef.current = null;
     for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-      const canvas = regionCanvasesRef.current[fieldId];
-      if (!canvas) continue;
-      canvas.remove(...canvas.getObjects());
-      canvas.requestRenderAll();
+      clearOcrIdleTimer(fieldId);
+      const drawCanvas = drawCanvasesRef.current[fieldId];
+      const ocrCanvas = ocrCanvasesRef.current[fieldId];
+      if (drawCanvas) {
+        drawCanvas.remove(...drawCanvas.getObjects());
+        drawCanvas.requestRenderAll();
+      }
+      if (ocrCanvas) {
+        ocrCanvas.remove(...ocrCanvas.getObjects());
+        ocrCanvas.requestRenderAll();
+      }
     }
-    setEditorState((prev) => ({
-      ...prev,
-      highlights: [],
-      inkFallbacks: [],
-      ocrRegions: HANDWRITTEN_VISIT_FIELD_IDS.reduce(
-        (acc, fieldId) => {
-          acc[fieldId] = createEmptyWritableRegionState();
-          return acc;
-        },
-        {} as HandwrittenVisitSheetState["ocrRegions"],
-      ),
-    }));
-  }, [pushUndoSnapshot]);
+    setEditorState((prev) => {
+      const next = {
+        ...prev,
+        highlights: [],
+        inkFallbacks: [],
+        wordTokens: [],
+        ocrRegions: HANDWRITTEN_VISIT_FIELD_IDS.reduce(
+          (acc, fieldId) => {
+            acc[fieldId] = createEmptyWritableRegionState();
+            return acc;
+          },
+          {} as HandwrittenVisitSheetState["ocrRegions"],
+        ),
+      };
+      editorStateRef.current = next;
+      return next;
+    });
+  }, [clearOcrIdleTimer, pushUndoSnapshot]);
 
   const clearWritableRegion = useCallback((fieldId: HandwrittenVisitFieldId) => {
-    const canvas = regionCanvasesRef.current[fieldId];
+    const drawCanvas = drawCanvasesRef.current[fieldId];
+    const ocrCanvas = ocrCanvasesRef.current[fieldId];
     pushUndoSnapshot();
-    if (canvas) {
-      canvas.remove(...canvas.getObjects());
-      canvas.requestRenderAll();
+    clearOcrIdleTimer(fieldId);
+    if (drawCanvas) {
+      drawCanvas.remove(...drawCanvas.getObjects());
+      drawCanvas.requestRenderAll();
+    }
+    if (ocrCanvas) {
+      ocrCanvas.remove(...ocrCanvas.getObjects());
+      ocrCanvas.requestRenderAll();
     }
     setEditorState((prev) => {
       const next = cloneSheetState(prev);
       next.ocrRegions[fieldId] = createEmptyWritableRegionState();
+      next.wordTokens = next.wordTokens.filter((token) => token.fieldId !== fieldId);
       editorStateRef.current = next;
       return next;
     });
     textEditSnapshotFieldRef.current = null;
-  }, [pushUndoSnapshot]);
+    textEditSnapshotTokenRef.current = null;
+  }, [clearOcrIdleTimer, pushUndoSnapshot]);
 
-  const recognizeSingleWritableRegion = useCallback(async (fieldId: HandwrittenVisitFieldId) => {
-    const canvas = regionCanvasesRef.current[fieldId];
+  const recognizePendingOcrRegion = useCallback(async (fieldId: HandwrittenVisitFieldId) => {
+    const canvas = ocrCanvasesRef.current[fieldId];
     if (!canvas || !canvasHasObjects(canvas)) {
-      setError(`Add handwriting inside ${WRITABLE_REGION_LABELS[fieldId]} before running OCR.`);
       return;
     }
 
     const inkBounds = getCanvasInkBounds(canvas);
     if (!inkBounds) {
-      setError(`Add handwriting inside ${WRITABLE_REGION_LABELS[fieldId]} before running OCR.`);
       return;
     }
 
+    clearOcrIdleTimer(fieldId);
     setOcrPendingFieldId(fieldId);
+    setSelectedFieldId(fieldId);
     setMessage(null);
     setError(null);
 
@@ -755,111 +875,56 @@ export function VisitHandwrittenPrescription({
         singleLine,
         ...ocrPayload,
       });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      const text = result.text;
-      if (!text) {
-        setError(`OCR could not read ${WRITABLE_REGION_LABELS[fieldId]}. Try writing darker or more clearly.`);
+      if (!result.ok || !result.text.trim()) {
+        setError(result.ok ? `OCR could not read ${WRITABLE_REGION_LABELS[fieldId]}.` : result.error);
         return;
       }
 
       const textBox = getWritableTextBox(inkBounds, canvas.getWidth(), canvas.getHeight());
-      const fontSize = getWritableFontSize(textBox, canvas.getHeight());
+      const fontSize = Math.max(10, getWritableFontSize(textBox, canvas.getHeight()) * 0.92);
+      const nextTokenId = crypto.randomUUID();
 
       pushUndoSnapshot();
       setEditorState((prev) => {
         const next = cloneSheetState(prev);
+        next.wordTokens = [
+          ...next.wordTokens,
+          {
+            id: nextTokenId,
+            fieldId,
+            text: result.text.trim(),
+            x: textBox.x,
+            y: textBox.y,
+            width: textBox.width,
+            height: textBox.height,
+            fontSize,
+          },
+        ];
         next.ocrRegions[fieldId] = {
+          ...next.ocrRegions[fieldId],
           mode: "ocr",
-          text,
-          ocrText: text,
-          fabricJson: serializeRegionCanvas(canvas),
-          inkBounds,
-          textBox,
-          fontSize,
+          ocrText: result.text.trim(),
+          ocrFabricJson: null,
         };
         editorStateRef.current = next;
         return next;
       });
-      setSelectedFieldId(fieldId);
+
+      canvas.remove(...canvas.getObjects());
+      canvas.requestRenderAll();
       setMessage(`${WRITABLE_REGION_LABELS[fieldId]} converted to typed text.`);
     } catch (ocrError) {
       setError(ocrError instanceof Error ? ocrError.message : "Failed to convert handwriting to text.");
     } finally {
       setOcrPendingFieldId(null);
     }
-  }, [pushUndoSnapshot, visitId]);
+  }, [clearOcrIdleTimer, pushUndoSnapshot, visitId]);
 
-  const recognizeAllWritableRegions = useCallback(async () => {
-    const targets = HANDWRITTEN_VISIT_FIELD_IDS.filter((fieldId) => canvasHasObjects(regionCanvasesRef.current[fieldId]));
-    if (!targets.length) {
-      setError("Add handwriting inside at least one writable region before running OCR.");
-      return;
-    }
-
-    setOcrAllPending(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const nextState = createSnapshot();
-      let converted = 0;
-      let firstConvertedField: HandwrittenVisitFieldId | null = null;
-
-      for (const fieldId of targets) {
-        const canvas = regionCanvasesRef.current[fieldId];
-        if (!canvas) continue;
-        const inkBounds = getCanvasInkBounds(canvas);
-        if (!inkBounds) continue;
-        const singleLine = canvas.getHeight() <= 52;
-        const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
-        const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
-        const result = await recognizeHandwrittenRegionAction({
-          visitId,
-          fieldId,
-          fieldLabel: WRITABLE_REGION_LABELS[fieldId],
-          singleLine,
-          ...ocrPayload,
-        });
-        if (!result.ok) continue;
-        const text = result.text;
-        if (!text) continue;
-        const textBox = getWritableTextBox(inkBounds, canvas.getWidth(), canvas.getHeight());
-        nextState.ocrRegions[fieldId] = {
-          mode: "ocr",
-          text,
-          ocrText: text,
-          fabricJson: serializeRegionCanvas(canvas),
-          inkBounds,
-          textBox,
-          fontSize: getWritableFontSize(textBox, canvas.getHeight()),
-        };
-        converted += 1;
-        if (!firstConvertedField) {
-          firstConvertedField = fieldId;
-        }
-      }
-
-      if (!converted) {
-        setError("OCR could not read the written regions. Try darker writing or smaller groups of text.");
-        return;
-      }
-
-      pushUndoSnapshot();
-      editorStateRef.current = nextState;
-      setEditorState(nextState);
-      if (firstConvertedField) {
-        setSelectedFieldId(firstConvertedField);
-      }
-      setMessage(`Converted ${converted} handwritten region${converted === 1 ? "" : "s"} to typed text.`);
-    } catch (ocrError) {
-      setError(ocrError instanceof Error ? ocrError.message : "Failed to convert handwriting to text.");
-    } finally {
-      setOcrAllPending(false);
-    }
-  }, [createSnapshot, pushUndoSnapshot, visitId]);
+  useEffect(() => {
+    convertPendingOcrRegionRef.current = (fieldId: HandwrittenVisitFieldId) => {
+      void recognizePendingOcrRegion(fieldId);
+    };
+  }, [recognizePendingOcrRegion]);
 
   const handleSelectedRegionTextFocus = useCallback(() => {
     if (!selectedFieldId) return;
@@ -884,6 +949,25 @@ export function VisitHandwrittenPrescription({
       return next;
     });
   }, [selectedFieldId]);
+
+  const handleSelectedTokenFocus = useCallback((tokenId: string) => {
+    if (textEditSnapshotTokenRef.current === tokenId) return;
+    pushUndoSnapshot();
+    textEditSnapshotTokenRef.current = tokenId;
+  }, [pushUndoSnapshot]);
+
+  const handleSelectedTokenBlur = useCallback(() => {
+    textEditSnapshotTokenRef.current = null;
+  }, []);
+
+  const handleSelectedTokenTextChange = useCallback((tokenId: string, value: string) => {
+    setEditorState((prev) => {
+      const next = cloneSheetState(prev);
+      next.wordTokens = next.wordTokens.map((token) => (token.id === tokenId ? { ...token, text: value } : token));
+      editorStateRef.current = next;
+      return next;
+    });
+  }, []);
 
   const handleWritableRegionPointerDown = useCallback((fieldId: HandwrittenVisitFieldId) => {
     setSelectedFieldId(fieldId);
@@ -920,6 +1004,12 @@ export function VisitHandwrittenPrescription({
     try {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
+      }
+
+       for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+        if (canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
+          await recognizePendingOcrRegion(fieldId);
+        }
       }
 
       await new Promise<void>((resolve) => {
@@ -967,62 +1057,107 @@ export function VisitHandwrittenPrescription({
     () =>
       HANDWRITTEN_VISIT_FIELD_IDS.some((fieldId) => {
         const region = editorState.ocrRegions[fieldId];
-        return Boolean(region.text.trim() || hasSerializedFabricObjects(region.fabricJson));
+        return Boolean(
+          region.text.trim() ||
+            hasSerializedFabricObjects(region.fabricJson) ||
+            hasSerializedFabricObjects(region.ocrFabricJson) ||
+            editorState.wordTokens.some((token) => token.fieldId === fieldId),
+        );
       }),
-    [editorState.ocrRegions],
+    [editorState.ocrRegions, editorState.wordTokens],
   );
   const selectedRegion = editorState.ocrRegions[selectedFieldId];
+  const selectedRegionTokens = useMemo(
+    () =>
+      editorState.wordTokens
+        .filter((token) => token.fieldId === selectedFieldId)
+        .sort((a, b) => a.y - b.y || a.x - b.x),
+    [editorState.wordTokens, selectedFieldId],
+  );
   const selectedRegionHasInk =
-    canvasHasObjects(regionCanvasesRef.current[selectedFieldId]) || hasSerializedFabricObjects(selectedRegion?.fabricJson);
-  const busyOcr = ocrAllPending || Boolean(ocrPendingFieldId);
+    canvasHasObjects(drawCanvasesRef.current[selectedFieldId]) ||
+    canvasHasObjects(ocrCanvasesRef.current[selectedFieldId]) ||
+    hasSerializedFabricObjects(selectedRegion?.fabricJson) ||
+    hasSerializedFabricObjects(selectedRegion?.ocrFabricJson) ||
+    Boolean(selectedRegion?.text.trim()) ||
+    selectedRegionTokens.length > 0;
 
   const renderWritableRegion = useCallback(
     (fieldId: HandwrittenVisitFieldId) => {
       const region = editorState.ocrRegions[fieldId];
       const isSelected = selectedFieldId === fieldId;
-      const showTypedText = region.mode === "ocr" && region.text.trim().length > 0;
-      const textBox = region.textBox ?? {
-        x: 2,
-        y: 2,
-        width: 160,
-        height: 28,
-      };
+      const tokens = editorState.wordTokens
+        .filter((token) => token.fieldId === fieldId)
+        .sort((a, b) => a.y - b.y || a.x - b.x);
       return (
-        <div className="absolute inset-0 z-[2]">
-          <button
-            type="button"
-            aria-label={`Select ${WRITABLE_REGION_LABELS[fieldId]}`}
-            className={`absolute inset-0 rounded-[4px] ${
-              capturingPdf ? "" : isSelected ? "shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]" : ""
+        <div className="absolute inset-0 z-[2] pointer-events-none">
+          {!capturingPdf ? (
+            <div
+              className={`absolute inset-0 rounded-[4px] ${isSelected ? "shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]" : ""}`}
+            />
+          ) : null}
+          <canvas
+            ref={(node) => registerDrawCanvasRef(fieldId, node)}
+            className={`absolute inset-0 h-full w-full ${
+              tool === "draw" ? "pointer-events-auto" : "pointer-events-none"
             }`}
-            onPointerDown={() => handleWritableRegionPointerDown(fieldId)}
           />
           <canvas
-            ref={(node) => registerRegionCanvasRef(fieldId, node)}
+            ref={(node) => registerOcrCanvasRef(fieldId, node)}
             className={`absolute inset-0 h-full w-full ${
-              showTypedText || tool === "highlight" || tool === "scroll" || tool === "erase"
-                ? "pointer-events-none"
-                : "pointer-events-auto"
-            } ${showTypedText ? "opacity-0" : "opacity-100"}`}
+              tool === "ocr" ? "pointer-events-auto" : "pointer-events-none"
+            }`}
           />
-          {showTypedText ? (
+          {tool === "erase" || tool === "scroll" ? (
+            <button
+              type="button"
+              aria-label={`Select ${WRITABLE_REGION_LABELS[fieldId]}`}
+              className="pointer-events-auto absolute inset-0 rounded-[4px]"
+              onPointerDown={() => handleWritableRegionPointerDown(fieldId)}
+            />
+          ) : null}
+          {region.text.trim() && region.textBox ? (
             <div
               className="pointer-events-none absolute overflow-hidden whitespace-pre-wrap break-words text-left leading-[1.15] text-slate-900"
               style={{
-                left: textBox.x,
-                top: textBox.y,
-                width: textBox.width,
-                minHeight: textBox.height,
+                left: region.textBox.x,
+                top: region.textBox.y,
+                width: region.textBox.width,
+                minHeight: region.textBox.height,
                 fontSize: region.fontSize ?? 12,
               }}
             >
               {region.text}
             </div>
           ) : null}
+          {tokens.map((token) => (
+            <div
+              key={token.id}
+              className="pointer-events-none absolute overflow-hidden whitespace-pre-wrap break-words text-left leading-[1.15] text-slate-900"
+              style={{
+                left: token.x,
+                top: token.y,
+                width: token.width,
+                minHeight: token.height,
+                fontSize: token.fontSize,
+              }}
+            >
+              {token.text}
+            </div>
+          ))}
         </div>
       );
     },
-    [capturingPdf, editorState.ocrRegions, handleWritableRegionPointerDown, registerRegionCanvasRef, selectedFieldId, tool],
+    [
+      capturingPdf,
+      editorState.ocrRegions,
+      editorState.wordTokens,
+      handleWritableRegionPointerDown,
+      registerDrawCanvasRef,
+      registerOcrCanvasRef,
+      selectedFieldId,
+      tool,
+    ],
   );
 
   const toolbarBody = (
@@ -1030,8 +1165,11 @@ export function VisitHandwrittenPrescription({
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Tools</p>
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" aria-label="Write" title="Write" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+          <button type="button" aria-label="Normal write" title="Normal write" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
             <ToolIcon tool="draw" />
+          </button>
+          <button type="button" aria-label="Instant OCR" title="Instant OCR" className={toolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+            <ToolIcon tool="ocr" />
           </button>
           <button type="button" aria-label="Highlight" title="Highlight" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
             <ToolIcon tool="highlight" />
@@ -1058,6 +1196,34 @@ export function VisitHandwrittenPrescription({
         />
       </label>
 
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Zoom</span>
+          <span className="text-[11px] font-semibold text-slate-700">{Math.round(zoom * 100)}%</span>
+        </div>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            className="btn-secondary btn-compact flex-1 text-xs"
+            disabled={zoom <= 0.6}
+            onClick={() => setZoom((current) => Math.max(0.6, Number((current - 0.1).toFixed(2))))}
+          >
+            Zoom out
+          </button>
+          <button type="button" className="btn-secondary btn-compact flex-1 text-xs" onClick={() => setZoom(1)}>
+            100%
+          </button>
+          <button
+            type="button"
+            className="btn-secondary btn-compact flex-1 text-xs"
+            disabled={zoom >= 2}
+            onClick={() => setZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
+          >
+            Zoom in
+          </button>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <button type="button" className="btn-secondary btn-compact text-xs" disabled={!undoStack.length} onClick={undo}>
           Undo
@@ -1073,32 +1239,16 @@ export function VisitHandwrittenPrescription({
         >
           Clear ink
         </button>
-        <button
-          type="button"
-          className="btn-secondary btn-compact text-xs"
-          disabled={!selectedRegionHasInk || busyOcr}
-          onClick={() => void recognizeSingleWritableRegion(selectedFieldId)}
-        >
-          {ocrPendingFieldId === selectedFieldId ? "OCR…" : "OCR selected"}
-        </button>
-        <button
-          type="button"
-          className="btn-secondary btn-compact text-xs"
-          disabled={!hasWritableContent || busyOcr}
-          onClick={() => void recognizeAllWritableRegions()}
-        >
-          {ocrAllPending ? "OCR all…" : "OCR all"}
-        </button>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-800">Tips</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>Use Write to handwrite inside the dedicated boxes on the template.</li>
-          <li>Each writable box has its own Fabric canvas and is exported separately for OCR.</li>
-          <li>Use OCR Selected or OCR All to convert handwriting into typed text in the same area.</li>
-          <li>Edit OCR mistakes in the panel below before saving the PDF.</li>
-          <li>Highlight still works on top of the visit form.</li>
+          <li>`Normal write` keeps your handwriting exactly as ink and never sends it for OCR.</li>
+          <li>`Instant OCR` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
+          <li>Normal ink and OCR text can live together in the same field without changing each other.</li>
+          <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
+          <li>Use `Convert to PDF` when the page looks right.</li>
         </ul>
       </div>
 
@@ -1109,23 +1259,18 @@ export function VisitHandwrittenPrescription({
           <button
             type="button"
             className="btn-secondary btn-compact text-xs"
-            disabled={!selectedRegionHasInk || busyOcr}
-            onClick={() => void recognizeSingleWritableRegion(selectedFieldId)}
-          >
-            {ocrPendingFieldId === selectedFieldId ? "Converting..." : "Convert to text"}
-          </button>
-          <button
-            type="button"
-            className="btn-secondary btn-compact text-xs"
-            disabled={!selectedRegionHasInk && !selectedRegion.text.trim()}
+            disabled={!selectedRegionHasInk}
             onClick={() => clearWritableRegion(selectedFieldId)}
           >
             Clear region
           </button>
         </div>
-        {selectedRegion.mode === "ocr" ? (
+        {ocrPendingFieldId === selectedFieldId ? (
+          <p className="mt-3 text-[11px] font-medium text-primary">Converting your latest OCR stroke to typed text…</p>
+        ) : null}
+        {selectedRegion.text.trim() ? (
           <label className="mt-3 block">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Edit OCR text</span>
+            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Legacy OCR text</span>
             <textarea
               rows={selectedFieldId === "prescription" || selectedFieldId === "physicalExamination" || selectedFieldId === "diagnosis" || selectedFieldId === "otherTests" ? 5 : 3}
               value={selectedRegion.text}
@@ -1138,11 +1283,32 @@ export function VisitHandwrittenPrescription({
               The typed text stays in the same box and will be saved in the handwritten PDF.
             </p>
           </label>
-        ) : (
+        ) : null}
+        {selectedRegionTokens.length ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Instant OCR snippets</p>
+            {selectedRegionTokens.map((token, index) => (
+              <label key={token.id} className="block">
+                <span className="text-[11px] text-slate-500">Snippet {index + 1}</span>
+                <input
+                  type="text"
+                  value={token.text}
+                  onFocus={() => handleSelectedTokenFocus(token.id)}
+                  onBlur={handleSelectedTokenBlur}
+                  onChange={(event) => handleSelectedTokenTextChange(token.id, event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-[12px] text-slate-900 shadow-sm outline-none focus:border-primary"
+                />
+              </label>
+            ))}
+          </div>
+        ) : !selectedRegion.text.trim() ? (
           <p className="mt-3 text-[11px] text-slate-500">
-            Draw inside this region, then convert it to text. The OCR result will replace the strokes visually while keeping their position.
+            Use either normal writing or instant OCR in this region. Instant OCR only converts the strokes drawn in OCR mode.
           </p>
-        )}
+        ) : null}
+        <button type="button" className="btn-primary btn-compact mt-4 text-xs" disabled={pending} onClick={() => void savePdf()}>
+          {pending ? "Converting to PDF…" : "Convert to PDF"}
+        </button>
       </div>
 
       {embed ? <p className="text-[11px] text-slate-500">Embedded visit mode still supports full handwritten save.</p> : null}
@@ -1163,8 +1329,11 @@ export function VisitHandwrittenPrescription({
         Move
       </button>
       <div className="space-y-2">
-        <button type="button" aria-label="Write" title="Write" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
+        <button type="button" aria-label="Normal write" title="Normal write" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
           <ToolIcon tool="draw" />
+        </button>
+        <button type="button" aria-label="Instant OCR" title="Instant OCR" className={compactToolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+          <ToolIcon tool="ocr" />
         </button>
         <button type="button" aria-label="Highlight" title="Highlight" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
           <ToolIcon tool="highlight" />
@@ -1189,6 +1358,38 @@ export function VisitHandwrittenPrescription({
           />
         </label>
 
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <span>Zoom</span>
+            <span>{Math.round(zoom * 100)}%</span>
+          </div>
+          <div className="mt-1 flex gap-1">
+            <button
+              type="button"
+              className="flex-1 rounded-md border border-slate-300 bg-white px-1 py-1 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+              disabled={zoom <= 0.6}
+              onClick={() => setZoom((current) => Math.max(0.6, Number((current - 0.1).toFixed(2))))}
+            >
+              -
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-md border border-slate-300 bg-white px-1 py-1 text-[10px] font-semibold text-slate-700"
+              onClick={() => setZoom(1)}
+            >
+              100
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-md border border-slate-300 bg-white px-1 py-1 text-[10px] font-semibold text-slate-700 disabled:opacity-50"
+              disabled={zoom >= 2}
+              onClick={() => setZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
         <button type="button" className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50" disabled={!undoStack.length} onClick={undo}>
           Undo
         </button>
@@ -1205,19 +1406,11 @@ export function VisitHandwrittenPrescription({
         </button>
         <button
           type="button"
-          className="w-full rounded-lg border border-slate-300/80 bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 disabled:opacity-50"
-          disabled={!selectedRegionHasInk || busyOcr}
-          onClick={() => void recognizeSingleWritableRegion(selectedFieldId)}
-        >
-          {ocrPendingFieldId === selectedFieldId ? "OCR..." : "OCR"}
-        </button>
-        <button
-          type="button"
           className="w-full rounded-lg border border-primary bg-primary px-2 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
           disabled={pending}
           onClick={() => void savePdf()}
         >
-          {pending ? "Saving..." : "Save"}
+          {pending ? "Converting..." : "Convert PDF"}
         </button>
         <button
           type="button"
@@ -1281,6 +1474,24 @@ export function VisitHandwrittenPrescription({
       </svg>
     </div>
   );
+  const displayedSheetStage = (
+    <div
+      className="relative"
+      style={{
+        width: HANDWRITTEN_VISIT_SHEET_WIDTH * zoom,
+        height: HANDWRITTEN_VISIT_SHEET_HEIGHT * zoom,
+      }}
+    >
+      <div
+        style={{
+          transform: `scale(${zoom})`,
+          transformOrigin: "top left",
+        }}
+      >
+        {sheetStage}
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -1289,8 +1500,8 @@ export function VisitHandwrittenPrescription({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-on-background">Interactive handwritten full visit sheet</p>
             <p className="text-[12px] text-on-surface-variant">
-              Use Fabric.js writable boxes for handwriting, convert each box to typed text with OCR, fix OCR mistakes,
-              and save the final sheet as a PDF.
+              Use two writing methods on the visit template: normal handwriting that stays as ink, and instant OCR that
+              turns only OCR-mode strokes into typed text after a short pause.
             </p>
             <p className="text-[11px] text-on-surface-variant">
               Patient: {petName || "—"} | Owner: {ownerName || "—"} | Doctor: {doctorName || "—"} | Clinic: {clinicName || "—"}
@@ -1332,7 +1543,7 @@ export function VisitHandwrittenPrescription({
               <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-950">
                 {fullscreenToolbar}
                 <div className="h-full overflow-x-auto overflow-y-auto bg-slate-950 p-4">
-                  <div className="flex min-h-full items-start justify-center">{sheetStage}</div>
+                  <div className="flex min-h-full items-start justify-center">{displayedSheetStage}</div>
                 </div>
               </div>
             ) : (
@@ -1341,7 +1552,7 @@ export function VisitHandwrittenPrescription({
                   <div>
                     <p className="font-headline text-base font-bold text-slate-900">Interactive handwritten full visit studio</p>
                     <p className="text-[12px] text-slate-600">
-                      Write freely on the fixed HTML form, then save the handwritten page exactly as a PDF.
+                      Normal write keeps your ink. Instant OCR converts only OCR-mode writing. Convert the finished page to PDF when ready.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1371,19 +1582,21 @@ export function VisitHandwrittenPrescription({
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
                       <div className="text-[12px] text-slate-600">
                         {scrollMode
-                          ? "Scroll / Edit mode is on. Select a writable region or use the checkboxes directly."
+                          ? "Scroll / Edit mode is on. Click checkboxes directly and move around the sheet safely."
                           : tool === "highlight"
                             ? "Highlight mode writes marker strokes across the whole template."
                             : tool === "erase"
                               ? "Eraser mode clears the writable region you tap."
-                              : "Write mode lets you handwrite inside the dedicated writable regions."}
+                              : tool === "ocr"
+                                ? "Instant OCR mode converts the latest OCR stroke group about 2 seconds after you stop writing."
+                                : "Normal write mode lets you handwrite inside the dedicated writable regions without OCR."}
                       </div>
                       <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
-                        {pending ? "Saving PDF…" : "Save handwritten visit"}
+                        {pending ? "Converting to PDF…" : "Convert to PDF"}
                       </button>
                     </div>
                     <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto p-4">
-                      <div className="mx-auto rounded-[24px] bg-white p-3 shadow-xl">{sheetStage}</div>
+                      <div className="mx-auto rounded-[24px] bg-white p-3 shadow-xl">{displayedSheetStage}</div>
                     </div>
                   </div>
                 </div>
