@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 import { getMarketingSiteSettings } from "@/lib/marketing/get-marketing-site";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 /**
  * Inbox for public-site alerts (contact form, new bookings). Set in Vercel so mail always reaches ops
@@ -35,7 +36,9 @@ export async function resolveClinicNotificationRecipients(
   const fallback = await resolveAdminNotificationEmail(supabase, clinicId);
   if (fallback) recipients.add(fallback.toLowerCase());
 
-  const { data: members, error: membersErr } = await supabase
+  const lookupClient = createServiceRoleClient() ?? supabase;
+
+  const { data: members, error: membersErr } = await lookupClient
     .from("user_clinic_memberships")
     .select("user_id, role")
     .eq("clinic_id", clinicId)
@@ -50,7 +53,7 @@ export async function resolveClinicNotificationRecipients(
     return Array.from(recipients);
   }
 
-  const { data: users, error: usersErr } = await supabase
+  const { data: users, error: usersErr } = await lookupClient
     .from("app_users")
     .select("id, email")
     .in("id", userIds)

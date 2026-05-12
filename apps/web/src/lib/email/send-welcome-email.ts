@@ -2,8 +2,24 @@ import { getPlatformBranding } from "@/lib/platform-branding";
 import { createHostingerTransport, getHostingerFromAddress } from "./hostinger-mail";
 import { renderBrandedEmail } from "./render-branded-email";
 
-function getPortalBaseUrl() {
-  return (process.env.NEXT_PUBLIC_WEB_APP_URL?.trim() || "http://localhost:3000").replace(/\/$/, "");
+type AdminCreatedAccessKind = "website" | "web";
+
+function getAccessUrls(kind: AdminCreatedAccessKind) {
+  if (kind === "website") {
+    return {
+      loginUrl: "https://greencoatvets.com",
+      passwordUrl: "https://greencoatvets.com",
+      ctaLabel: "Open main website",
+      accessLabel: "website access",
+    };
+  }
+
+  return {
+    loginUrl: "https://web.greencoatvets.com/login",
+    passwordUrl: "https://web.greencoatvets.com/profile",
+    ctaLabel: "Open clinic portal",
+    accessLabel: "clinic web access",
+  };
 }
 
 export async function sendPortalWelcomeEmail(params: {
@@ -47,6 +63,7 @@ export async function sendAdminCreatedPortalCredentialsEmail(params: {
   email: string;
   fullName: string;
   password: string;
+  accessKind: AdminCreatedAccessKind;
   roleLabel?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   const to = params.email.trim().toLowerCase();
@@ -60,9 +77,7 @@ export async function sendAdminCreatedPortalCredentialsEmail(params: {
 
   const branding = await getPlatformBranding();
   const brandName = branding.product_name || "GreenCoatVets";
-  const portalBaseUrl = getPortalBaseUrl();
-  const loginUrl = `${portalBaseUrl}/login`;
-  const profileUrl = `${portalBaseUrl}/profile`;
+  const accessUrls = getAccessUrls(params.accessKind);
   const mail = renderBrandedEmail({
     brandName,
     heading: "Your clinic portal account is ready",
@@ -72,20 +87,21 @@ export async function sendAdminCreatedPortalCredentialsEmail(params: {
         ? `You can now sign in as ${params.roleLabel} in the clinic workspace.`
         : "You can now sign in to the clinic workspace.",
       "Please change this temporary password immediately after your first login so you can set a password of your own choice.",
-      `After signing in, open My profile to update your password: ${profileUrl}`,
+      `Use this link after login to update your password: ${accessUrls.passwordUrl}`,
     ],
     details: [
       { label: "Login email", value: to },
       { label: "Temporary password", value: password },
+      { label: "Access", value: accessUrls.accessLabel },
       ...(params.roleLabel ? [{ label: "Assigned role", value: params.roleLabel }] : []),
     ],
     bullets: [
       "Sign in with the credentials above.",
-      "Open My profile in the portal after login.",
+      `Open ${accessUrls.passwordUrl} after login.`,
       "Set a new password that only you know.",
     ],
-    ctaLabel: "Open clinic portal",
-    ctaHref: loginUrl,
+    ctaLabel: accessUrls.ctaLabel,
+    ctaHref: accessUrls.loginUrl,
     footer: `${brandName} staff account setup`,
   });
 

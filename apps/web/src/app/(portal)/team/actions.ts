@@ -20,6 +20,10 @@ function formatRoleLabel(role: string) {
   return role.replace(/_/g, " ");
 }
 
+function getAccessKind(role: string): "website" | "web" {
+  return role === "marketing_editor" || role === "pet_owner" ? "website" : "web";
+}
+
 export async function getClinicTeamMembers(): Promise<TeamMemberRow[]> {
   const access = await getUserAccess();
   if (access.membership?.role !== "clinic_admin") {
@@ -101,6 +105,7 @@ export async function assignUserToClinicAction(formData: FormData) {
           email,
           fullName: fullName || email,
           password,
+          accessKind: getAccessKind(role),
           roleLabel: formatRoleLabel(role),
         });
         if (!result.sent) {

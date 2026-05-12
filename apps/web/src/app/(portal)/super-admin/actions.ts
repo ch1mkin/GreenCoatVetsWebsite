@@ -30,6 +30,10 @@ function formatRoleLabel(role: string) {
   return role.replace(/_/g, " ");
 }
 
+function getAccessKind(role: string): "website" | "web" {
+  return role === "marketing_editor" || role === "pet_owner" ? "website" : "web";
+}
+
 export async function createClinicAsSuperAdmin(formData: FormData) {
   await assertSuperAdmin();
   const name = String(formData.get("name") ?? "").trim();
@@ -345,6 +349,7 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
           email,
           fullName: fullName || email,
           password,
+          accessKind: getAccessKind(role),
           roleLabel: formatRoleLabel(role),
         });
         if (!result.sent) {
