@@ -14,6 +14,246 @@ import { assertVisitReportAccess } from "@/lib/visits/visit-report-access";
 
 const BUCKET = "medical-files";
 
+type RecognizeHandwrittenRegionResult =
+  | { ok: true; text: string; confidence: "high" | "medium" | "low"; source: "openrouter" | "local" }
+  | { ok: false; error: string };
+
+const HANDWRITTEN_FIELD_TRANSCRIPTION_HINTS: Record<string, string> = {
+  patientName: "This is usually a pet name. Do not autocorrect into common English words if the letters look unusual.",
+  ownerName: "This is a person's name. Preserve the visible spelling exactly and do not normalize it.",
+  mobile: "This should usually be digits, spaces, plus signs, or hyphens only.",
+  date: "This should usually be a date, often numbers with / or - separators.",
+  age: "This is usually a short age value such as 2y, 8m, 4 years, or similar.",
+  rt: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
+  rr: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
+  hr: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
+  crt: "This is a short clinical value. Keep digits, decimals, symbols, and brief units exactly as written.",
+  bw: "This is a short body-weight value. Keep digits, decimals, and units exactly as written.",
+  prescription: "This may include medicine names, doses, numbers, short abbreviations, and line breaks.",
+};
+
+function extractAssistantTextContent(
+  content:
+    | string
+    | Array<{
+        type?: string;
+        text?: string;
+      }>
+    | null
+    | undefined,
+) {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .map((item) => (item?.type === "text" && typeof item.text === "string" ? item.text : ""))
+    .join("\n")
+    .trim();
+}
+
+function normalizeHandwrittenOcrText(input: string) {
+  return input
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trimEnd())
+    .join("\n")
+    .trim();
+}
+
+function parseHandwrittenOcrJson(raw: string): { text: string; confidence: "high" | "medium" | "low" } | null {
+  const trimmed = raw.trim();
+  const jsonLike = trimmed.match(/\{[\s\S]*\}/)?.[0] ?? trimmed;
+  try {
+    const parsed = JSON.parse(jsonLike) as {
+      text?: unknown;
+      confidence?: unknown;
+    };
+    const text = normalizeHandwrittenOcrText(typeof parsed.text === "string" ? parsed.text : "");
+    const confidence = parsed.confidence === "high" || parsed.confidence === "medium" || parsed.confidence === "low"
+      ? parsed.confidence
+      : "medium";
+    return { text, confidence };
+  } catch {
+    return null;
+  }
+}
+
+export async function recognizeHandwrittenRegionAction(input: {
+  visitId: string;
+  fieldId: string;
+  fieldLabel: string;
+  singleLine?: boolean;
+  rawDataUrl: string;
+  contrastDataUrl: string;
+  boostedDataUrl: string;
+  localCandidates?: string[];
+}): Promise<RecognizeHandwrittenRegionResult> {
+  try {
+    const access = await getUserAccess();
+    if (access.membership?.role === "pet_owner") {
+      return { ok: false, error: "Only clinic staff can run handwritten OCR." };
+    }
+
+    const visitId = String(input.visitId ?? "").trim();
+    if (!visitId) {
+      return { ok: false, error: "Visit id is required for OCR." };
+    }
+
+    const supabase = createClient();
+    await assertVisitReportAccess(supabase, access, visitId);
+
+    const rawDataUrl = String(input.rawDataUrl ?? "").trim();
+    const contrastDataUrl = String(input.contrastDataUrl ?? "").trim();
+    const boostedDataUrl = String(input.boostedDataUrl ?? "").trim();
+    const localCandidates = Array.isArray(input.localCandidates)
+      ? input.localCandidates
+          .map((candidate) => String(candidate ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+
+    if (!rawDataUrl || !contrastDataUrl || !boostedDataUrl) {
+      return { ok: false, error: "Handwritten OCR images are missing." };
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      const fallbackText = normalizeHandwrittenOcrText(localCandidates[0] ?? "");
+      if (!fallbackText) {
+        return { ok: false, error: "Missing OPENROUTER_API_KEY and no fallback OCR result was available." };
+      }
+      return {
+        ok: true,
+        text: fallbackText,
+        confidence: "low",
+        source: "local",
+      };
+    }
+
+    const model = process.env.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_OCR_MODEL || "openai/gpt-4o-mini";
+    const fieldLabel = String(input.fieldLabel ?? "").trim() || "clinical handwritten field";
+    const fieldHint =
+      HANDWRITTEN_FIELD_TRANSCRIPTION_HINTS[String(input.fieldId ?? "").trim()] ||
+      "Transcribe the handwriting exactly as seen. Do not autocorrect names, spellings, abbreviations, or numbers.";
+    const localCandidateText = localCandidates.length ? localCandidates.join(" | ") : "none";
+
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        max_tokens: 180,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an expert handwriting transcription model for veterinary notes. Compare all provided images of the same handwritten crop and return the exact visible text. Preserve spelling, case, numbers, abbreviations, and line breaks. Never autocorrect. If a single letter is written, return that single letter only. Respond with JSON only: {\"text\":\"...\",\"confidence\":\"high|medium|low\"}.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: [
+                  `Field label: ${fieldLabel}`,
+                  `Layout: ${input.singleLine ? "single-line region" : "multi-line region"}`,
+                  `Field-specific hint: ${fieldHint}`,
+                  `Weak OCR candidate hints: ${localCandidateText}`,
+                  "Task: read the handwritten text exactly from these three images of the same crop.",
+                  "Rules:",
+                  "- use the images, not the candidate hints, if they disagree",
+                  "- do not add words that are not visible",
+                  "- do not normalize spelling",
+                  "- do not wrap the result in markdown or quotes outside JSON",
+                ].join("\n"),
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: rawDataUrl,
+                },
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: contrastDataUrl,
+                },
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: boostedDataUrl,
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const payload = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?:
+            | string
+            | Array<{
+                type?: string;
+                text?: string;
+              }>;
+        };
+      }>;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      const fallbackText = normalizeHandwrittenOcrText(localCandidates[0] ?? "");
+      if (fallbackText) {
+        return {
+          ok: true,
+          text: fallbackText,
+          confidence: "low",
+          source: "local",
+        };
+      }
+      return { ok: false, error: payload.error?.message ?? "Handwritten OCR failed." };
+    }
+
+    const rawContent = extractAssistantTextContent(payload.choices?.[0]?.message?.content);
+    const parsed = parseHandwrittenOcrJson(rawContent);
+    const bestText = normalizeHandwrittenOcrText(parsed?.text || rawContent);
+    if (bestText) {
+      return {
+        ok: true,
+        text: bestText,
+        confidence: parsed?.confidence ?? "medium",
+        source: "openrouter",
+      };
+    }
+
+    const fallbackText = normalizeHandwrittenOcrText(localCandidates[0] ?? "");
+    if (fallbackText) {
+      return {
+        ok: true,
+        text: fallbackText,
+        confidence: "low",
+        source: "local",
+      };
+    }
+
+    return { ok: false, error: "No OCR text could be extracted from the handwritten region." };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to run handwritten OCR.",
+    };
+  }
+}
+
 /**
  * Generates the PDF, uploads to medical-files, and stores the path on the visit row (attachment for pet profile).
  */

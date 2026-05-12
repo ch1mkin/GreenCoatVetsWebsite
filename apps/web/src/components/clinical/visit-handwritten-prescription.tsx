@@ -4,9 +4,12 @@ import { toBlob as domToBlob } from "html-to-image";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
+import {
+  recognizeHandwrittenRegionAction,
+  saveHandwrittenVisitPdfAction,
+} from "@/app/(portal)/visits/visit-report-actions";
 import { VisitHandwrittenHtmlSheet } from "@/components/clinical/visit-handwritten-html-sheet";
-import { runHandwrittenRegionOcr } from "@/lib/visits/handwritten-ocr";
+import { prepareHandwrittenRegionOcrPayload } from "@/lib/visits/handwritten-ocr";
 import type {
   HandwrittenVisitCheckboxId,
   HandwrittenVisitFieldId,
@@ -742,10 +745,21 @@ export function VisitHandwrittenPrescription({
     setError(null);
 
     try {
+      const singleLine = canvas.getHeight() <= 52;
       const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
-      const text = await runHandwrittenRegionOcr(imageDataUrl, {
-        singleLine: canvas.getHeight() <= 52,
+      const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
+      const result = await recognizeHandwrittenRegionAction({
+        visitId,
+        fieldId,
+        fieldLabel: WRITABLE_REGION_LABELS[fieldId],
+        singleLine,
+        ...ocrPayload,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const text = result.text;
       if (!text) {
         setError(`OCR could not read ${WRITABLE_REGION_LABELS[fieldId]}. Try writing darker or more clearly.`);
         return;
@@ -776,7 +790,7 @@ export function VisitHandwrittenPrescription({
     } finally {
       setOcrPendingFieldId(null);
     }
-  }, [pushUndoSnapshot]);
+  }, [pushUndoSnapshot, visitId]);
 
   const recognizeAllWritableRegions = useCallback(async () => {
     const targets = HANDWRITTEN_VISIT_FIELD_IDS.filter((fieldId) => canvasHasObjects(regionCanvasesRef.current[fieldId]));
@@ -799,10 +813,18 @@ export function VisitHandwrittenPrescription({
         if (!canvas) continue;
         const inkBounds = getCanvasInkBounds(canvas);
         if (!inkBounds) continue;
+        const singleLine = canvas.getHeight() <= 52;
         const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
-        const text = await runHandwrittenRegionOcr(imageDataUrl, {
-          singleLine: canvas.getHeight() <= 52,
+        const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
+        const result = await recognizeHandwrittenRegionAction({
+          visitId,
+          fieldId,
+          fieldLabel: WRITABLE_REGION_LABELS[fieldId],
+          singleLine,
+          ...ocrPayload,
         });
+        if (!result.ok) continue;
+        const text = result.text;
         if (!text) continue;
         const textBox = getWritableTextBox(inkBounds, canvas.getWidth(), canvas.getHeight());
         nextState.ocrRegions[fieldId] = {
@@ -837,7 +859,7 @@ export function VisitHandwrittenPrescription({
     } finally {
       setOcrAllPending(false);
     }
-  }, [createSnapshot, pushUndoSnapshot]);
+  }, [createSnapshot, pushUndoSnapshot, visitId]);
 
   const handleSelectedRegionTextFocus = useCallback(() => {
     if (!selectedFieldId) return;
