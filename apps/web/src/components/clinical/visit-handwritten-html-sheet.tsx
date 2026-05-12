@@ -514,8 +514,9 @@ export function VisitHandwrittenHtmlSheet({
         .watermark {
           position: absolute;
           width: 390px;
-          right: 40px;
-          bottom: 120px;
+          left: 67%;
+          top: 360px;
+          transform: translateX(-50%);
           opacity: 0.12;
           z-index: 0;
           pointer-events: none;
@@ -527,14 +528,14 @@ export function VisitHandwrittenHtmlSheet({
           padding-top: 14px;
           padding-right: 14px;
           position: relative;
-          z-index: 2;
+          z-index: 1;
         }
 
         .right {
           flex: 1;
           padding-top: 14px;
           position: relative;
-          z-index: 2;
+          z-index: 1;
         }
 
         .parameter-title {
@@ -617,19 +618,23 @@ export function VisitHandwrittenHtmlSheet({
 
         .diagnosis {
           margin-top: 48px;
-          border-top: 2px solid #555;
-          height: 1px;
           position: relative;
         }
 
         .dx {
-          position: absolute;
-          top: -22px;
-          left: 12px;
+          display: inline-block;
+          margin-left: 12px;
+          margin-bottom: 6px;
           background: #fff;
-          padding: 0 3px;
+          padding: 0 4px;
           font-size: 18px;
           font-weight: 700;
+        }
+
+        .diagnosis::after {
+          content: "";
+          display: block;
+          border-top: 2px solid #555;
         }
 
         .diagnosis-field {
@@ -639,7 +644,7 @@ export function VisitHandwrittenHtmlSheet({
         }
 
         .rx {
-          margin-top: 10px;
+          margin-top: 14px;
           padding-left: 14px;
           font-size: 20px;
           font-weight: 700;

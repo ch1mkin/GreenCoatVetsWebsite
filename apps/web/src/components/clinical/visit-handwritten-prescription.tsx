@@ -734,7 +734,7 @@ export function VisitHandwrittenPrescription({
       />
       <svg
         viewBox={`0 0 ${HANDWRITTEN_VISIT_SHEET_WIDTH} ${HANDWRITTEN_VISIT_SHEET_HEIGHT}`}
-        className={`absolute inset-0 h-full w-full ${overlayPointerClass}`}
+        className={`absolute inset-0 z-10 h-full w-full ${overlayPointerClass}`}
         onPointerDown={startStroke}
         onPointerMove={moveStroke}
         onPointerUp={endStroke}
