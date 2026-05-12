@@ -2,8 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   confirmDeleteWebsiteAppointmentsAction,
+  confirmDeleteWebsiteOwnerPetAction,
   createAppointment,
   sendWebsiteAppointmentsDeleteCodeAction,
+  sendWebsiteOwnerPetDeleteCodeAction,
   updateAppointmentStatus,
 } from "./actions";
 import { createVisitFromAppointment } from "@/app/(portal)/visits/actions";
@@ -25,6 +27,13 @@ type SearchParams = {
   purged?: string;
   purged_count?: string;
   purge_error?: string;
+  owner_pet_purge_code_sent?: string;
+  owner_pet_purge_owner_count?: string;
+  owner_pet_purge_pet_count?: string;
+  owner_pet_purged?: string;
+  owner_pet_purged_owner_count?: string;
+  owner_pet_purged_pet_count?: string;
+  owner_pet_purge_error?: string;
 };
 
 const typeOptions = [
@@ -81,6 +90,13 @@ export default async function AppointmentsPage({
   const purgeTargetCount = Number(searchParams.purge_target_count ?? "0") || 0;
   const purgedCount = Number(searchParams.purged_count ?? "0") || 0;
   const purgeError = typeof searchParams.purge_error === "string" ? searchParams.purge_error : null;
+  const ownerPetPurgeCodeSent = searchParams.owner_pet_purge_code_sent === "1" || searchParams.owner_pet_purge_code_sent === "true";
+  const ownerPetPurgeOwnerCount = Number(searchParams.owner_pet_purge_owner_count ?? "0") || 0;
+  const ownerPetPurgePetCount = Number(searchParams.owner_pet_purge_pet_count ?? "0") || 0;
+  const ownerPetPurged = searchParams.owner_pet_purged === "1" || searchParams.owner_pet_purged === "true";
+  const ownerPetPurgedOwnerCount = Number(searchParams.owner_pet_purged_owner_count ?? "0") || 0;
+  const ownerPetPurgedPetCount = Number(searchParams.owner_pet_purged_pet_count ?? "0") || 0;
+  const ownerPetPurgeError = typeof searchParams.owner_pet_purge_error === "string" ? searchParams.owner_pet_purge_error : null;
 
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/dashboard");
@@ -99,7 +115,7 @@ export default async function AppointmentsPage({
   } = await supabase.auth.getUser();
   const canManageWebsiteDeletes = access.isSuperAdmin || role === "clinic_admin";
 
-  const [branchesRes, doctorsRes, ownersRes, petsRes, websiteBookingCountRes] = await Promise.all([
+  const [branchesRes, doctorsRes, ownersRes, petsRes, websiteBookingCountRes, websiteOwnerPetPurgeStatsRes] = await Promise.all([
     supabase
       .from("branches")
       .select("id, name")
@@ -130,6 +146,13 @@ export default async function AppointmentsPage({
       .select("id", { count: "exact", head: true })
       .eq("clinic_id", clinic_id)
       .in("booking_source", ["website_guest", "owner_portal"]),
+    canManageWebsiteDeletes
+      ? supabase.rpc("get_website_owner_pet_purge_stats", {
+          p_clinic_id: clinic_id,
+          p_cutoff: new Date().toISOString(),
+          p_excluded_email: user?.email?.trim().toLowerCase() ?? null,
+        })
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (branchesRes.error) throw new Error(branchesRes.error.message);
@@ -137,10 +160,16 @@ export default async function AppointmentsPage({
   if (ownersRes.error) throw new Error(ownersRes.error.message);
   if (petsRes.error) throw new Error(petsRes.error.message);
   if (websiteBookingCountRes.error) throw new Error(websiteBookingCountRes.error.message);
+  if (websiteOwnerPetPurgeStatsRes.error) throw new Error(websiteOwnerPetPurgeStatsRes.error.message);
 
   const branchOptions = branchesRes.data ?? [];
   const hasBranches = branchOptions.length > 0;
   const websiteBookingCount = websiteBookingCountRes.count ?? 0;
+  const ownerPetPurgeRow = Array.isArray(websiteOwnerPetPurgeStatsRes.data)
+    ? websiteOwnerPetPurgeStatsRes.data[0]
+    : websiteOwnerPetPurgeStatsRes.data;
+  const websiteOwnerPurgeCount = Number((ownerPetPurgeRow as { owner_count?: number | string | null } | null)?.owner_count ?? 0) || 0;
+  const websitePetPurgeCount = Number((ownerPetPurgeRow as { pet_count?: number | string | null } | null)?.pet_count ?? 0) || 0;
 
   let query = supabase
     .from("appointments")
@@ -206,6 +235,12 @@ export default async function AppointmentsPage({
           <p className="mt-1 text-sm">{purgeError}</p>
         </section>
       ) : null}
+      {ownerPetPurgeError ? (
+        <section className="card-soft mb-4 border border-red-200 bg-red-50 text-red-900">
+          <p className="font-semibold">Website owner and patient cleanup failed</p>
+          <p className="mt-1 text-sm">{ownerPetPurgeError}</p>
+        </section>
+      ) : null}
       {purgeCodeSent ? (
         <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">Verification code sent</p>
@@ -216,11 +251,32 @@ export default async function AppointmentsPage({
           </p>
         </section>
       ) : null}
+      {ownerPetPurgeCodeSent ? (
+        <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Website owner and patient cleanup code sent</p>
+          <p className="mt-1 text-sm">
+            We emailed a code to <strong>{user?.email ?? "your account email"}</strong> for deleting eligible website-created owners and patients in
+            this clinic.
+            {ownerPetPurgeOwnerCount > 0 || ownerPetPurgePetCount > 0
+              ? ` This code currently covers ${ownerPetPurgeOwnerCount} owner${ownerPetPurgeOwnerCount === 1 ? "" : "s"} and ${ownerPetPurgePetCount} patient${ownerPetPurgePetCount === 1 ? "" : "s"}.`
+              : ""}
+          </p>
+        </section>
+      ) : null}
       {purged ? (
         <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">Website-booked appointments deleted</p>
           <p className="mt-1 text-sm">
             Removed {purgedCount} website-booked appointment{purgedCount === 1 ? "" : "s"} from this clinic.
+          </p>
+        </section>
+      ) : null}
+      {ownerPetPurged ? (
+        <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Website owners and patients deleted</p>
+          <p className="mt-1 text-sm">
+            Removed {ownerPetPurgedOwnerCount} website-created owner{ownerPetPurgedOwnerCount === 1 ? "" : "s"} and {ownerPetPurgedPetCount} patient
+            {ownerPetPurgedPetCount === 1 ? "" : "s"} from this clinic.
           </p>
         </section>
       ) : null}
@@ -313,6 +369,57 @@ export default async function AppointmentsPage({
               </div>
               <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
                 Delete website-booked appointments
+              </SubmitButton>
+            </form>
+          </div>
+        </section>
+      ) : null}
+
+      {canManageWebsiteDeletes ? (
+        <section className="mt-6 card-soft">
+          <h2 className="font-headline text-lg font-bold">Website owner and patient cleanup</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Delete eligible website-created test owners and patients after confirming with a code sent to{" "}
+            <strong>{user?.email ?? "your admin email"}</strong>. The cleanup excludes that admin email and only targets conservative website-origin
+            records that do not already show clinic-side activity.
+          </p>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Eligible website-created owners: <strong>{websiteOwnerPurgeCount}</strong>
+            <span className="mx-2 text-amber-700">|</span>
+            Eligible website-created patients: <strong>{websitePetPurgeCount}</strong>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <form action={sendWebsiteOwnerPetDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
+              <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
+              <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
+                Send owner/patient delete code
+              </SubmitButton>
+            </form>
+            <form action={confirmDeleteWebsiteOwnerPetAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+              <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
+              <p className="mt-1 text-sm text-red-900/80">
+                Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-created owner
+                and patient rows.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <input
+                  className="input-soft bg-white"
+                  name="verification_code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  placeholder="6-digit code"
+                  required
+                />
+                <input
+                  className="input-soft bg-white"
+                  name="confirm_delete_text"
+                  placeholder='Type "delete"'
+                  required
+                />
+              </div>
+              <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
+                Delete website-created owners and patients
               </SubmitButton>
             </form>
           </div>
