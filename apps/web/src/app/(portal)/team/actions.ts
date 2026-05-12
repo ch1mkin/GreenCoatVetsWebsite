@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
+import { sendAdminCreatedPortalCredentialsEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
 export type TeamMemberRow = {
@@ -14,6 +15,10 @@ export type TeamMemberRow = {
   is_active: boolean;
   updated_at: string | null;
 };
+
+function formatRoleLabel(role: string) {
+  return role.replace(/_/g, " ");
+}
 
 export async function getClinicTeamMembers(): Promise<TeamMemberRow[]> {
   const access = await getUserAccess();
@@ -29,6 +34,7 @@ export async function getClinicTeamMembers(): Promise<TeamMemberRow[]> {
 
 export async function assignUserToClinicAction(formData: FormData) {
   let errorMessage: string | null = null;
+  let warningMessage: string | null = null;
 
   try {
     const access = await getUserAccess();
@@ -88,6 +94,24 @@ export async function assignUserToClinicAction(formData: FormData) {
       }
       throw new Error(error.message);
     }
+
+    if (createdUserId) {
+      try {
+        const result = await sendAdminCreatedPortalCredentialsEmail({
+          email,
+          fullName: fullName || email,
+          password,
+          roleLabel: formatRoleLabel(role),
+        });
+        if (!result.sent) {
+          warningMessage =
+            "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually and ask them to change it from My profile after login.";
+        }
+      } catch {
+        warningMessage =
+          "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually and ask them to change it from My profile after login.";
+      }
+    }
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Could not assign that user.";
   }
@@ -97,7 +121,11 @@ export async function assignUserToClinicAction(formData: FormData) {
   }
 
   revalidatePath("/team");
-  redirect("/team?saved=1");
+  const params = new URLSearchParams({ saved: "1" });
+  if (warningMessage) {
+    params.set("warning", warningMessage);
+  }
+  redirect(`/team?${params.toString()}`);
 }
 
 export async function removeUserFromClinicAction(formData: FormData) {

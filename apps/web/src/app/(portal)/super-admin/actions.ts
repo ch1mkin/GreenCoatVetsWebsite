@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
+import { sendAdminCreatedPortalCredentialsEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
 async function assertSuperAdmin() {
@@ -23,6 +24,10 @@ async function assertSuperAdmin() {
   if (error || !data) {
     throw new Error("Only super admin can perform this action.");
   }
+}
+
+function formatRoleLabel(role: string) {
+  return role.replace(/_/g, " ");
 }
 
 export async function createClinicAsSuperAdmin(formData: FormData) {
@@ -284,6 +289,7 @@ export async function listClinicsMinimalForSuperAdmin(): Promise<Array<{ id: str
 
 export async function superAdminAssignUserToClinicAction(formData: FormData) {
   let errorMessage: string | null = null;
+  let warningMessage: string | null = null;
 
   try {
     await assertSuperAdmin();
@@ -332,6 +338,24 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
       }
       throw new Error(error.message);
     }
+
+    if (createdUserId) {
+      try {
+        const result = await sendAdminCreatedPortalCredentialsEmail({
+          email,
+          fullName: fullName || email,
+          password,
+          roleLabel: formatRoleLabel(role),
+        });
+        if (!result.sent) {
+          warningMessage =
+            "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually and ask them to change it from My profile after login.";
+        }
+      } catch {
+        warningMessage =
+          "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually and ask them to change it from My profile after login.";
+      }
+    }
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : "Could not assign that user.";
   }
@@ -342,7 +366,11 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
 
   revalidatePath("/super-admin/users");
   revalidatePath("/team");
-  redirect("/super-admin/users?saved=1");
+  const params = new URLSearchParams({ saved: "1" });
+  if (warningMessage) {
+    params.set("warning", warningMessage);
+  }
+  redirect(`/super-admin/users?${params.toString()}`);
 }
 
 export async function superAdminDeactivateUserEverywhereAction(formData: FormData) {

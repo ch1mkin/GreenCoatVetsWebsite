@@ -38,6 +38,7 @@ export default async function SuperAdminUsersPage({
   const deactivated = searchParams.deactivated === "1" || searchParams.deactivated === "true";
   const deleted = searchParams.deleted === "1" || searchParams.deleted === "true";
   const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
+  const warningMessage = typeof searchParams.warning === "string" ? searchParams.warning : null;
 
   return (
     <AppShell
@@ -61,6 +62,12 @@ export default async function SuperAdminUsersPage({
         <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">User assigned</p>
           <p className="mt-1 text-sm">The account was created or linked successfully.</p>
+        </section>
+      ) : null}
+      {warningMessage ? (
+        <section className="card-soft mb-3 border border-amber-200 bg-amber-50 text-amber-950">
+          <p className="font-semibold">Welcome email not sent</p>
+          <p className="mt-1 text-sm">{warningMessage}</p>
         </section>
       ) : null}
       {deactivated ? (

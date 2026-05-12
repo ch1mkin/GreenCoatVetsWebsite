@@ -36,6 +36,7 @@ export default async function TeamManagementPage({
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
   const removed = searchParams.removed === "1" || searchParams.removed === "true";
   const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
+  const warningMessage = typeof searchParams.warning === "string" ? searchParams.warning : null;
 
   return (
     <AppShell
@@ -54,6 +55,12 @@ export default async function TeamManagementPage({
         <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">Access updated</p>
           <p className="mt-1 text-sm">The account was assigned successfully.</p>
+        </section>
+      ) : null}
+      {warningMessage ? (
+        <section className="card-soft mb-3 border border-amber-200 bg-amber-50 text-amber-950">
+          <p className="font-semibold">Welcome email not sent</p>
+          <p className="mt-1 text-sm">{warningMessage}</p>
         </section>
       ) : null}
       {removed ? (
