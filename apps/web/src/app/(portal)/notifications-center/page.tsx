@@ -5,6 +5,7 @@ import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/web/app-shell";
+import { NotificationTestEmailCard } from "@/components/web/notification-test-email-card";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { SubmitButton } from "@/components/web/submit-button";
 
@@ -154,6 +155,9 @@ export default async function NotificationsCenterPage() {
   const pendingEmailTotal = pendingEmailCountRes.count ?? 0;
 
   const smtpHost = process.env.HOSTINGER_SMTP_HOST ?? "smtp.hostinger.com";
+  const smtpFrom = process.env.HOSTINGER_SMTP_FROM?.trim() || process.env.HOSTINGER_SMTP_USER?.trim() || null;
+  const canSendTestEmail =
+    access.isSuperAdmin || access.membership?.role === "clinic_admin" || access.membership?.role === "branch_admin";
   const queueDepthPct = Math.min(100, pendingEmailTotal === 0 ? 0 : Math.round((pendingEmailTotal / (pendingEmailTotal + 10)) * 100));
 
   const recentFeed = notifications.slice(0, 6);
@@ -304,6 +308,8 @@ export default async function NotificationsCenterPage() {
               ) : null}
             </div>
           </div>
+
+          {canSendTestEmail ? <NotificationTestEmailCard defaultRecipient={user.email} fromAddress={smtpFrom} /> : null}
 
           <div className="rounded-3xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-sm">
             <h3 className="font-headline text-lg font-bold">Full log</h3>

@@ -1,8 +1,9 @@
 "use server";
 
-import nodemailer from "nodemailer";
 import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
+import { getUserAccess } from "@/lib/auth/get-user-access";
+import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
 import { createClient } from "@/lib/supabase/server";
 
 type NotificationInsert = {
@@ -329,22 +330,11 @@ export async function dispatchPendingEmails() {
   const { clinic_id } = await getActiveMembership();
   const supabase = createClient();
 
-  const host = process.env.HOSTINGER_SMTP_HOST;
-  const port = Number(process.env.HOSTINGER_SMTP_PORT ?? "465");
-  const user = process.env.HOSTINGER_SMTP_USER;
-  const pass = process.env.HOSTINGER_SMTP_PASS;
-  const from = process.env.HOSTINGER_SMTP_FROM || user;
-
-  if (!host || !user || !pass || !from) {
+  const transporter = createHostingerTransport();
+  const from = getHostingerFromAddress();
+  if (!transporter || !from) {
     throw new Error("Missing Hostinger SMTP env vars.");
   }
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
 
   const { data: pending, error } = await supabase
     .from("notifications")
@@ -376,6 +366,57 @@ export async function dispatchPendingEmails() {
 
   revalidatePath("/notifications-center");
   return sent;
+}
+
+type SendTestEmailResult = { ok: true; sentTo: string; from: string } | { ok: false; error: string };
+
+export async function sendNotificationTestEmailAction(formData: FormData): Promise<SendTestEmailResult> {
+  const access = await getUserAccess();
+  const role = access.membership?.role ?? null;
+  const canSend = access.isSuperAdmin || role === "clinic_admin" || role === "branch_admin";
+  if (!canSend) {
+    return { ok: false, error: "Only admins can send SMTP test emails." };
+  }
+
+  const recipient = String(formData.get("recipient_email") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!recipient) {
+    return { ok: false, error: "Recipient email is required." };
+  }
+
+  const transporter = createHostingerTransport();
+  const from = getHostingerFromAddress();
+  if (!transporter || !from) {
+    return { ok: false, error: "Hostinger SMTP is not configured yet." };
+  }
+
+  const { clinic_id } = await getActiveMembership();
+  const sentAt = new Date();
+
+  try {
+    await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: "GreenCoatVets SMTP test email",
+      text: [
+        "This is a test email sent from the GreenCoatVets web admin.",
+        "",
+        `Clinic ID: ${clinic_id}`,
+        `Sent at: ${sentAt.toISOString()}`,
+        `SMTP host: ${process.env.HOSTINGER_SMTP_HOST ?? "smtp.hostinger.com"}`,
+        "",
+        "If you received this, the Hostinger mailbox configuration is working.",
+      ].join("\n"),
+    });
+
+    return { ok: true, sentTo: recipient, from };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Failed to send the SMTP test email.",
+    };
+  }
 }
 
 /** Form actions — void return for `<form action={...}>`. */

@@ -158,14 +158,6 @@ export function VisitHandwrittenHtmlSheet({
         </div>
 
         <div className="main">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="watermark"
-            src={brandingLogoUrl}
-            alt=""
-            loading="eager"
-          />
-
           <div className="left">
             <div className="parameter-title">PARAMETER</div>
 
@@ -229,10 +221,21 @@ export function VisitHandwrittenHtmlSheet({
               <div className="dx">Dx</div>
             </div>
             <StaticFieldArea className="diagnosis-field" />
-            <div className="rx">
-              R<sub>x</sub>
+            <div className="rx-section">
+              <div className="rx">
+                R<sub>x</sub>
+              </div>
+              <div className="prescription-shell">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="watermark"
+                  src={brandingLogoUrl}
+                  alt=""
+                  loading="eager"
+                />
+                <StaticFieldArea className="prescription-field" />
+              </div>
             </div>
-            <StaticFieldArea className="prescription-field" />
           </div>
         </div>
 
@@ -511,17 +514,6 @@ export function VisitHandwrittenHtmlSheet({
           position: relative;
         }
 
-        .watermark {
-          position: absolute;
-          width: 390px;
-          left: 67%;
-          top: 360px;
-          transform: translateX(-50%);
-          opacity: 0.12;
-          z-index: 0;
-          pointer-events: none;
-        }
-
         .left {
           width: 255px;
           border-right: 2px solid #555;
@@ -643,17 +635,38 @@ export function VisitHandwrittenHtmlSheet({
           border: 0;
         }
 
-        .rx {
+        .rx-section {
           margin-top: 14px;
+        }
+
+        .rx {
           padding-left: 14px;
           font-size: 20px;
           font-weight: 700;
         }
 
-        .prescription-field {
+        .prescription-shell {
+          position: relative;
           margin-top: 10px;
           min-height: 360px;
+        }
+
+        .watermark {
+          position: absolute;
+          width: 390px;
+          max-width: 72%;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          opacity: 0.12;
+          z-index: 0;
+          pointer-events: none;
+        }
+
+        .prescription-field {
+          min-height: 360px;
           border: 0;
+          z-index: 1;
         }
 
         .bottom {
