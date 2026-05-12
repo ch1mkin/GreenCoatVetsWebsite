@@ -1,8 +1,9 @@
 "use client";
 
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import type {
   HandwrittenVisitCheckboxId,
+  HandwrittenVisitFieldId,
   HandwrittenVisitSheetState,
 } from "@/lib/visits/handwritten-visit-sheet";
 
@@ -11,19 +12,25 @@ type Props = {
   state: HandwrittenVisitSheetState;
   registerCheckboxRef: (checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => void;
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
+  renderWritableRegion?: (fieldId: HandwrittenVisitFieldId) => ReactNode;
   logoUrl?: string | null;
 };
 
 function StaticFieldArea({
   className,
+  fieldId,
+  overlay,
   value,
 }: {
   className: string;
+  fieldId?: HandwrittenVisitFieldId;
+  overlay?: ReactNode;
   value?: string;
 }) {
   return (
-    <div className={className}>
+    <div className={className} data-writable-field={fieldId}>
       {value ? <span className="field-value">{value}</span> : null}
+      {overlay}
     </div>
   );
 }
@@ -54,6 +61,7 @@ export function VisitHandwrittenHtmlSheet({
   state,
   registerCheckboxRef,
   onCheckboxChange,
+  renderWritableRegion,
   logoUrl,
 }: Props) {
   const { checkboxes, fields } = state;
@@ -115,10 +123,22 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-large">
             <div className="item">
-              Patient Name : <StaticFieldArea className="dotted-line patient-line" value={fields.patientName} />
+              Patient Name :{" "}
+              <StaticFieldArea
+                className="dotted-line patient-line"
+                fieldId="patientName"
+                overlay={renderWritableRegion?.("patientName")}
+                value={fields.patientName}
+              />
             </div>
             <div className="item">
-              Age : <StaticFieldArea className="dotted-line age-line" value={fields.age} />
+              Age :{" "}
+              <StaticFieldArea
+                className="dotted-line age-line"
+                fieldId="age"
+                overlay={renderWritableRegion?.("age")}
+                value={fields.age}
+              />
             </div>
             <div className="item gender-item">
               Gender : M{" "}
@@ -129,13 +149,31 @@ export function VisitHandwrittenHtmlSheet({
 
           <div className="row row-gap-medium owner-meta-row">
             <div className="item">
-              Owner Name : <StaticFieldArea className="dotted-line owner-line" value={fields.ownerName} />
+              Owner Name :{" "}
+              <StaticFieldArea
+                className="dotted-line owner-line"
+                fieldId="ownerName"
+                overlay={renderWritableRegion?.("ownerName")}
+                value={fields.ownerName}
+              />
             </div>
             <div className="item">
-              Mobile : <StaticFieldArea className="dotted-line mobile-line" value={fields.mobile} />
+              Mobile :{" "}
+              <StaticFieldArea
+                className="dotted-line mobile-line"
+                fieldId="mobile"
+                overlay={renderWritableRegion?.("mobile")}
+                value={fields.mobile}
+              />
             </div>
             <div className="item">
-              Date : <StaticFieldArea className="dotted-line date-line" value={fields.date} />
+              Date :{" "}
+              <StaticFieldArea
+                className="dotted-line date-line"
+                fieldId="date"
+                overlay={renderWritableRegion?.("date")}
+                value={fields.date}
+              />
             </div>
           </div>
         </div>
@@ -143,17 +181,25 @@ export function VisitHandwrittenHtmlSheet({
         <div className="small-fields">
           <div className="row">
             <div className="small-label">CC / HP / :</div>
-            <StaticFieldArea className="small-row-field" />
+            <StaticFieldArea className="small-row-field" fieldId="ccHp" overlay={renderWritableRegion?.("ccHp")} />
           </div>
           <div className="row">
             <div className="small-label">Deworming :</div>
             <SheetCheckbox checkboxId="deworming" checked={checkboxes.deworming} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
-            <StaticFieldArea className="small-checkbox-field" />
+            <StaticFieldArea
+              className="small-checkbox-field"
+              fieldId="dewormingText"
+              overlay={renderWritableRegion?.("dewormingText")}
+            />
           </div>
           <div className="row row-last">
             <div className="small-label">Vaccination :</div>
             <SheetCheckbox checkboxId="vaccination" checked={checkboxes.vaccination} registerCheckboxRef={registerCheckboxRef} onCheckboxChange={onCheckboxChange} />
-            <StaticFieldArea className="small-checkbox-field" />
+            <StaticFieldArea
+              className="small-checkbox-field"
+              fieldId="vaccinationText"
+              overlay={renderWritableRegion?.("vaccinationText")}
+            />
           </div>
         </div>
 
@@ -163,27 +209,27 @@ export function VisitHandwrittenHtmlSheet({
 
             <div className="param-row">
               <div className="param">RT :</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="rt" overlay={renderWritableRegion?.("rt")} />
             </div>
             <div className="param-row">
               <div className="param">RR :</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="rr" overlay={renderWritableRegion?.("rr")} />
             </div>
             <div className="param-row">
               <div className="param">HR :</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="hr" overlay={renderWritableRegion?.("hr")} />
             </div>
             <div className="param-row">
               <div className="param">CRT :</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="crt" overlay={renderWritableRegion?.("crt")} />
             </div>
             <div className="param-row">
               <div className="param">ALLERGIC :</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="allergic" overlay={renderWritableRegion?.("allergic")} />
             </div>
             <div className="param-row">
               <div className="param">B/W</div>
-              <StaticFieldArea className="param-value" />
+              <StaticFieldArea className="param-value" fieldId="bw" overlay={renderWritableRegion?.("bw")} />
             </div>
 
             <div className="test-title">TEST REFERRED</div>
@@ -208,19 +254,31 @@ export function VisitHandwrittenHtmlSheet({
 
             <div className="other">
               <div>Any other tests</div>
-              <StaticFieldArea className="other-tests-field" />
+              <StaticFieldArea
+                className="other-tests-field"
+                fieldId="otherTests"
+                overlay={renderWritableRegion?.("otherTests")}
+              />
             </div>
           </div>
 
           <div className="right">
             <div className="physical">
               <span>Physical Examination :</span>
-              <StaticFieldArea className="physical-field" />
+              <StaticFieldArea
+                className="physical-field"
+                fieldId="physicalExamination"
+                overlay={renderWritableRegion?.("physicalExamination")}
+              />
             </div>
             <div className="diagnosis">
               <div className="dx">Dx</div>
             </div>
-            <StaticFieldArea className="diagnosis-field" />
+            <StaticFieldArea
+              className="diagnosis-field"
+              fieldId="diagnosis"
+              overlay={renderWritableRegion?.("diagnosis")}
+            />
             <div className="rx-section">
               <div className="rx">
                 R<sub>x</sub>
@@ -233,7 +291,11 @@ export function VisitHandwrittenHtmlSheet({
                   alt=""
                   loading="eager"
                 />
-                <StaticFieldArea className="prescription-field" />
+                <StaticFieldArea
+                  className="prescription-field"
+                  fieldId="prescription"
+                  overlay={renderWritableRegion?.("prescription")}
+                />
               </div>
             </div>
           </div>

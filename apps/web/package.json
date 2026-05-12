@@ -16,6 +16,7 @@
     "@saasclinics/lib": "file:../../packages/lib",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.3",
+    "fabric": "^7.3.1",
     "html-to-image": "^1.11.13",
     "next": "14.2.35",
     "nodemailer": "^8.0.3",

@@ -2,9 +2,10 @@ import { REFERRED_TEST_OPTIONS } from "@/lib/clinical/referred-tests";
 
 export const HANDWRITTEN_VISIT_SHEET_WIDTH = 1000;
 export const HANDWRITTEN_VISIT_SHEET_HEIGHT = 1414;
-export const HANDWRITTEN_VISIT_STATE_VERSION = 1;
+export const HANDWRITTEN_VISIT_STATE_VERSION = 2;
 
 export type HandwrittenVisitPoint = { x: number; y: number };
+export type HandwrittenVisitRect = { x: number; y: number; width: number; height: number };
 
 export type HandwrittenVisitHighlightStroke = {
   id: string;
@@ -21,6 +22,18 @@ export type HandwrittenVisitWordToken = {
   width: number;
   height: number;
   fontSize: number;
+};
+
+export type HandwrittenVisitWritableRegionMode = "ink" | "ocr";
+
+export type HandwrittenVisitWritableRegionState = {
+  mode: HandwrittenVisitWritableRegionMode;
+  text: string;
+  ocrText: string;
+  fabricJson: Record<string, unknown> | null;
+  inkBounds: HandwrittenVisitRect | null;
+  textBox: HandwrittenVisitRect | null;
+  fontSize: number | null;
 };
 
 export type HandwrittenVisitFieldId =
@@ -77,6 +90,7 @@ export type HandwrittenVisitSheetState = {
   wordTokens: HandwrittenVisitWordToken[];
   highlights: HandwrittenVisitHighlightStroke[];
   inkFallbacks: HandwrittenVisitHighlightStroke[];
+  ocrRegions: Record<HandwrittenVisitFieldId, HandwrittenVisitWritableRegionState>;
 };
 
 export type HandwrittenVisitInitialStateInput = {
@@ -103,7 +117,7 @@ export type HandwrittenVisitInitialStateInput = {
   prescription?: string | null;
 };
 
-const TEXT_FIELD_IDS: HandwrittenVisitFieldId[] = [
+export const HANDWRITTEN_VISIT_FIELD_IDS: HandwrittenVisitFieldId[] = [
   "patientName",
   "age",
   "ownerName",
@@ -172,12 +186,30 @@ const TEST_CHECKBOX_MAP: Record<string, HandwrittenVisitCheckboxId> = {
 };
 
 function createEmptyFields(): Record<HandwrittenVisitFieldId, string> {
-  return TEXT_FIELD_IDS.reduce(
+  return HANDWRITTEN_VISIT_FIELD_IDS.reduce(
     (acc, fieldId) => {
       acc[fieldId] = "";
       return acc;
     },
     {} as Record<HandwrittenVisitFieldId, string>,
+  );
+}
+
+function createEmptyWritableRegions(): Record<HandwrittenVisitFieldId, HandwrittenVisitWritableRegionState> {
+  return HANDWRITTEN_VISIT_FIELD_IDS.reduce(
+    (acc, fieldId) => {
+      acc[fieldId] = {
+        mode: "ink",
+        text: "",
+        ocrText: "",
+        fabricJson: null,
+        inkBounds: null,
+        textBox: null,
+        fontSize: null,
+      };
+      return acc;
+    },
+    {} as Record<HandwrittenVisitFieldId, HandwrittenVisitWritableRegionState>,
   );
 }
 
@@ -243,6 +275,7 @@ export function createHandwrittenVisitSheetState(
     wordTokens: [],
     highlights: [],
     inkFallbacks: [],
+    ocrRegions: createEmptyWritableRegions(),
   };
 }
 
@@ -254,9 +287,40 @@ export function normalizeHandwrittenVisitSheetState(
   const value = raw as Partial<HandwrittenVisitSheetState>;
   const fields = createEmptyFields();
   const checkboxes = createEmptyCheckboxes();
+  const ocrRegions = createEmptyWritableRegions();
 
-  for (const fieldId of TEXT_FIELD_IDS) {
+  for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
     fields[fieldId] = typeof value.fields?.[fieldId] === "string" ? value.fields[fieldId] : fallback.fields[fieldId];
+    const rawRegion = value.ocrRegions?.[fieldId];
+    ocrRegions[fieldId] = {
+      mode: rawRegion?.mode === "ocr" ? "ocr" : "ink",
+      text: typeof rawRegion?.text === "string" ? rawRegion.text : "",
+      ocrText: typeof rawRegion?.ocrText === "string" ? rawRegion.ocrText : "",
+      fabricJson:
+        rawRegion?.fabricJson && typeof rawRegion.fabricJson === "object" && !Array.isArray(rawRegion.fabricJson)
+          ? rawRegion.fabricJson
+          : null,
+      inkBounds:
+        rawRegion?.inkBounds &&
+        typeof rawRegion.inkBounds === "object" &&
+        typeof rawRegion.inkBounds.x === "number" &&
+        typeof rawRegion.inkBounds.y === "number" &&
+        typeof rawRegion.inkBounds.width === "number" &&
+        typeof rawRegion.inkBounds.height === "number"
+          ? rawRegion.inkBounds
+          : null,
+      textBox:
+        rawRegion?.textBox &&
+        typeof rawRegion.textBox === "object" &&
+        typeof rawRegion.textBox.x === "number" &&
+        typeof rawRegion.textBox.y === "number" &&
+        typeof rawRegion.textBox.width === "number" &&
+        typeof rawRegion.textBox.height === "number"
+          ? rawRegion.textBox
+          : null,
+      fontSize:
+        typeof rawRegion?.fontSize === "number" && Number.isFinite(rawRegion.fontSize) ? rawRegion.fontSize : null,
+    };
   }
   for (const checkboxId of CHECKBOX_IDS) {
     checkboxes[checkboxId] =
@@ -309,6 +373,7 @@ export function normalizeHandwrittenVisitSheetState(
     wordTokens,
     highlights,
     inkFallbacks,
+    ocrRegions,
   };
 }
 
