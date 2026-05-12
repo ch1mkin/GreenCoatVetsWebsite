@@ -83,7 +83,7 @@ export default async function WalkInGuestPage() {
       : inferredWebsiteBase;
   const walkInBookingUrl = `${websiteBase.replace(/\/$/, "")}/book?walk_in=1`;
   const stylizedQrPreviewUrl = `/api/reception/walk-in-qr?target=${encodeURIComponent(walkInBookingUrl)}&label=${encodeURIComponent(branding.product_name)}`;
-  const stylizedQrDownloadUrl = `${stylizedQrPreviewUrl}&download=1`;
+  const stylizedQrDownloadUrl = `${stylizedQrPreviewUrl}&download=1&format=png`;
 
   return (
     <AppShell
@@ -184,7 +184,7 @@ export default async function WalkInGuestPage() {
           <div className="flex flex-col gap-2">
             <a
               href={stylizedQrDownloadUrl}
-              download="greencoatvets-walk-in-qr.svg"
+              download="greencoatvets-walk-in-qr.png"
               className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95"
             >
               Download branded QR

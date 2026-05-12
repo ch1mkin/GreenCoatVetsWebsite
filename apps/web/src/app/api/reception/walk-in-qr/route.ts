@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 
 const BRAND_GREEN = "#006c50";
 const BRAND_GREEN_SOFT = "#0d8b68";
 const BRAND_GREEN_DARK = "#084f3b";
+const GOLD_LIGHT = "#f7dc6f";
+const GOLD_DARK = "#c99a1a";
 const TEXT_DARK = "#111827";
 const TEXT_MUTED = "#5f6f68";
 
@@ -47,6 +50,10 @@ export async function GET(request: Request) {
   const target = String(searchParams.get("target") ?? "").trim();
   const label = String(searchParams.get("label") ?? "GreenCoatVets").trim() || "GreenCoatVets";
   const download = searchParams.get("download") === "1";
+  const format = String(searchParams.get("format") ?? (download ? "png" : "svg"))
+    .trim()
+    .toLowerCase();
+  const wantsPng = format === "png";
 
   let normalizedTarget = "";
   try {
@@ -74,8 +81,16 @@ export async function GET(request: Request) {
           <stop offset="0%" stop-color="${BRAND_GREEN_SOFT}" />
           <stop offset="100%" stop-color="${BRAND_GREEN_DARK}" />
         </linearGradient>
+        <linearGradient id="goldBorder" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="${GOLD_LIGHT}" />
+          <stop offset="50%" stop-color="#ffe8a3" />
+          <stop offset="100%" stop-color="${GOLD_DARK}" />
+        </linearGradient>
         <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#003527" flood-opacity="0.22" />
+        </filter>
+        <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="${GOLD_LIGHT}" flood-opacity="0.38" />
         </filter>
       </defs>
 
@@ -93,9 +108,10 @@ export async function GET(request: Request) {
       ${pawPrint(924, 846, 0.98, 0.08)}
       ${pawPrint(352, 1188, 1.02, 0.08)}
 
-      <rect x="74" y="74" width="932" height="1252" rx="42" fill="white" filter="url(#cardShadow)" />
+      <rect x="62" y="62" width="956" height="1276" rx="48" fill="none" stroke="url(#goldBorder)" stroke-width="8" filter="url(#goldGlow)" />
+      <rect x="74" y="74" width="932" height="1252" rx="42" fill="white" stroke="url(#goldBorder)" stroke-width="3" filter="url(#cardShadow)" />
 
-      <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="#d9e6e0" stroke-width="4" />
+      <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="url(#goldBorder)" stroke-width="4" />
       ${logoDataUrl ? `<rect x="154" y="144" width="120" height="120" rx="24" fill="white" stroke="#d9e6e0" stroke-width="2" />` : ""}
       ${logoDataUrl ? `<image href="${logoDataUrl}" x="161" y="151" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
       <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="${TEXT_DARK}">
@@ -108,7 +124,7 @@ export async function GET(request: Request) {
         Scan to open the booking form on your clinic website
       </text>
 
-      <rect x="188" y="372" width="704" height="704" rx="34" fill="white" stroke="#d7e5df" stroke-width="10" />
+      <rect x="188" y="372" width="704" height="704" rx="34" fill="white" stroke="url(#goldBorder)" stroke-width="10" />
       <image href="${qrDataUrl}" x="242" y="426" width="596" height="596" preserveAspectRatio="xMidYMid meet" />
 
       <text x="540" y="1148" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="${BRAND_GREEN}">
@@ -119,6 +135,18 @@ export async function GET(request: Request) {
       </text>
     </svg>
   `.trim();
+
+  if (wantsPng) {
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    return new NextResponse(new Uint8Array(png), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Disposition": `${download ? "attachment" : "inline"}; filename="greencoatvets-walk-in-qr.png"`,
+        "Cache-Control": "public, max-age=300",
+      },
+    });
+  }
 
   return new NextResponse(svg, {
     status: 200,
