@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
+import { beginPortalLoginOtpAction } from "@/app/login/otp-actions";
+import { sendPortalWelcomeEmailAction } from "./actions";
 
 export function SignupForm({
   productName,
@@ -140,7 +142,18 @@ export function SignupForm({
         setError(mapAuthError(inviteError.message));
         return;
       }
-      router.push("/dashboard");
+      await sendPortalWelcomeEmailAction({
+        email,
+        fullName,
+        roleLabel: inviteRole ? inviteRole.replace(/_/g, " ") : null,
+      });
+      const otpResult = await beginPortalLoginOtpAction(email);
+      if (!otpResult.ok) {
+        setIsSubmitting(false);
+        setError(otpResult.error);
+        return;
+      }
+      router.push("/login/verify-email?next=/dashboard");
       router.refresh();
       return;
     }
@@ -149,7 +162,18 @@ export function SignupForm({
       p_full_name: fullName.trim() || null,
       p_phone: null,
     });
-    router.push("/dashboard");
+    await sendPortalWelcomeEmailAction({
+      email,
+      fullName,
+      roleLabel: null,
+    });
+    const otpResult = await beginPortalLoginOtpAction(email);
+    if (!otpResult.ok) {
+      setIsSubmitting(false);
+      setError(otpResult.error);
+      return;
+    }
+    router.push("/login/verify-email?next=/dashboard");
     router.refresh();
     setIsSubmitting(false);
   }

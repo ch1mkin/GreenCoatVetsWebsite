@@ -149,6 +149,16 @@ export default async function AccountPage({
                   <span className="mt-1 text-sm text-on-surface-variant">Timeline plus saved visit-report PDFs when available.</span>
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/account/password"
+                  className="clinical-shadow flex h-full flex-col rounded-2xl border border-surface-container-high bg-surface-container-lowest p-6 transition-shadow hover:shadow-md"
+                >
+                  <span className="material-symbols-outlined text-3xl text-primary">lock</span>
+                  <span className="mt-3 font-headline text-lg font-bold text-on-surface">Password</span>
+                  <span className="mt-1 text-sm text-on-surface-variant">Change the password for this account.</span>
+                </Link>
+              </li>
             </ul>
 
             <div className="mt-10 rounded-2xl border border-outline-variant/30 bg-surface-container-low/80 p-5">

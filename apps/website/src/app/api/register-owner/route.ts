@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
+import { sendWebsiteWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -52,6 +53,13 @@ export async function POST(request: Request) {
           })
           .eq("id", guestOwner.id);
         if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
+        try {
+          if (emailNorm) {
+            await sendWebsiteWelcomeEmail({ email: emailNorm, fullName });
+          }
+        } catch (error) {
+          console.error("[register-owner] welcome email failed", error);
+        }
         return NextResponse.json({ ok: true, mergedGuest: true }, { status: 200 });
       }
     }
@@ -64,6 +72,14 @@ export async function POST(request: Request) {
       email: user.email ?? null,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    try {
+      if (emailNorm) {
+        await sendWebsiteWelcomeEmail({ email: emailNorm, fullName });
+      }
+    } catch (mailError) {
+      console.error("[register-owner] welcome email failed", mailError);
+    }
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch {

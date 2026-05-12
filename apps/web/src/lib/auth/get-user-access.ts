@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { hasValidPortalOtpCookie } from "@/lib/auth/portal-email-otp";
 import { createClient } from "@/lib/supabase/server";
 
 export type UserAccess = {
@@ -17,6 +18,11 @@ export async function getUserAccess(): Promise<UserAccess> {
   } = await supabase.auth.getUser();
   if (!user) {
     redirect("/login");
+  }
+
+  const otpVerified = await hasValidPortalOtpCookie(user.id);
+  if (!otpVerified) {
+    redirect("/login/verify-email");
   }
 
   const [{ data: superAdmin }, { data: membership }] = await Promise.all([

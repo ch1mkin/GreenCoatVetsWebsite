@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { renderBrandedEmail } from "@/lib/email/render-branded-email";
+import { getPlatformBranding } from "@/lib/platform-branding";
 import { createClient } from "@/lib/supabase/server";
 
 type NotificationInsert = {
@@ -329,6 +331,8 @@ export async function runReminderGeneration() {
 export async function dispatchPendingEmails() {
   const { clinic_id } = await getActiveMembership();
   const supabase = createClient();
+  const branding = await getPlatformBranding();
+  const brandName = branding.product_name || "GreenCoatVets";
 
   const transporter = createHostingerTransport();
   const from = getHostingerFromAddress();
@@ -351,11 +355,18 @@ export async function dispatchPendingEmails() {
     const to = (item.payload as { email?: string })?.email;
     if (!to) continue;
     try {
+      const mail = renderBrandedEmail({
+        brandName,
+        heading: item.title,
+        intro: item.message,
+        footer: `${brandName} automated notifications`,
+      });
       await transporter.sendMail({
         from,
         to,
         subject: item.title,
-        text: item.message,
+        text: mail.text,
+        html: mail.html,
       });
       await supabase.from("notifications").update({ sent_at: new Date().toISOString() }).eq("id", item.id);
       sent += 1;
@@ -393,21 +404,28 @@ export async function sendNotificationTestEmailAction(formData: FormData): Promi
 
   const { clinic_id } = await getActiveMembership();
   const sentAt = new Date();
+  const branding = await getPlatformBranding();
+  const brandName = branding.product_name || "GreenCoatVets";
+  const mail = renderBrandedEmail({
+    brandName,
+    heading: "SMTP test email",
+    intro: "This is a real test email sent from the web admin to confirm mail delivery is working.",
+    details: [
+      { label: "Clinic ID", value: clinic_id },
+      { label: "Sent at", value: sentAt.toISOString() },
+      { label: "SMTP host", value: process.env.HOSTINGER_SMTP_HOST ?? "smtp.hostinger.com" },
+      { label: "From", value: from },
+    ],
+    footer: `${brandName} SMTP verification`,
+  });
 
   try {
     await transporter.sendMail({
       from,
       to: recipient,
-      subject: "GreenCoatVets SMTP test email",
-      text: [
-        "This is a test email sent from the GreenCoatVets web admin.",
-        "",
-        `Clinic ID: ${clinic_id}`,
-        `Sent at: ${sentAt.toISOString()}`,
-        `SMTP host: ${process.env.HOSTINGER_SMTP_HOST ?? "smtp.hostinger.com"}`,
-        "",
-        "If you received this, the Hostinger mailbox configuration is working.",
-      ].join("\n"),
+      subject: `${brandName} SMTP test email`,
+      text: mail.text,
+      html: mail.html,
     });
 
     return { ok: true, sentTo: recipient, from };

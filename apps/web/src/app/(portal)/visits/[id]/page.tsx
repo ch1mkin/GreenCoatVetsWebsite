@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
+import { createVaccinationAlertFromVisit } from "../../vaccinations/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { canManageInvoices } from "@/lib/auth/invoice-access";
 import { getUserAccess } from "@/lib/auth/get-user-access";
@@ -741,6 +742,41 @@ export default async function VisitDetailsPage({
           </button>
           </div>
         </form>
+
+        <VisitSection embed={embed} id="section-vaccination-alerts" title="Vaccination alert" defaultOpen={!embed}>
+          <p className="text-[11px] text-on-surface-variant">
+            Create a vaccination reminder from this visit and email it to the owner immediately.
+            {String(owner?.email ?? "").trim() ? (
+              <> The reminder will go to <strong>{String(owner?.email ?? "").trim()}</strong>.</>
+            ) : (
+              <> Add an owner email first if you want the reminder to be delivered by email.</>
+            )}
+          </p>
+          <form action={createVaccinationAlertFromVisit} className="grid gap-2 md:grid-cols-4">
+            <input type="hidden" name="visit_id" value={visit.id} />
+            <label className="flex flex-col gap-0.5 md:col-span-2">
+              <span className="text-[11px] font-semibold text-on-surface-variant">Vaccine name</span>
+              <input className="input-soft input-compact" name="vaccine_name" placeholder="Rabies booster" required />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-semibold text-on-surface-variant">Dose</span>
+              <input className="input-soft input-compact" name="dose" placeholder="1 ml IM" />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-[11px] font-semibold text-on-surface-variant">Due date</span>
+              <input className="input-soft input-compact" name="due_on" type="date" />
+            </label>
+            <label className="flex flex-col gap-0.5 md:col-span-3">
+              <span className="text-[11px] font-semibold text-on-surface-variant">Notes</span>
+              <input className="input-soft input-compact" name="notes" placeholder="Optional reminder note for the owner" />
+            </label>
+            <div className="flex items-end">
+              <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Sending reminder…">
+                Create alert + email owner
+              </SubmitButton>
+            </div>
+          </form>
+        </VisitSection>
 
         <VisitSection
           embed={embed}

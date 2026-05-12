@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
+import { beginPortalLoginOtpAction } from "./otp-actions";
 
 export function LoginForm({
   productName,
@@ -57,7 +58,15 @@ export function LoginForm({
         }
       }
 
-      router.replace("/dashboard");
+      const otpResult = await beginPortalLoginOtpAction(session.user.email ?? "");
+      if (cancelled) return;
+      if (!otpResult.ok) {
+        setIsSubmitting(false);
+        setError(otpResult.error);
+        return;
+      }
+
+      router.replace("/login/verify-email?next=/dashboard");
       router.refresh();
     })();
 
@@ -71,7 +80,7 @@ export function LoginForm({
     setIsSubmitting(true);
 
     const supabase = createClient();
-    const nextPath = invite ? `/login?oauth=google&invite=${encodeURIComponent(invite)}` : "/dashboard";
+    const nextPath = invite ? `/login?oauth=google&invite=${encodeURIComponent(invite)}` : "/login?oauth=google";
     const redirectTo = new URL("/auth/callback", window.location.origin);
     redirectTo.searchParams.set("next", nextPath);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -118,8 +127,15 @@ export function LoginForm({
       }
     }
 
+    const otpResult = await beginPortalLoginOtpAction(email);
+    if (!otpResult.ok) {
+      setIsSubmitting(false);
+      setError(otpResult.error);
+      return;
+    }
+
     setIsSubmitting(false);
-    router.push("/dashboard");
+    router.push("/login/verify-email?next=/dashboard");
     router.refresh();
   }
 

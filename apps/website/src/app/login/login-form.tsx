@@ -23,6 +23,7 @@ export function LoginForm({
   const invite = (searchParams.get("invite") ?? "").trim();
   const redirectAfter = (searchParams.get("redirect") ?? "").trim();
   const oauthMode = searchParams.get("oauth") === "google";
+  const resetDone = searchParams.get("reset") === "1";
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -146,6 +147,11 @@ export function LoginForm({
         <p className="text-sm text-muted-foreground">
           Sign in to view appointments, orders, and pet records.
         </p>
+        {resetDone ? (
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            Password updated. You can sign in with the new password now.
+          </p>
+        ) : null}
         {redirectAfter === "/book" ? (
           <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
             Sign in to continue to <strong>book an appointment</strong>.
@@ -197,6 +203,9 @@ export function LoginForm({
         >
           {isSubmitting ? "Signing in..." : "Sign in"}
         </button>
+        <Link className="block text-center text-sm underline" href="/forgot-password">
+          Forgot password?
+        </Link>
         <Link className="block text-center text-sm underline" href="/signup">
           New pet owner? Create account
         </Link>

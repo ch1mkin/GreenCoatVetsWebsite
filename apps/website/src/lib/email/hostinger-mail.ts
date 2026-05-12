@@ -26,6 +26,47 @@ export async function resolveAdminNotificationEmail(
   return null;
 }
 
+export async function resolveClinicNotificationRecipients(
+  supabase: SupabaseClient,
+  clinicId: string,
+  roles: string[],
+): Promise<string[]> {
+  const recipients = new Set<string>();
+  const fallback = await resolveAdminNotificationEmail(supabase, clinicId);
+  if (fallback) recipients.add(fallback.toLowerCase());
+
+  const { data: members, error: membersErr } = await supabase
+    .from("user_clinic_memberships")
+    .select("user_id, role")
+    .eq("clinic_id", clinicId)
+    .eq("is_active", true)
+    .in("role", roles);
+  if (membersErr || !members?.length) {
+    return Array.from(recipients);
+  }
+
+  const userIds = Array.from(new Set(members.map((row) => row.user_id).filter(Boolean)));
+  if (!userIds.length) {
+    return Array.from(recipients);
+  }
+
+  const { data: users, error: usersErr } = await supabase
+    .from("app_users")
+    .select("id, email")
+    .in("id", userIds)
+    .not("email", "is", null);
+  if (usersErr || !users?.length) {
+    return Array.from(recipients);
+  }
+
+  for (const row of users) {
+    const email = row.email?.trim().toLowerCase();
+    if (email) recipients.add(email);
+  }
+
+  return Array.from(recipients);
+}
+
 export function createHostingerTransport() {
   const host = process.env.HOSTINGER_SMTP_HOST;
   const port = Number(process.env.HOSTINGER_SMTP_PORT ?? "465");

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
+import { sendVaccinationAlertEmail } from "@/lib/email/send-vaccination-alert-email";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createVaccinationRecord(formData: FormData) {
@@ -130,4 +131,67 @@ export async function sendVaccinationReminderNow(formData: FormData) {
 
   revalidatePath("/vaccinations");
   revalidatePath("/notifications-center");
+}
+
+export async function createVaccinationAlertFromVisit(formData: FormData) {
+  const visitId = String(formData.get("visit_id") ?? "").trim();
+  const vaccineName = String(formData.get("vaccine_name") ?? "").trim();
+  const dose = String(formData.get("dose") ?? "").trim();
+  const dueOn = String(formData.get("due_on") ?? "").trim();
+  const notes = String(formData.get("notes") ?? "").trim();
+
+  if (!visitId || !vaccineName) {
+    throw new Error("Visit and vaccine name are required.");
+  }
+
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+
+  const { data: visit, error: visitError } = await supabase
+    .from("visits")
+    .select("id, branch_id, pet_id, owner_id, owners(full_name, email), pets(name), branches(name)")
+    .eq("id", visitId)
+    .eq("clinic_id", clinic_id)
+    .maybeSingle();
+  if (visitError) throw new Error(visitError.message);
+  if (!visit) throw new Error("Visit not found.");
+
+  const ownerRaw = visit.owners as { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
+  const owner = Array.isArray(ownerRaw) ? ownerRaw[0] ?? null : ownerRaw;
+  const petRaw = visit.pets as { name?: string | null } | { name?: string | null }[] | null;
+  const pet = Array.isArray(petRaw) ? petRaw[0] ?? null : petRaw;
+  const branchRaw = visit.branches as { name?: string | null } | { name?: string | null }[] | null;
+  const branch = Array.isArray(branchRaw) ? branchRaw[0] ?? null : branchRaw;
+
+  const { data: clinicRow } = await supabase.from("clinics").select("name").eq("id", clinic_id).maybeSingle();
+
+  const reminderSentAt = owner?.email ? new Date().toISOString() : null;
+  const { error: insertError } = await supabase.from("vaccination_records").insert({
+    clinic_id,
+    branch_id: visit.branch_id ?? null,
+    pet_id: visit.pet_id,
+    vaccine_name: vaccineName,
+    dose: dose || null,
+    due_on: dueOn || null,
+    status: owner?.email ? "reminded" : "scheduled",
+    reminder_sent_at: reminderSentAt,
+  });
+  if (insertError) throw new Error(insertError.message);
+
+  if (owner?.email) {
+    await sendVaccinationAlertEmail({
+      to: owner.email,
+      ownerName: owner.full_name?.trim() || "there",
+      petName: pet?.name?.trim() || "your pet",
+      clinicName: clinicRow?.name?.trim() || "GreenCoatVets",
+      branchName: branch?.name?.trim() || null,
+      vaccineName,
+      dose,
+      dueOn,
+      notes,
+    });
+  }
+
+  revalidatePath(`/visits/${visitId}`);
+  revalidatePath("/vaccinations");
 }

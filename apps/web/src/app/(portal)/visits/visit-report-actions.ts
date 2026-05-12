@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { renderBrandedEmail } from "@/lib/email/render-branded-email";
 import { fetchClinicLogoBytesForPdf } from "@/lib/invoicing/fetch-clinic-logo";
 import { getUserAccess } from "@/lib/auth/get-user-access";
+import { getPlatformBranding } from "@/lib/platform-branding";
 import { buildHandwrittenCanvasPdfBytes } from "@/lib/pdf/clinic-documents";
 import { createClient } from "@/lib/supabase/server";
 import { buildVisitReportPdfForVisit } from "@/lib/pdf/visit-report-pdf";
@@ -255,12 +257,22 @@ export async function shareVisitReportPdfByEmailAction(formData: FormData): Prom
     const petName = String(petRow?.name ?? "").trim() || "patient";
     const attachmentName = `visit-report-${petName.replace(/[^a-zA-Z0-9._-]+/g, "-").toLowerCase() || visitId.slice(0, 8)}.pdf`;
     const fileBytes = Buffer.from(await blob.arrayBuffer());
+    const branding = await getPlatformBranding();
+    const brandName = branding.product_name || "GreenCoatVets";
+    const mail = renderBrandedEmail({
+      brandName,
+      heading: `Visit report for ${petName}`,
+      intro: `Hi ${ownerName}, your saved visit report PDF for ${petName} is attached.`,
+      body: ["Keep this report for your records and contact the clinic if you need any clarification on the visit summary."],
+      footer: `${brandName} visit reports`,
+    });
 
     await transporter.sendMail({
       from,
       to: recipient,
       subject: `Visit report for ${petName}`,
-      text: `Hello ${ownerName},\n\nAttached is the saved visit report PDF for ${petName}.\n\nRegards,\nGreenCoatVets`,
+      text: mail.text,
+      html: mail.html,
       attachments: [
         {
           filename: attachmentName,
