@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { parse, type Font } from "opentype.js";
 import sharp from "sharp";
 
 const BRAND_GREEN = "#006c50";
@@ -11,7 +12,7 @@ const GOLD_DARK = "#c99a1a";
 const TEXT_DARK = "#111827";
 const TEXT_MUTED = "#5f6f68";
 
-let embeddedQrFontCssPromise: Promise<string> | null = null;
+let qrFontsPromise: Promise<{ medium: Font; bold: Font }> | null = null;
 
 function escapeXml(value: string): string {
   return value
@@ -49,55 +50,70 @@ function pawPrint(x: number, y: number, scale: number, opacity = 0.12): string {
   `;
 }
 
-async function getEmbeddedQrFontCss(): Promise<string> {
-  if (!embeddedQrFontCssPromise) {
-    const candidateRoots = [
-      process.cwd(),
-      path.resolve(process.cwd(), ".."),
-      path.resolve(process.cwd(), "../.."),
-    ];
-    const mediumPathCandidates = candidateRoots.map((root) =>
-      path.join(root, "node_modules", "@fontsource", "inter", "files", "inter-latin-500-normal.woff"),
-    );
-    const boldPathCandidates = candidateRoots.map((root) =>
-      path.join(root, "node_modules", "@fontsource", "inter", "files", "inter-latin-800-normal.woff"),
-    );
+function getFontPathCandidates(fileName: string): string[] {
+  const candidateRoots = [process.cwd(), path.resolve(process.cwd(), ".."), path.resolve(process.cwd(), "../..")];
+  return candidateRoots.map((root) => path.join(root, "node_modules", "@fontsource", "inter", "files", fileName));
+}
 
-    const readFirstAvailable = async (candidates: string[]) => {
-      for (const candidate of candidates) {
-        try {
-          return await readFile(candidate);
-        } catch {
-          // Try the next possible monorepo location.
-        }
-      }
-
-      throw new Error("Embedded QR font files not found.");
-    };
-
-    embeddedQrFontCssPromise = Promise.all([readFirstAvailable(mediumPathCandidates), readFirstAvailable(boldPathCandidates)])
-      .then(([mediumFont, boldFont]) => {
-        const mediumBase64 = mediumFont.toString("base64");
-        const boldBase64 = boldFont.toString("base64");
-        return `
-          @font-face {
-            font-family: "QrInter";
-            src: url("data:font/woff;base64,${mediumBase64}") format("woff");
-            font-style: normal;
-            font-weight: 500;
-          }
-          @font-face {
-            font-family: "QrInter";
-            src: url("data:font/woff;base64,${boldBase64}") format("woff");
-            font-style: normal;
-            font-weight: 800;
-          }
-        `.trim();
-      })
-      .catch(() => "");
+async function readFirstAvailable(candidates: string[]) {
+  for (const candidate of candidates) {
+    try {
+      return await readFile(candidate);
+    } catch {
+      // Try the next possible monorepo location.
+    }
   }
 
-  return embeddedQrFontCssPromise;
+  throw new Error("Embedded QR font files not found.");
+}
+
+function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
+}
+
+async function getQrFonts(): Promise<{ medium: Font; bold: Font }> {
+  if (!qrFontsPromise) {
+    qrFontsPromise = Promise.all([
+      readFirstAvailable(getFontPathCandidates("inter-latin-500-normal.woff")),
+      readFirstAvailable(getFontPathCandidates("inter-latin-800-normal.woff")),
+    ]).then(([mediumFont, boldFont]) => ({
+      medium: parse(bufferToArrayBuffer(mediumFont)),
+      bold: parse(bufferToArrayBuffer(boldFont)),
+    }));
+  }
+
+  return qrFontsPromise;
+}
+
+function fitTextSize(font: Font, text: string, preferredSize: number, minSize: number, maxWidth: number): number {
+  let size = preferredSize;
+  while (size > minSize && font.getAdvanceWidth(text, size, { kerning: true }) > maxWidth) {
+    size -= 1;
+  }
+  return size;
+}
+
+function renderTextPath({
+  font,
+  text,
+  x,
+  y,
+  fontSize,
+  fill,
+  anchor = "start",
+}: {
+  font: Font;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  fill: string;
+  anchor?: "start" | "middle" | "end";
+}) {
+  const width = font.getAdvanceWidth(text, fontSize, { kerning: true });
+  const startX = anchor === "middle" ? x - width / 2 : anchor === "end" ? x - width : x;
+  const pathData = font.getPath(text, startX, y, fontSize, { kerning: true }).toPathData(2);
+  return `<path d="${pathData}" fill="${fill}" />`;
 }
 
 export async function GET(request: Request) {
@@ -119,28 +135,35 @@ export async function GET(request: Request) {
 
   const qrSourceUrl = `https://api.qrserver.com/v1/create-qr-code/?size=720x720&margin=0&data=${encodeURIComponent(normalizedTarget)}`;
   const logoSourceUrl = new URL("/platform-logo.png", origin).toString();
-  const [qrDataUrl, logoDataUrl, embeddedQrFontCss] = await Promise.all([
+  const [qrDataUrl, logoDataUrl, qrFonts] = await Promise.all([
     fetchAsDataUrl(qrSourceUrl),
     fetchAsDataUrl(logoSourceUrl),
-    getEmbeddedQrFontCss(),
+    getQrFonts(),
   ]);
 
   if (!qrDataUrl) {
     return NextResponse.json({ error: "Could not build the QR image." }, { status: 502 });
   }
 
-  const safeLabel = escapeXml(label.slice(0, 42));
+  const labelText = label.slice(0, 42);
+  const safeLabel = escapeXml(labelText);
   const targetUrl = new URL(normalizedTarget);
-  const safeDisplayUrl = escapeXml(`${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`.replace(/\/$/, ""));
+  const displayUrlText = `${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`.replace(/\/$/, "");
+  const labelFontSize = fitTextSize(qrFonts.bold, labelText, 54, 36, logoDataUrl ? 620 : 760);
+  const subtitleFontSize = fitTextSize(qrFonts.bold, "Walk-in self check-in", 26, 22, logoDataUrl ? 620 : 760);
+  const descriptionFontSize = fitTextSize(
+    qrFonts.medium,
+    "Scan to open the booking form on your clinic website",
+    22,
+    17,
+    logoDataUrl ? 620 : 760,
+  );
+  const footerTitleFontSize = fitTextSize(qrFonts.bold, "Scan here to book", 36, 28, 500);
+  const footerUrlFontSize = fitTextSize(qrFonts.medium, displayUrlText, 22, 14, 780);
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1400" viewBox="0 0 1080 1400" role="img" aria-label="${safeLabel} walk-in booking QR">
       <defs>
-        <style>
-          <![CDATA[
-            ${embeddedQrFontCss}
-          ]]>
-        </style>
         <linearGradient id="brandBg" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${BRAND_GREEN_SOFT}" />
           <stop offset="100%" stop-color="${BRAND_GREEN_DARK}" />
@@ -178,25 +201,52 @@ export async function GET(request: Request) {
       <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="url(#goldBorder)" stroke-width="4" />
       ${logoDataUrl ? `<rect x="154" y="144" width="120" height="120" rx="24" fill="white" stroke="#d9e6e0" stroke-width="2" />` : ""}
       ${logoDataUrl ? `<image href="${logoDataUrl}" x="161" y="151" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
-      <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="QrInter, Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="${TEXT_DARK}">
-        ${safeLabel}
-      </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="236" font-family="QrInter, Inter, Arial, sans-serif" font-size="26" font-weight="800" fill="${TEXT_DARK}">
-        Walk-in self check-in
-      </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="274" font-family="QrInter, Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
-        Scan to open the booking form on your clinic website
-      </text>
+      ${renderTextPath({
+        font: qrFonts.bold,
+        text: labelText,
+        x: logoDataUrl ? 300 : 160,
+        y: 188,
+        fontSize: labelFontSize,
+        fill: TEXT_DARK,
+      })}
+      ${renderTextPath({
+        font: qrFonts.bold,
+        text: "Walk-in self check-in",
+        x: logoDataUrl ? 300 : 160,
+        y: 236,
+        fontSize: subtitleFontSize,
+        fill: TEXT_DARK,
+      })}
+      ${renderTextPath({
+        font: qrFonts.medium,
+        text: "Scan to open the booking form on your clinic website",
+        x: logoDataUrl ? 300 : 160,
+        y: 274,
+        fontSize: descriptionFontSize,
+        fill: TEXT_MUTED,
+      })}
 
       <rect x="188" y="372" width="704" height="704" rx="34" fill="white" stroke="url(#goldBorder)" stroke-width="10" />
       <image href="${qrDataUrl}" x="242" y="426" width="596" height="596" preserveAspectRatio="xMidYMid meet" />
 
-      <text x="540" y="1148" text-anchor="middle" font-family="QrInter, Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="${BRAND_GREEN}">
-        Scan here to book
-      </text>
-      <text x="540" y="1204" text-anchor="middle" font-family="QrInter, Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
-        ${safeDisplayUrl}
-      </text>
+      ${renderTextPath({
+        font: qrFonts.bold,
+        text: "Scan here to book",
+        x: 540,
+        y: 1148,
+        fontSize: footerTitleFontSize,
+        fill: BRAND_GREEN,
+        anchor: "middle",
+      })}
+      ${renderTextPath({
+        font: qrFonts.medium,
+        text: displayUrlText,
+        x: 540,
+        y: 1204,
+        fontSize: footerUrlFontSize,
+        fill: TEXT_MUTED,
+        anchor: "middle",
+      })}
     </svg>
   `.trim();
 
