@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createWalkInGuestPatient } from "../actions";
 import { AppShell } from "@/components/web/app-shell";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
+import { getPlatformBranding } from "@/lib/platform-branding";
 import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/web/submit-button";
 
@@ -16,6 +18,40 @@ const ALLOWED = new Set([
   "lab_technician",
   "pharmacist",
 ]);
+
+function normalizeBaseUrl(raw: string | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function isLocalBaseUrl(raw: string | null): boolean {
+  if (!raw) return true;
+  try {
+    const hostname = new URL(raw).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return true;
+  }
+}
+
+function inferWebsiteBaseUrl(host: string, protocol: string): string {
+  const cleanHost = host.split(":")[0]?.trim().toLowerCase() ?? "";
+  if (!cleanHost || cleanHost === "localhost" || cleanHost === "127.0.0.1") {
+    return "http://localhost:3001";
+  }
+  if (cleanHost.startsWith("app.")) {
+    return `${protocol}://${cleanHost.replace(/^app\./, "")}`;
+  }
+  if (cleanHost.startsWith("web.")) {
+    return `${protocol}://${cleanHost.replace(/^web\./, "")}`;
+  }
+  return `${protocol}://${cleanHost}`;
+}
 
 export default async function WalkInGuestPage() {
   const access = await getUserAccess();
@@ -33,10 +69,21 @@ export default async function WalkInGuestPage() {
     .eq("is_active", true)
     .order("name", { ascending: true });
 
+  const branding = await getPlatformBranding();
+  const requestHeaders = headers();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
-  const websiteBase = process.env.NEXT_PUBLIC_WEBSITE_APP_URL ?? "http://localhost:3001";
+  const configuredWebsiteBase = normalizeBaseUrl(process.env.NEXT_PUBLIC_WEBSITE_APP_URL);
+  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
+  const requestProtocol =
+    requestHeaders.get("x-forwarded-proto") ?? (requestHost.includes("localhost") || requestHost.includes("127.0.0.1") ? "http" : "https");
+  const inferredWebsiteBase = inferWebsiteBaseUrl(requestHost, requestProtocol);
+  const websiteBase =
+    configuredWebsiteBase && !(requestProtocol === "https" && isLocalBaseUrl(configuredWebsiteBase))
+      ? configuredWebsiteBase
+      : inferredWebsiteBase;
   const walkInBookingUrl = `${websiteBase.replace(/\/$/, "")}/book?walk_in=1`;
-  const walkInQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(walkInBookingUrl)}`;
+  const stylizedQrPreviewUrl = `/api/reception/walk-in-qr?target=${encodeURIComponent(walkInBookingUrl)}&label=${encodeURIComponent(branding.product_name)}`;
+  const stylizedQrDownloadUrl = `${stylizedQrPreviewUrl}&download=1`;
 
   return (
     <AppShell
@@ -128,7 +175,28 @@ export default async function WalkInGuestPage() {
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={walkInQrUrl} alt="Reception walk-in booking QR" className="mx-auto h-[220px] w-[220px] rounded-xl object-contain" />
+            <img
+              src={stylizedQrPreviewUrl}
+              alt="Reception walk-in booking QR"
+              className="mx-auto h-auto w-full rounded-xl object-contain"
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <a
+              href={stylizedQrDownloadUrl}
+              download="greencoatvets-walk-in-qr.svg"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-sm hover:opacity-95"
+            >
+              Download branded QR
+            </a>
+            <a
+              href={walkInBookingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary"
+            >
+              Open booking page
+            </a>
           </div>
           <a className="block break-all text-[11px] font-medium text-primary underline" href={walkInBookingUrl} target="_blank" rel="noreferrer">
             {walkInBookingUrl}
