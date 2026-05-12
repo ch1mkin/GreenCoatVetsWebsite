@@ -20,6 +20,8 @@ export default async function BookConfirmedPage({
   const clinic = await resolveClinic();
   const tokenRaw = searchParams.token;
   const token = typeof tokenRaw === "string" ? tokenRaw : Array.isArray(tokenRaw) ? tokenRaw[0] : "";
+  const branchRaw = searchParams.branch;
+  const branchName = typeof branchRaw === "string" ? branchRaw : Array.isArray(branchRaw) ? branchRaw[0] : "";
 
   return (
     <main className="bg-surface min-h-[60vh] px-6 py-16">
@@ -33,6 +35,11 @@ export default async function BookConfirmedPage({
         <p className="mt-3 text-on-surface-variant leading-relaxed">
           Thank you — <strong>{clinic.name}</strong> can see this booking in their schedule. Save your reference code below.
         </p>
+        {branchName ? (
+          <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-on-surface">
+            Your appointment was sent to the <strong>{branchName}</strong> branch.
+          </div>
+        ) : null}
         {token ? (
           <div className="mt-6 rounded-2xl border border-dashed border-primary/40 bg-primary/5 px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-wide text-primary">Your link code</p>

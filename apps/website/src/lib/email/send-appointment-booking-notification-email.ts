@@ -6,7 +6,7 @@ import { renderBrandedEmail } from "./render-branded-email";
 export async function sendAppointmentBookingNotificationEmail(params: {
   clinicId: string;
   clinicName: string;
-  branchId: string;
+  branchName: string;
   appointmentType: string;
   startsAtIso: string;
   petName: string;
@@ -22,14 +22,13 @@ export async function sendAppointmentBookingNotificationEmail(params: {
   const from = getHostingerFromAddress();
   if (!transporter || !from) return { sent: false, reason: "smtp_not_configured" };
 
-  const [branding, recipients, { data: br }] = await Promise.all([
+  const [branding, recipients] = await Promise.all([
     getPlatformBranding(),
     resolveClinicNotificationRecipients(supabase, params.clinicId, ["clinic_admin", "branch_admin", "receptionist", "doctor"]),
-    supabase.from("branches").select("name").eq("id", params.branchId).maybeSingle(),
   ]);
   if (!recipients.length && !params.ownerEmail?.trim()) return { sent: false, reason: "no_recipient" };
 
-  const branchName = (br?.name as string | undefined)?.trim() || params.branchId;
+  const branchName = params.branchName.trim() || "—";
   const when = new Date(params.startsAtIso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const sourceLabel = params.bookingSource === "guest_website" ? "Guest (website)" : "Signed-in owner";
   const brandName = branding.product_name || params.clinicName;

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
+import { normalizeBookingPetGender, parseBookingAgeYearsToMonths } from "@/lib/booking/pet-demographics";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,16 @@ type GuestRpcResult = {
   merge_token: string;
   owner_id: string;
 };
+
+async function resolvePublicBranchNameForClinic(clinicId: string, branchId: string): Promise<string> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_public_branches_for_clinic", {
+    p_clinic_id: clinicId,
+  });
+  if (error) return branchId;
+  const rows = (data ?? []) as Array<{ id: string; name: string }>;
+  return rows.find((row) => row.id === branchId)?.name?.trim() || branchId;
+}
 
 export async function submitGuestBooking(formData: FormData) {
   const supabase = createClient();
@@ -31,6 +42,9 @@ export async function submitGuestBooking(formData: FormData) {
   const email = String(formData.get("guest_email") ?? "").trim().toLowerCase();
   const petName = String(formData.get("pet_name") ?? "").trim();
   const petSpecies = String(formData.get("pet_species") ?? "").trim();
+  const petGender = normalizeBookingPetGender(String(formData.get("pet_gender") ?? ""));
+  const petAgeYears = String(formData.get("pet_age_years") ?? "").trim();
+  const petAgeMonths = parseBookingAgeYearsToMonths(petAgeYears);
   const chiefComplaint = String(formData.get("chief_complaint") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const allergies = String(formData.get("allergies") ?? "").trim();
@@ -40,6 +54,12 @@ export async function submitGuestBooking(formData: FormData) {
   if (!branchId || !startsAtRaw || !fullName || !phone || !email || !petName) {
     throw new Error("Please fill in branch, date & time, your details, and pet name.");
   }
+  if (!petGender) {
+    throw new Error("Pet gender is required.");
+  }
+  if (!petAgeMonths) {
+    throw new Error("Pet age is required.");
+  }
   if (!consentAccepted) {
     throw new Error("You must accept the booking consent before submitting.");
   }
@@ -48,6 +68,7 @@ export async function submitGuestBooking(formData: FormData) {
   }
 
   const startsAt = new Date(startsAtRaw).toISOString();
+  const branchName = await resolvePublicBranchNameForClinic(clinic.id, branchId);
 
   const { data, error } = await supabase.rpc("create_guest_website_booking", {
     p_clinic_id: clinic.id,
@@ -60,6 +81,8 @@ export async function submitGuestBooking(formData: FormData) {
     p_owner_email: email,
     p_pet_name: petName,
     p_pet_species: normalizeLegacySpeciesToCanonical(petSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE),
+    p_pet_gender: petGender,
+    p_pet_age_months: petAgeMonths,
     p_chief_complaint: chiefComplaint,
     p_notes: notes,
     p_allergies: allergies,
@@ -86,7 +109,7 @@ export async function submitGuestBooking(formData: FormData) {
     await sendAppointmentBookingNotificationEmail({
       clinicId: clinic.id,
       clinicName: clinic.name,
-      branchId,
+      branchName,
       appointmentType,
       startsAtIso: startsAt,
       petName,
@@ -101,7 +124,7 @@ export async function submitGuestBooking(formData: FormData) {
     console.error("[book/guest] admin notification email failed", mailErr);
   }
 
-  redirect(`/book/confirmed?token=${encodeURIComponent(row.merge_token)}`);
+  redirect(`/book/confirmed?token=${encodeURIComponent(row.merge_token)}&branch=${encodeURIComponent(branchName)}`);
 }
 
 export async function claimGuestBookingWithToken(

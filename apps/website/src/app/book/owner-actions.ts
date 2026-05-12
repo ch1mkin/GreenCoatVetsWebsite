@@ -3,11 +3,22 @@
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { redirect } from "next/navigation";
 import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
+import { formatBookingAgeYearsLabel, normalizeBookingPetGender, parseBookingAgeYearsToMonths } from "@/lib/booking/pet-demographics";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
 
 const appointmentTypes = ["consultation", "vaccination", "surgery", "grooming", "emergency"] as const;
+
+async function resolvePublicBranchNameForClinic(clinicId: string, branchId: string): Promise<string> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_public_branches_for_clinic", {
+    p_clinic_id: clinicId,
+  });
+  if (error) return branchId;
+  const rows = (data ?? []) as Array<{ id: string; name: string }>;
+  return rows.find((row) => row.id === branchId)?.name?.trim() || branchId;
+}
 
 export async function submitOwnerBooking(formData: FormData) {
   const supabase = createClient();
@@ -24,6 +35,9 @@ export async function submitOwnerBooking(formData: FormData) {
   const existingPetId = String(formData.get("pet_id") ?? "").trim();
   const newPetName = String(formData.get("new_pet_name") ?? "").trim();
   const newPetSpecies = String(formData.get("new_pet_species") ?? "").trim();
+  const petGender = normalizeBookingPetGender(String(formData.get("pet_gender") ?? ""));
+  const petAgeYears = String(formData.get("pet_age_years") ?? "").trim();
+  const petAgeMonths = parseBookingAgeYearsToMonths(petAgeYears);
   const appointmentType = String(formData.get("appointment_type") ?? "consultation").trim();
   const startsAtRaw = String(formData.get("starts_at") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
@@ -41,6 +55,12 @@ export async function submitOwnerBooking(formData: FormData) {
   if (!existingPetId && !newPetName) {
     throw new Error("Branch, pet and time are required.");
   }
+  if (!existingPetId && !petGender) {
+    throw new Error("Pet gender is required for a new pet.");
+  }
+  if (!existingPetId && !petAgeMonths) {
+    throw new Error("Pet age is required for a new pet.");
+  }
   if (!appointmentTypes.includes(appointmentType as (typeof appointmentTypes)[number])) {
     throw new Error("Invalid appointment type.");
   }
@@ -55,6 +75,8 @@ export async function submitOwnerBooking(formData: FormData) {
   }
 
   const startsAt = new Date(startsAtRaw).toISOString();
+  const branchName = await resolvePublicBranchNameForClinic(clinic.id, branchId);
+  const patientAgeLabel = formatBookingAgeYearsLabel(petAgeYears);
   let petId = existingPetId;
 
   if (!petId) {
@@ -66,12 +88,26 @@ export async function submitOwnerBooking(formData: FormData) {
         primary_branch_id: branchId,
         name: newPetName,
         species: normalizeLegacySpeciesToCanonical(newPetSpecies || DEFAULT_PET_SPECIES_BOOKING_VALUE),
+        gender: petGender,
+        age_months: petAgeMonths,
         is_active: true,
       })
       .select("id")
       .single();
     if (petError) throw new Error(petError.message);
     petId = createdPet.id;
+  } else if (petGender || petAgeMonths) {
+    const { error: petUpdateError } = await supabase
+      .from("pets")
+      .update({
+        gender: petGender || undefined,
+        age_months: petAgeMonths ?? undefined,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", petId)
+      .eq("clinic_id", clinic.id)
+      .eq("owner_id", ownerRow.id);
+    if (petUpdateError) throw new Error(petUpdateError.message);
   }
 
   const ownerIntake = {
@@ -81,6 +117,8 @@ export async function submitOwnerBooking(formData: FormData) {
     contact_name: contactFullName || null,
     contact_phone: contactPhone || null,
     contact_email: contactEmail || null,
+    patient_gender: petGender || null,
+    patient_age: patientAgeLabel || null,
     consent_accepted: true,
     consent_text: APPOINTMENT_BOOKING_CONSENT_TEXT,
     consent_version: APPOINTMENT_BOOKING_CONSENT_VERSION,
@@ -130,7 +168,7 @@ export async function submitOwnerBooking(formData: FormData) {
     await sendAppointmentBookingNotificationEmail({
       clinicId: clinic.id,
       clinicName: clinic.name,
-      branchId,
+      branchName,
       appointmentType,
       startsAtIso: startsAt,
       petName: petDisplayName,
@@ -145,5 +183,5 @@ export async function submitOwnerBooking(formData: FormData) {
     console.error("[book] admin notification email failed", mailErr);
   }
 
-  redirect("/account");
+  redirect(`/account?booked=1&branch=${encodeURIComponent(branchName)}`);
 }

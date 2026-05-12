@@ -12,10 +12,11 @@ function readStepState(): StepState {
   const branch = (document.querySelector('select[name="branch_id"]') as HTMLSelectElement | null)?.value?.trim() ?? "";
   const pet = (document.querySelector('select[name="pet_id"]') as HTMLSelectElement | null)?.value?.trim() ?? "";
   const petName = (document.querySelector('input[name="pet_name"]') as HTMLInputElement | null)?.value?.trim() ?? "";
+  const newPetName = (document.querySelector('input[name="new_pet_name"]') as HTMLInputElement | null)?.value?.trim() ?? "";
   const startsAt = (document.querySelector('input[name="starts_at"]') as HTMLInputElement | null)?.value?.trim() ?? "";
   return {
     details: branch.length > 0,
-    vetPet: pet.length > 0 || petName.length > 0,
+    vetPet: pet.length > 0 || petName.length > 0 || newPetName.length > 0,
     time: startsAt.length > 0,
   };
 }

@@ -15,7 +15,11 @@ const ASSIGN_ROLES = [
   { value: "pet_owner", label: "Pet owner" },
 ] as const;
 
-export default async function TeamManagementPage() {
+export default async function TeamManagementPage({
+  searchParams = {},
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const access = await getUserAccess();
   const role = (access.membership?.role ?? "pet_owner") as Parameters<typeof getRoleNavGroups>[0];
   if (role !== "clinic_admin") {
@@ -29,6 +33,9 @@ export default async function TeamManagementPage() {
   } catch {
     rows = [];
   }
+  const saved = searchParams.saved === "1" || searchParams.saved === "true";
+  const removed = searchParams.removed === "1" || searchParams.removed === "true";
+  const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
 
   return (
     <AppShell
@@ -37,6 +44,24 @@ export default async function TeamManagementPage() {
       activeHref="/team"
       navGroups={navGroups}
     >
+      {errorMessage ? (
+        <section className="card-soft mb-3 border border-red-200 bg-red-50 text-red-900">
+          <p className="font-semibold">Could not update team access</p>
+          <p className="mt-1 text-sm">{errorMessage}</p>
+        </section>
+      ) : null}
+      {saved ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Access updated</p>
+          <p className="mt-1 text-sm">The account was assigned successfully.</p>
+        </section>
+      ) : null}
+      {removed ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Access removed</p>
+          <p className="mt-1 text-sm">That clinic membership has been deactivated.</p>
+        </section>
+      ) : null}
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign or update access</h2>
         <p className="mt-1 text-[11px] text-slate-600">

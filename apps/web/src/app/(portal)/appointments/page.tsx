@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createAppointment, updateAppointmentStatus } from "./actions";
+import {
+  confirmDeleteWebsiteAppointmentsAction,
+  createAppointment,
+  sendWebsiteAppointmentsDeleteCodeAction,
+  updateAppointmentStatus,
+} from "./actions";
 import { createVisitFromAppointment } from "@/app/(portal)/visits/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
@@ -12,6 +17,14 @@ import { SubmitButton } from "@/components/web/submit-button";
 type SearchParams = {
   date?: string;
   status?: string;
+  branch?: string;
+  type?: string;
+  source?: string;
+  purge_code_sent?: string;
+  purge_target_count?: string;
+  purged?: string;
+  purged_count?: string;
+  purge_error?: string;
 };
 
 const typeOptions = [
@@ -30,6 +43,12 @@ const statusOptions = [
   "no_show",
 ] as const;
 
+const sourceOptions = [
+  { value: "manual", label: "Manual / clinic-created" },
+  { value: "owner_portal", label: "Website owner portal" },
+  { value: "website_guest", label: "Website guest booking" },
+] as const;
+
 function pickName(row: unknown, key: "full_name" | "name"): string {
   if (!row) return "-";
   if (Array.isArray(row)) {
@@ -39,6 +58,14 @@ function pickName(row: unknown, key: "full_name" | "name"): string {
   return (row as Record<string, string>)[key] ?? "-";
 }
 
+function sourceLabel(source: string | null | undefined): string {
+  if (!source) return "Manual";
+  if (source === "clinic_portal") return "Clinic portal";
+  if (source === "owner_portal") return "Owner portal";
+  if (source === "website_guest") return "Website guest";
+  return source.replace(/_/g, " ");
+}
+
 export default async function AppointmentsPage({
   searchParams,
 }: {
@@ -46,6 +73,14 @@ export default async function AppointmentsPage({
 }) {
   const date = (searchParams.date ?? "").trim();
   const status = (searchParams.status ?? "").trim();
+  const branch = (searchParams.branch ?? "").trim();
+  const type = (searchParams.type ?? "").trim();
+  const source = (searchParams.source ?? "").trim();
+  const purgeCodeSent = searchParams.purge_code_sent === "1" || searchParams.purge_code_sent === "true";
+  const purged = searchParams.purged === "1" || searchParams.purged === "true";
+  const purgeTargetCount = Number(searchParams.purge_target_count ?? "0") || 0;
+  const purgedCount = Number(searchParams.purged_count ?? "0") || 0;
+  const purgeError = typeof searchParams.purge_error === "string" ? searchParams.purge_error : null;
 
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/dashboard");
@@ -59,8 +94,12 @@ export default async function AppointmentsPage({
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
   const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const canManageWebsiteDeletes = access.isSuperAdmin || role === "clinic_admin";
 
-  const [branchesRes, doctorsRes, ownersRes, petsRes] = await Promise.all([
+  const [branchesRes, doctorsRes, ownersRes, petsRes, websiteBookingCountRes] = await Promise.all([
     supabase
       .from("branches")
       .select("id, name")
@@ -86,27 +125,45 @@ export default async function AppointmentsPage({
       .eq("clinic_id", clinic_id)
       .order("name", { ascending: true })
       .limit(300),
+    supabase
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinic_id)
+      .in("booking_source", ["website_guest", "owner_portal"]),
   ]);
 
   if (branchesRes.error) throw new Error(branchesRes.error.message);
   if (doctorsRes.error) throw new Error(doctorsRes.error.message);
   if (ownersRes.error) throw new Error(ownersRes.error.message);
   if (petsRes.error) throw new Error(petsRes.error.message);
+  if (websiteBookingCountRes.error) throw new Error(websiteBookingCountRes.error.message);
 
   const branchOptions = branchesRes.data ?? [];
   const hasBranches = branchOptions.length > 0;
+  const websiteBookingCount = websiteBookingCountRes.count ?? 0;
 
   let query = supabase
     .from("appointments")
     .select(
-      "id, starts_at, appointment_type, status, notes, owners(full_name), pets(name), branches(name), staff_profiles(full_name)"
+      "id, starts_at, appointment_type, status, notes, booking_source, branch_id, owners(full_name), pets(name), branches(name), staff_profiles(full_name)"
     )
     .eq("clinic_id", clinic_id)
-    .order("starts_at", { ascending: true })
-    .limit(50);
+    .order("starts_at", { ascending: false })
+    .limit(200);
 
   if (status && statusOptions.includes(status as (typeof statusOptions)[number])) {
     query = query.eq("status", status);
+  }
+  if (branch) {
+    query = query.eq("branch_id", branch);
+  }
+  if (type && typeOptions.includes(type as (typeof typeOptions)[number])) {
+    query = query.eq("appointment_type", type);
+  }
+  if (source === "manual") {
+    query = query.or("booking_source.is.null,booking_source.eq.clinic_portal");
+  } else if (source && sourceOptions.some((option) => option.value === source)) {
+    query = query.eq("booking_source", source);
   }
   if (date) {
     query = query.gte("starts_at", `${date}T00:00:00`).lt("starts_at", `${date}T23:59:59`);
@@ -143,9 +200,34 @@ export default async function AppointmentsPage({
         </div>
       }
     >
+      {purgeError ? (
+        <section className="card-soft mb-4 border border-red-200 bg-red-50 text-red-900">
+          <p className="font-semibold">Website appointment delete failed</p>
+          <p className="mt-1 text-sm">{purgeError}</p>
+        </section>
+      ) : null}
+      {purgeCodeSent ? (
+        <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Verification code sent</p>
+          <p className="mt-1 text-sm">
+            We emailed a code to <strong>{user?.email ?? "your account email"}</strong> for deleting the existing website-booked appointments in this
+            clinic.
+            {purgeTargetCount > 0 ? ` This code currently covers ${purgeTargetCount} appointment${purgeTargetCount === 1 ? "" : "s"}.` : ""}
+          </p>
+        </section>
+      ) : null}
+      {purged ? (
+        <section className="card-soft mb-4 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Website-booked appointments deleted</p>
+          <p className="mt-1 text-sm">
+            Removed {purgedCount} website-booked appointment{purgedCount === 1 ? "" : "s"} from this clinic.
+          </p>
+        </section>
+      ) : null}
+
       <section className="card-soft">
         <h2 className="font-headline text-lg font-bold">Filters</h2>
-        <form className="mt-3 grid gap-3 md:grid-cols-3" method="get">
+        <form className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-6" method="get">
           <input className="input-soft" type="date" name="date" defaultValue={date} />
           <select className="input-soft" name="status" defaultValue={status}>
             <option value="">All statuses</option>
@@ -155,11 +237,87 @@ export default async function AppointmentsPage({
               </option>
             ))}
           </select>
+          <select className="input-soft" name="branch" defaultValue={branch}>
+            <option value="">All branches</option>
+            {branchOptions.map((branchOption) => (
+              <option key={branchOption.id} value={branchOption.id}>
+                {branchOption.name}
+              </option>
+            ))}
+          </select>
+          <select className="input-soft" name="type" defaultValue={type}>
+            <option value="">All appointment types</option>
+            {typeOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+          <select className="input-soft" name="source" defaultValue={source}>
+            <option value="">All sources</option>
+            {sourceOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <button className="btn-primary" type="submit">
             Apply
           </button>
         </form>
+        <div className="mt-3">
+          <Link className="text-sm font-semibold text-primary hover:underline" href="/appointments">
+            Clear filters
+          </Link>
+        </div>
       </section>
+
+      {canManageWebsiteDeletes ? (
+        <section className="mt-6 card-soft">
+          <h2 className="font-headline text-lg font-bold">Website booking cleanup</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Delete the current clinic&apos;s existing website-booked appointments after confirming with a code sent to{" "}
+            <strong>{user?.email ?? "your admin email"}</strong>. New bookings created after the code is sent are not included.
+          </p>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Existing website-booked appointments in this clinic: <strong>{websiteBookingCount}</strong>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <form action={sendWebsiteAppointmentsDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
+              <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
+              <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
+                Send delete code
+              </SubmitButton>
+            </form>
+            <form action={confirmDeleteWebsiteAppointmentsAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+              <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
+              <p className="mt-1 text-sm text-red-900/80">
+                Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-booked rows.
+              </p>
+              <div className="mt-4 grid gap-3">
+                <input
+                  className="input-soft bg-white"
+                  name="verification_code"
+                  inputMode="numeric"
+                  pattern="[0-9]{6}"
+                  placeholder="6-digit code"
+                  required
+                />
+                <input
+                  className="input-soft bg-white"
+                  name="confirm_delete_text"
+                  placeholder='Type "delete"'
+                  required
+                />
+              </div>
+              <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
+                Delete website-booked appointments
+              </SubmitButton>
+            </form>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-6 card-soft" id="create-appointment">
         <h2 className="font-headline text-lg font-bold">Create appointment</h2>
@@ -229,7 +387,7 @@ export default async function AppointmentsPage({
       </section>
 
       <section className="mt-6 overflow-hidden rounded-xl bg-surface-container-low p-4">
-        <h2 className="mb-3 font-headline text-lg font-bold">Upcoming / filtered</h2>
+        <h2 className="mb-3 font-headline text-lg font-bold">Appointments (newest first)</h2>
         <div className="overflow-x-auto rounded-xl bg-surface-container-lowest p-2">
           <table className="w-full text-left text-sm">
             <thead>
@@ -240,6 +398,7 @@ export default async function AppointmentsPage({
                 <th className="px-3 py-3">Pet</th>
                 <th className="px-3 py-3">Branch</th>
                 <th className="px-3 py-3">Doctor</th>
+                <th className="px-3 py-3">Source</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Actions</th>
                 <th className="px-3 py-3">Consultation</th>
@@ -254,6 +413,7 @@ export default async function AppointmentsPage({
                   <td className="px-3 py-3">{pickName(appt.pets, "name")}</td>
                   <td className="px-3 py-3">{pickName(appt.branches, "name")}</td>
                   <td className="px-3 py-3">{pickName(appt.staff_profiles, "full_name")}</td>
+                  <td className="px-3 py-3">{sourceLabel(appt.booking_source as string | null | undefined)}</td>
                   <td className="px-3 py-3">{appt.status}</td>
                   <td className="px-3 py-3">
                     <form action={updateAppointmentStatus} className="flex flex-wrap gap-2">

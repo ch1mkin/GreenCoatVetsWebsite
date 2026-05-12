@@ -2,10 +2,12 @@ import Link from "next/link";
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, PET_SPECIES_BOOKING_OPTIONS } from "@saasclinics/lib";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { APPOINTMENT_BOOKING_CONSENT_TEXT } from "@/lib/booking/appointment-consent";
+import { BOOKING_PET_GENDER_OPTIONS } from "@/lib/booking/pet-demographics";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { clinicMetadata } from "@/lib/seo/clinic-metadata";
 import { createClient } from "@/lib/supabase/server";
 import { BookingProgressIndicator } from "@/components/site/booking-progress-indicator";
+import { BookingSubmitButton } from "@/components/site/booking-submit-button";
 import { submitGuestBooking } from "@/app/book/actions";
 import { submitOwnerBooking } from "@/app/book/owner-actions";
 
@@ -144,17 +146,43 @@ export default async function BookAppointmentPage({
                     </select>
                   </div>
                   {hasOwnerPets ? (
-                    <div>
-                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet</label>
-                      <select className={field} name="pet_id" required>
-                        <option value="">Select pet</option>
-                        {pets?.map((pet) => (
-                          <option key={pet.id} value={pet.id}>
-                            {pet.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet</label>
+                        <select className={field} name="pet_id" required>
+                          <option value="">Select pet</option>
+                          {pets?.map((pet) => (
+                            <option key={pet.id} value={pet.id}>
+                              {pet.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet gender</label>
+                        <select className={field} name="pet_gender" defaultValue="">
+                          <option value="">Keep existing / not sure</option>
+                          {BOOKING_PET_GENDER_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-on-surface-variant">Optional for pets already saved in your account.</p>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet age (years)</label>
+                        <input
+                          className={field}
+                          name="pet_age_years"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          inputMode="decimal"
+                          placeholder="Optional for existing pet"
+                        />
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div>
@@ -171,6 +199,30 @@ export default async function BookAppointmentPage({
                             </option>
                           ))}
                         </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet gender</label>
+                        <select className={field} name="pet_gender" defaultValue="" required>
+                          <option value="">Select gender</option>
+                          {BOOKING_PET_GENDER_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet age (years)</label>
+                        <input
+                          className={field}
+                          name="pet_age_years"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          inputMode="decimal"
+                          placeholder="e.g. 3"
+                          required
+                        />
                       </div>
                     </>
                   )}
@@ -274,12 +326,12 @@ export default async function BookAppointmentPage({
                 <p className="text-sm text-on-surface-variant">
                   After submitting, you&apos;ll return to your account. For changes, contact reception or use your portal.
                 </p>
-                <button
-                  type="submit"
+                <BookingSubmitButton
                   className="gradient-primary w-full rounded-xl py-4 font-headline text-lg font-bold text-on-primary shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                  pendingLabel="Finalizing your appointment…"
                 >
                   Confirm appointment
-                </button>
+                </BookingSubmitButton>
                 <p className="text-center text-[10px] text-on-surface-variant">Subject to clinic confirmation and availability.</p>
               </div>
             </aside>
@@ -329,6 +381,30 @@ export default async function BookAppointmentPage({
                       ))}
                     </select>
                     <p className="mt-1 text-xs text-on-surface-variant">Choose canine, feline, exotic, avian, or equine — same categories as in clinic records.</p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet gender</label>
+                    <select className={field} name="pet_gender" defaultValue="" required>
+                      <option value="">Select gender</option>
+                      {BOOKING_PET_GENDER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pet age (years)</label>
+                    <input
+                      className={field}
+                      name="pet_age_years"
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      inputMode="decimal"
+                      placeholder="e.g. 2"
+                      required
+                    />
                   </div>
                 </div>
               </section>
@@ -414,12 +490,12 @@ export default async function BookAppointmentPage({
                 <p className="text-sm text-on-surface-variant">
                   You&apos;ll get a confirmation code on the next page. Staff can see this visit in their schedule immediately.
                 </p>
-                <button
-                  type="submit"
+                <BookingSubmitButton
                   className="gradient-primary w-full rounded-xl py-4 font-headline text-lg font-bold text-on-primary shadow-lg transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                  pendingLabel="Submitting your booking request…"
                 >
                   Submit booking request
-                </button>
+                </BookingSubmitButton>
                 <p className="text-center text-[10px] text-on-surface-variant">Subject to clinic confirmation and availability.</p>
               </div>
             </aside>

@@ -1,7 +1,14 @@
 "use server";
 
+import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
+import { getUserAccess } from "@/lib/auth/get-user-access";
+import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { renderBrandedEmail } from "@/lib/email/render-branded-email";
+import { getPlatformBranding } from "@/lib/platform-branding";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const allowedTypes = [
@@ -19,6 +26,47 @@ const allowedStatuses = [
   "cancelled",
   "no_show",
 ] as const;
+
+const WEBSITE_BOOKING_SOURCES = ["website_guest", "owner_portal"] as const;
+const WEBSITE_APPOINTMENT_PURGE_ACTION = "delete_website_booked_appointments";
+const WEBSITE_APPOINTMENT_PURGE_TTL_MS = 10 * 60 * 1000;
+
+function appointmentsUrl(params: Record<string, string | number | boolean | null | undefined>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === "") continue;
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `/appointments?${qs}` : "/appointments";
+}
+
+function hashAdminActionCode(userId: string, clinicId: string, code: string) {
+  return crypto.createHash("sha256").update(`${WEBSITE_APPOINTMENT_PURGE_ACTION}:${clinicId}:${userId}:${code}`).digest("hex");
+}
+
+async function assertWebsiteAppointmentPurgeAccess() {
+  const access = await getUserAccess();
+  const role = access.membership?.role ?? (access.isSuperAdmin ? "super_admin" : "pet_owner");
+  if (!access.isSuperAdmin && role !== "clinic_admin") {
+    throw new Error("Only clinic admins can delete website-booked appointments.");
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id || !user.email?.trim()) {
+    throw new Error("Your admin account needs a valid email before you can request a verification code.");
+  }
+
+  const { clinic_id } = await getActiveMembership();
+  return {
+    clinicId: clinic_id,
+    userId: user.id,
+    userEmail: user.email.trim().toLowerCase(),
+  };
+}
 
 export async function createAppointment(formData: FormData) {
   const branchId = String(formData.get("branch_id") ?? "").trim();
@@ -49,6 +97,7 @@ export async function createAppointment(formData: FormData) {
     owner_id: ownerId,
     doctor_id: doctorId || null,
     appointment_type: appointmentType,
+    booking_source: "clinic_portal",
     starts_at: new Date(startsAt).toISOString(),
     notes: notes || null,
     created_by: user?.id ?? null,
@@ -56,6 +105,169 @@ export async function createAppointment(formData: FormData) {
 
   if (error) throw new Error(error.message);
   revalidatePath("/appointments");
+}
+
+export async function sendWebsiteAppointmentsDeleteCodeAction() {
+  let errorMessage: string | null = null;
+
+  try {
+    const { clinicId, userId, userEmail } = await assertWebsiteAppointmentPurgeAccess();
+    const serviceRole = createServiceRoleClient();
+    if (!serviceRole) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification.");
+    }
+
+    const cutoffIso = new Date().toISOString();
+    const { count, error: countError } = await serviceRole
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .in("booking_source", [...WEBSITE_BOOKING_SOURCES])
+      .lte("created_at", cutoffIso);
+    if (countError) throw new Error(countError.message);
+    if (!count) {
+      throw new Error("There are no existing website-booked appointments to delete for this clinic.");
+    }
+
+    const transporter = createHostingerTransport();
+    const from = getHostingerFromAddress();
+    if (!transporter || !from) {
+      throw new Error("Hostinger SMTP is not configured on the server.");
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + WEBSITE_APPOINTMENT_PURGE_TTL_MS).toISOString();
+    const codeHash = hashAdminActionCode(userId, clinicId, code);
+
+    await serviceRole
+      .from("admin_email_action_codes")
+      .delete()
+      .eq("user_id", userId)
+      .eq("clinic_id", clinicId)
+      .eq("action_type", WEBSITE_APPOINTMENT_PURGE_ACTION)
+      .is("consumed_at", null);
+
+    const { error: insertError } = await serviceRole.from("admin_email_action_codes").insert({
+      clinic_id: clinicId,
+      user_id: userId,
+      email: userEmail,
+      action_type: WEBSITE_APPOINTMENT_PURGE_ACTION,
+      code_hash: codeHash,
+      payload: {
+        cutoff_iso: cutoffIso,
+        target_count: count,
+      },
+      expires_at: expiresAt,
+    });
+    if (insertError) throw new Error(insertError.message);
+
+    const branding = await getPlatformBranding();
+    const brandName = branding.product_name || "GreenCoatVets";
+    const mail = renderBrandedEmail({
+      brandName,
+      heading: "Confirm website appointment deletion",
+      intro: "Use the verification code below to permanently delete existing website-booked appointments for this clinic.",
+      body: [
+        `This code expires in ${Math.round(WEBSITE_APPOINTMENT_PURGE_TTL_MS / 60000)} minutes.`,
+        "Only appointments created before you requested this code will be deleted.",
+      ],
+      details: [
+        { label: "Verification code", value: code },
+        { label: "Website-booked appointments queued", value: String(count) },
+      ],
+      footer: `${brandName} destructive action verification`,
+    });
+
+    await transporter.sendMail({
+      from,
+      to: userEmail,
+      subject: `${brandName} verification code for website appointment deletion`,
+      text: mail.text,
+      html: mail.html,
+    });
+
+    redirect(appointmentsUrl({ purge_code_sent: 1, purge_target_count: count }));
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not send the verification code.";
+  }
+
+  redirect(appointmentsUrl({ purge_error: errorMessage }));
+}
+
+export async function confirmDeleteWebsiteAppointmentsAction(formData: FormData) {
+  let errorMessage: string | null = null;
+
+  try {
+    const { clinicId, userId } = await assertWebsiteAppointmentPurgeAccess();
+    const code = String(formData.get("verification_code") ?? "").trim();
+    const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
+      .trim()
+      .toLowerCase();
+    if (!/^\d{6}$/.test(code)) {
+      throw new Error("Enter the 6-digit code sent to your email.");
+    }
+    if (confirmPhrase !== "delete") {
+      throw new Error('Type "delete" to confirm removing website-booked appointments.');
+    }
+
+    const serviceRole = createServiceRoleClient();
+    if (!serviceRole) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification.");
+    }
+
+    const { data: challenge, error: challengeError } = await serviceRole
+      .from("admin_email_action_codes")
+      .select("id, code_hash, expires_at, consumed_at, payload")
+      .eq("user_id", userId)
+      .eq("clinic_id", clinicId)
+      .eq("action_type", WEBSITE_APPOINTMENT_PURGE_ACTION)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (challengeError || !challenge) {
+      throw new Error("Request a new verification code first.");
+    }
+    if (challenge.consumed_at) {
+      throw new Error("That verification code has already been used. Request a new one.");
+    }
+    if (new Date(challenge.expires_at).getTime() < Date.now()) {
+      throw new Error("That verification code has expired. Request a new one.");
+    }
+
+    const expectedHash = hashAdminActionCode(userId, clinicId, code);
+    if (expectedHash !== challenge.code_hash) {
+      throw new Error("The verification code is incorrect.");
+    }
+
+    const payload =
+      challenge.payload && typeof challenge.payload === "object" ? (challenge.payload as { cutoff_iso?: string | null }) : {};
+    const cutoffIso = payload.cutoff_iso?.trim();
+    if (!cutoffIso) {
+      throw new Error("The delete request is missing its cutoff timestamp. Request a new code.");
+    }
+
+    const { count: deletedCount, error: deleteError } = await serviceRole
+      .from("appointments")
+      .delete({ count: "exact" })
+      .eq("clinic_id", clinicId)
+      .in("booking_source", [...WEBSITE_BOOKING_SOURCES])
+      .lte("created_at", cutoffIso);
+    if (deleteError) throw new Error(deleteError.message);
+
+    await serviceRole
+      .from("admin_email_action_codes")
+      .update({ consumed_at: new Date().toISOString() })
+      .eq("id", challenge.id);
+
+    revalidatePath("/appointments");
+    revalidatePath("/appointments/calendar");
+    revalidatePath("/dashboard");
+    redirect(appointmentsUrl({ purged: 1, purged_count: deletedCount ?? 0 }));
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not delete website-booked appointments.";
+  }
+
+  redirect(appointmentsUrl({ purge_error: errorMessage }));
 }
 
 export async function updateAppointmentStatus(formData: FormData) {

@@ -24,6 +24,9 @@ export default async function AccountPage({
   const ownerClinic = portal?.clinic;
   const owner = portal?.owner ?? null;
   const claimed = searchParams.claimed === "1" || searchParams.claimed === "true";
+  const booked = searchParams.booked === "1" || searchParams.booked === "true";
+  const bookedBranchRaw = searchParams.branch;
+  const bookedBranch = typeof bookedBranchRaw === "string" ? bookedBranchRaw : Array.isArray(bookedBranchRaw) ? bookedBranchRaw[0] : "";
 
   return (
     <main className="bg-surface pb-20 pt-8 text-on-background sm:pt-12">
@@ -70,6 +73,20 @@ export default async function AccountPage({
           <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 text-emerald-950">
             <p className="font-headline font-bold text-emerald-900">Guest booking linked</p>
             <p className="mt-1 text-sm opacity-90">Your appointment is now under this account.</p>
+          </div>
+        ) : null}
+        {booked ? (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 text-emerald-950">
+            <p className="font-headline font-bold text-emerald-900">Appointment booked</p>
+            <p className="mt-1 text-sm opacity-90">
+              {bookedBranch ? (
+                <>
+                  Your booking was sent to the <strong>{bookedBranch}</strong> branch and is now visible to the clinic team.
+                </>
+              ) : (
+                <>Your booking is now visible to the clinic team.</>
+              )}
+            </p>
           </div>
         ) : null}
 

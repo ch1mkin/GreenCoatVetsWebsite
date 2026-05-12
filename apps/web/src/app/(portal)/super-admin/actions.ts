@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
 import { createClient } from "@/lib/supabase/server";
 
@@ -282,88 +283,124 @@ export async function listClinicsMinimalForSuperAdmin(): Promise<Array<{ id: str
 }
 
 export async function superAdminAssignUserToClinicAction(formData: FormData) {
-  await assertSuperAdmin();
-  const clinicId = String(formData.get("clinic_id") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  const role = String(formData.get("role") ?? "").trim();
-  const fullName = String(formData.get("full_name") ?? "").trim() || null;
-  const phone = String(formData.get("phone") ?? "").trim() || null;
-  const workingHours = String(formData.get("working_hours") ?? "").trim() || null;
-  const confirm = String(formData.get("confirm_assign") ?? "") === "on";
-  if (!clinicId || !email || !role) throw new Error("Clinic, email and role are required.");
-  if (!confirm) throw new Error("Confirm this assignment.");
+  let errorMessage: string | null = null;
 
-  const supabase = createClient();
-  const { data: uid, error: lookErr } = await supabase.rpc("lookup_user_id_for_clinic_assignment", {
-    p_clinic_id: clinicId,
-    p_email: email,
-  });
-  if (lookErr) throw new Error(lookErr.message);
-  let targetUserId = uid as string | null;
-  let createdUserId: string | null = null;
-  if (!targetUserId) {
-    const created = await provisionUserAccountForAdmin({
-      email,
-      password,
-      fullName,
-      phone,
+  try {
+    await assertSuperAdmin();
+    const clinicId = String(formData.get("clinic_id") ?? "").trim();
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    const role = String(formData.get("role") ?? "").trim();
+    const fullName = String(formData.get("full_name") ?? "").trim() || null;
+    const phone = String(formData.get("phone") ?? "").trim() || null;
+    const workingHours = String(formData.get("working_hours") ?? "").trim() || null;
+    const confirm = String(formData.get("confirm_assign") ?? "") === "on";
+    if (!clinicId || !email || !role) throw new Error("Clinic, email and role are required.");
+    if (!confirm) throw new Error("Confirm this assignment.");
+
+    const supabase = createClient();
+    const { data: uid, error: lookErr } = await supabase.rpc("lookup_user_id_for_clinic_assignment", {
+      p_clinic_id: clinicId,
+      p_email: email,
     });
-    targetUserId = created.userId;
-    createdUserId = created.userId;
-  }
-  if (!targetUserId) throw new Error("Unable to resolve a user for this email.");
-
-  const { error } = await supabase.rpc("assign_user_to_clinic_by_admin", {
-    p_target_user_id: targetUserId,
-    p_clinic_id: clinicId,
-    p_role: role,
-    p_staff_full_name: fullName,
-    p_staff_phone: phone,
-    p_working_hours: role === "doctor" ? workingHours : null,
-  });
-  if (error) {
-    if (createdUserId) {
-      await rollbackProvisionedUser(createdUserId);
+    if (lookErr) throw new Error(lookErr.message);
+    let targetUserId = uid as string | null;
+    let createdUserId: string | null = null;
+    if (!targetUserId) {
+      const created = await provisionUserAccountForAdmin({
+        email,
+        password,
+        fullName,
+        phone,
+      });
+      targetUserId = created.userId;
+      createdUserId = created.userId;
     }
-    throw new Error(error.message);
+    if (!targetUserId) throw new Error("Unable to resolve a user for this email.");
+
+    const { error } = await supabase.rpc("assign_user_to_clinic_by_admin", {
+      p_target_user_id: targetUserId,
+      p_clinic_id: clinicId,
+      p_role: role,
+      p_staff_full_name: fullName,
+      p_staff_phone: phone,
+      p_working_hours: role === "doctor" ? workingHours : null,
+    });
+    if (error) {
+      if (createdUserId) {
+        await rollbackProvisionedUser(createdUserId);
+      }
+      throw new Error(error.message);
+    }
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not assign that user.";
   }
+
+  if (errorMessage) {
+    redirect(`/super-admin/users?error=${encodeURIComponent(errorMessage)}`);
+  }
+
   revalidatePath("/super-admin/users");
   revalidatePath("/team");
+  redirect("/super-admin/users?saved=1");
 }
 
 export async function superAdminDeactivateUserEverywhereAction(formData: FormData) {
-  await assertSuperAdmin();
-  const targetId = String(formData.get("target_user_id") ?? "").trim();
-  const confirmPhrase = String(formData.get("confirm_deactivate_text") ?? "")
-    .trim()
-    .toLowerCase();
-  if (!targetId) throw new Error("User is required.");
-  if (confirmPhrase !== "confirm") throw new Error('Type "confirm" to deactivate this user everywhere.');
+  let errorMessage: string | null = null;
 
-  const supabase = createClient();
-  const { error } = await supabase.rpc("super_admin_deactivate_user_everywhere", {
-    p_user_id: targetId,
-  });
-  if (error) throw new Error(error.message);
+  try {
+    await assertSuperAdmin();
+    const targetId = String(formData.get("target_user_id") ?? "").trim();
+    const confirmPhrase = String(formData.get("confirm_deactivate_text") ?? "")
+      .trim()
+      .toLowerCase();
+    if (!targetId) throw new Error("User is required.");
+    if (confirmPhrase !== "confirm") throw new Error('Type "confirm" to deactivate this user everywhere.');
+
+    const supabase = createClient();
+    const { error } = await supabase.rpc("super_admin_deactivate_user_everywhere", {
+      p_user_id: targetId,
+    });
+    if (error) throw new Error(error.message);
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not deactivate that user.";
+  }
+
+  if (errorMessage) {
+    redirect(`/super-admin/users?error=${encodeURIComponent(errorMessage)}`);
+  }
+
   revalidatePath("/super-admin/users");
   revalidatePath("/super-admin");
+  redirect("/super-admin/users?deactivated=1");
 }
 
 export async function superAdminDeleteUserFromDatabaseAction(formData: FormData) {
-  await assertSuperAdmin();
-  const targetId = String(formData.get("target_user_id") ?? "").trim();
-  const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
-    .trim()
-    .toLowerCase();
-  if (!targetId) throw new Error("User is required.");
-  if (confirmPhrase !== "confirm") throw new Error('Type "confirm" to delete this user from the database.');
+  let errorMessage: string | null = null;
 
-  const supabase = createClient();
-  const { error } = await supabase.rpc("super_admin_delete_user_from_database", {
-    p_user_id: targetId,
-  });
-  if (error) throw new Error(error.message);
+  try {
+    await assertSuperAdmin();
+    const targetId = String(formData.get("target_user_id") ?? "").trim();
+    const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
+      .trim()
+      .toLowerCase();
+    if (!targetId) throw new Error("User is required.");
+    if (confirmPhrase !== "confirm") throw new Error('Type "confirm" to delete this user from the database.');
+
+    const supabase = createClient();
+    const { error } = await supabase.rpc("super_admin_delete_user_from_database", {
+      p_user_id: targetId,
+    });
+    if (error) throw new Error(error.message);
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not delete that user.";
+  }
+
+  if (errorMessage) {
+    redirect(`/super-admin/users?error=${encodeURIComponent(errorMessage)}`);
+  }
+
   revalidatePath("/super-admin/users");
   revalidatePath("/super-admin");
+  redirect("/super-admin/users?deleted=1");
 }

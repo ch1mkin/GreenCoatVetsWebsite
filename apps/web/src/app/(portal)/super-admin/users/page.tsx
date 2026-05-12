@@ -22,7 +22,11 @@ const ASSIGN_ROLES = [
   { value: "pet_owner", label: "Pet owner" },
 ] as const;
 
-export default async function SuperAdminUsersPage() {
+export default async function SuperAdminUsersPage({
+  searchParams = {},
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const access = await getUserAccess();
   if (!access.isSuperAdmin) {
     redirect("/dashboard");
@@ -30,6 +34,10 @@ export default async function SuperAdminUsersPage() {
 
   const navGroups = getRoleNavGroups("clinic_admin", true);
   const [users, clinics] = await Promise.all([listAppUsersForSuperAdmin(), listClinicsMinimalForSuperAdmin()]);
+  const saved = searchParams.saved === "1" || searchParams.saved === "true";
+  const deactivated = searchParams.deactivated === "1" || searchParams.deactivated === "true";
+  const deleted = searchParams.deleted === "1" || searchParams.deleted === "true";
+  const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
 
   return (
     <AppShell
@@ -43,6 +51,30 @@ export default async function SuperAdminUsersPage() {
         </Link>
       }
     >
+      {errorMessage ? (
+        <section className="card-soft mb-3 border border-red-200 bg-red-50 text-red-900">
+          <p className="font-semibold">Could not complete that user action</p>
+          <p className="mt-1 text-sm">{errorMessage}</p>
+        </section>
+      ) : null}
+      {saved ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">User assigned</p>
+          <p className="mt-1 text-sm">The account was created or linked successfully.</p>
+        </section>
+      ) : null}
+      {deactivated ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">User deactivated</p>
+          <p className="mt-1 text-sm">All clinic access for that user has been removed.</p>
+        </section>
+      ) : null}
+      {deleted ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">User deleted from database</p>
+          <p className="mt-1 text-sm">The selected platform-table records were removed successfully.</p>
+        </section>
+      ) : null}
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign role (any clinic)</h2>
         <p className="mt-1 text-[11px] text-slate-600">
