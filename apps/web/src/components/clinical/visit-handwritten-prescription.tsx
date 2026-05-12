@@ -50,20 +50,20 @@ async function waitForImages(root: HTMLElement) {
 
 function toolButtonClass(active: boolean) {
   return active
-    ? "flex h-10 w-10 items-center justify-center rounded-xl border border-primary bg-primary text-white shadow-sm"
-    : "flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-800 text-white shadow-sm hover:bg-slate-700";
+    ? "flex h-12 w-12 items-center justify-center rounded-2xl border border-primary bg-primary text-white shadow-sm shadow-primary/20"
+    : "flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm hover:border-primary/30 hover:bg-slate-50";
 }
 
 function compactToolButtonClass(active: boolean) {
   return active
-    ? "flex h-10 w-full items-center justify-center rounded-lg border border-primary bg-primary text-white shadow-sm"
-    : "flex h-10 w-full items-center justify-center rounded-lg border border-slate-800 bg-slate-800 text-white shadow-sm hover:bg-slate-700";
+    ? "flex h-12 w-full items-center justify-center rounded-xl border border-primary bg-primary text-white shadow-sm shadow-primary/20"
+    : "flex h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm hover:border-primary/30 hover:bg-slate-50";
 }
 
 function ToolIcon({ tool }: { tool: Tool }) {
   if (tool === "draw") {
     return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
         <path d="M4 20l4.5-1 9-9a1.8 1.8 0 0 0 0-2.5l-1-1a1.8 1.8 0 0 0-2.5 0l-9 9L4 20z" />
         <path d="M13 6l5 5" />
       </svg>
@@ -71,7 +71,7 @@ function ToolIcon({ tool }: { tool: Tool }) {
   }
   if (tool === "highlight") {
     return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
         <path d="M7 16l7-7 3 3-7 7H7v-3z" />
         <path d="M14 9l2-2 3 3-2 2" />
         <path d="M5 21h8" />
@@ -80,14 +80,14 @@ function ToolIcon({ tool }: { tool: Tool }) {
   }
   if (tool === "erase") {
     return (
-      <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+      <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
         <path d="M7 16l7-7 5 5-5 5H9l-2-2a2 2 0 0 1 0-3z" />
         <path d="M14 19h6" />
       </svg>
     );
   }
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.9" aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2.2" aria-hidden="true">
       <path d="M8 4l1 6 3-2 1 6 3-2 1 8" />
       <path d="M5 11c0-1.7 1.3-3 3-3h3" />
     </svg>
@@ -163,6 +163,7 @@ export function VisitHandwrittenPrescription({
   petName,
   ownerName,
   doctorName,
+  logoUrl,
   initialState,
 }: {
   visitId: string;
@@ -172,6 +173,7 @@ export function VisitHandwrittenPrescription({
   petName: string;
   ownerName: string;
   doctorName: string;
+  logoUrl?: string | null;
   initialState: HandwrittenVisitSheetState;
 }) {
   const router = useRouter();
@@ -644,7 +646,7 @@ export function VisitHandwrittenPrescription({
   const fullscreenToolbar = (
     <div
       ref={fullscreenToolbarRef}
-      className="absolute left-0 top-0 z-20 w-[122px] will-change-transform rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
+      className="absolute left-0 top-0 z-20 w-[136px] will-change-transform rounded-2xl border border-slate-300/80 bg-white/90 p-2 shadow-2xl backdrop-blur"
       style={{ transform: `translate3d(${fullscreenToolbarPos.x}px, ${fullscreenToolbarPos.y}px, 0)` }}
     >
       <button
@@ -728,6 +730,7 @@ export function VisitHandwrittenPrescription({
         state={editorState}
         registerCheckboxRef={registerCheckboxRef}
         onCheckboxChange={handleCheckboxChange}
+        logoUrl={logoUrl ?? null}
       />
       <svg
         viewBox={`0 0 ${HANDWRITTEN_VISIT_SHEET_WIDTH} ${HANDWRITTEN_VISIT_SHEET_HEIGHT}`}

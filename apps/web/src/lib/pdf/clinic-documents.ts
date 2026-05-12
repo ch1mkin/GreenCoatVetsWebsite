@@ -732,6 +732,7 @@ export async function buildPrescriptionPdfBytes(opts: {
 export async function buildHandwrittenCanvasPdfBytes(opts: {
   imageBytes: Uint8Array;
   footerText?: string | null;
+  logoBytes?: Uint8Array | null;
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const page = doc.addPage([PAGE_W, PAGE_H]);
@@ -745,6 +746,19 @@ export async function buildHandwrittenCanvasPdfBytes(opts: {
     image = await doc.embedJpg(opts.imageBytes);
   }
 
+  let logoImage: PDFImage | null = null;
+  if (opts.logoBytes && opts.logoBytes.length > 0) {
+    try {
+      logoImage = await doc.embedPng(opts.logoBytes);
+    } catch {
+      try {
+        logoImage = await doc.embedJpg(opts.logoBytes);
+      } catch {
+        logoImage = null;
+      }
+    }
+  }
+
   const maxW = PAGE_W - BOX_INSET * 2 - 12;
   const maxH = PAGE_H - BOX_INSET * 2 - 24;
   const scale = Math.min(maxW / image.width, maxH / image.height);
@@ -754,6 +768,30 @@ export async function buildHandwrittenCanvasPdfBytes(opts: {
   const y = BOX_INSET + (PAGE_H - BOX_INSET * 2 - height) / 2 + 8;
 
   page.drawImage(image, { x, y, width, height });
+
+  if (logoImage) {
+    const maxLogo = 58;
+    const logoScale = Math.min(maxLogo / logoImage.width, maxLogo / logoImage.height, 1);
+    const logoWidth = logoImage.width * logoScale;
+    const logoHeight = logoImage.height * logoScale;
+    page.drawImage(logoImage, {
+      x: BOX_INSET + 18,
+      y: PAGE_H - BOX_INSET - logoHeight - 16,
+      width: logoWidth,
+      height: logoHeight,
+    });
+
+    const markScale = Math.min(190 / logoImage.width, 190 / logoImage.height, 1.4);
+    const markWidth = logoImage.width * markScale;
+    const markHeight = logoImage.height * markScale;
+    page.drawImage(logoImage, {
+      x: PAGE_W - BOX_INSET - markWidth - 28,
+      y: BOX_INSET + 96,
+      width: markWidth,
+      height: markHeight,
+      opacity: 0.14,
+    });
+  }
 
   const footer = sanitizePdfText(
     opts.footerText?.trim() || "Handwritten clinical sheet captured digitally and exported as a PDF record.",

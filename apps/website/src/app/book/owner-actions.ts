@@ -2,6 +2,7 @@
 
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
 import { redirect } from "next/navigation";
+import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { createClient } from "@/lib/supabase/server";
@@ -29,8 +30,10 @@ export async function submitOwnerBooking(formData: FormData) {
   const chiefComplaint = String(formData.get("chief_complaint") ?? "").trim();
   const allergies = String(formData.get("allergies") ?? "").trim();
   const currentMedications = String(formData.get("current_medications") ?? "").trim();
+  const contactFullName = String(formData.get("contact_full_name") ?? "").trim();
   const contactPhone = String(formData.get("contact_phone") ?? "").trim();
   const contactEmail = String(formData.get("contact_email") ?? "").trim();
+  const consentAccepted = String(formData.get("booking_consent") ?? "") === "on";
 
   if (!branchId || !startsAtRaw) {
     throw new Error("Branch and time are required.");
@@ -40,6 +43,15 @@ export async function submitOwnerBooking(formData: FormData) {
   }
   if (!appointmentTypes.includes(appointmentType as (typeof appointmentTypes)[number])) {
     throw new Error("Invalid appointment type.");
+  }
+  if (!consentAccepted) {
+    throw new Error("You must accept the booking consent before submitting.");
+  }
+  if (!contactFullName) {
+    throw new Error("Full name is required.");
+  }
+  if (!contactPhone) {
+    throw new Error("Contact phone is required.");
   }
 
   const startsAt = new Date(startsAtRaw).toISOString();
@@ -66,9 +78,30 @@ export async function submitOwnerBooking(formData: FormData) {
     chief_complaint: chiefComplaint || null,
     allergies: allergies || null,
     current_medications: currentMedications || null,
+    contact_name: contactFullName || null,
     contact_phone: contactPhone || null,
     contact_email: contactEmail || null,
+    consent_accepted: true,
+    consent_text: APPOINTMENT_BOOKING_CONSENT_TEXT,
+    consent_version: APPOINTMENT_BOOKING_CONSENT_VERSION,
+    consent_at: new Date().toISOString(),
   };
+
+  const nextOwnerName = contactFullName || ownerRow.full_name;
+  const nextOwnerPhone = contactPhone || ownerRow.phone;
+  const nextOwnerEmail = contactEmail || ownerRow.email;
+
+  const { error: ownerUpdateError } = await supabase
+    .from("owners")
+    .update({
+      full_name: nextOwnerName,
+      phone: nextOwnerPhone,
+      email: nextOwnerEmail || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", ownerRow.id)
+    .eq("clinic_id", clinic.id);
+  if (ownerUpdateError) throw new Error(ownerUpdateError.message);
 
   const { error } = await supabase.from("appointments").insert({
     clinic_id: clinic.id,
@@ -101,9 +134,9 @@ export async function submitOwnerBooking(formData: FormData) {
       appointmentType,
       startsAtIso: startsAt,
       petName: petDisplayName,
-      ownerDisplay: ownerRow.full_name,
-      ownerEmail: contactEmail || ownerRow.email,
-      ownerPhone: contactPhone || ownerRow.phone,
+      ownerDisplay: nextOwnerName,
+      ownerEmail: nextOwnerEmail,
+      ownerPhone: nextOwnerPhone,
       chiefComplaint: chiefComplaint || null,
       notes: notes || null,
       bookingSource: "owner_portal",

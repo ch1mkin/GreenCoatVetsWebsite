@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useState, useTransition } from "react";
+import { shareVisitReportPdfByEmailAction } from "@/app/(portal)/visits/visit-report-actions";
 
 /**
  * Visit report PDF can come from structured visit save or a handwritten full-visit sheet.
@@ -9,13 +13,36 @@ export function VisitReportToolbar({
   petId,
   storedAt,
   source,
+  shareEmail,
 }: {
   visitId: string;
   petId: string;
   storedAt: string | null;
   source?: string | null;
+  shareEmail?: string | null;
 }) {
   const canDownload = Boolean(storedAt);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [sharePending, startShare] = useTransition();
+
+  function handleShare() {
+    if (!canDownload) return;
+    setShareMessage(null);
+    setShareError(null);
+    startShare(async () => {
+      const fd = new FormData();
+      fd.set("visit_id", visitId);
+      if (shareEmail?.trim()) fd.set("recipient_email", shareEmail.trim());
+      const result = await shareVisitReportPdfByEmailAction(fd);
+      if (!result.ok) {
+        setShareError(result.error);
+        return;
+      }
+      setShareMessage(`Visit report emailed to ${result.sentTo}.`);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-primary/25 bg-primary-fixed/10 px-3 py-3 text-[12px] sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
       <div className="flex items-center gap-2">
@@ -37,10 +64,22 @@ export function VisitReportToolbar({
             Download after save
           </span>
         )}
+        {canDownload ? (
+          <button
+            type="button"
+            className="btn-secondary btn-compact text-xs disabled:opacity-60"
+            disabled={sharePending}
+            onClick={handleShare}
+          >
+            {sharePending ? "Sending..." : "Email PDF"}
+          </button>
+        ) : null}
         <Link className="text-xs font-semibold text-primary underline" href={`/pets/${petId}?view=visit_reports`}>
           Pet profile — all reports
         </Link>
       </div>
+      {shareMessage ? <p className="w-full text-[11px] text-emerald-700">{shareMessage}</p> : null}
+      {shareError ? <p className="w-full text-[11px] text-red-700">{shareError}</p> : null}
       {storedAt ? (
         <p className="w-full text-[11px] text-on-surface-variant sm:ml-auto sm:w-auto">
           Last saved to record: {new Date(storedAt).toLocaleString()}
@@ -52,6 +91,9 @@ export function VisitReportToolbar({
           save the handwritten full visit sheet — then you can download it here and it appears on the patient record for owners.
         </p>
       )}
+      {canDownload && !shareEmail?.trim() ? (
+        <p className="w-full text-[11px] text-on-surface-variant">Add or confirm the owner email in the appointment intake to enable one-click PDF sharing.</p>
+      ) : null}
     </div>
   );
 }

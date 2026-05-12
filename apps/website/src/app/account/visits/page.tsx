@@ -25,8 +25,9 @@ export default async function AccountVisitsPage() {
   const portal = await getOwnerPortalContext(user.id);
   if (!portal) redirect("/account");
   const { clinic } = portal;
+  const reportsEnabled = clinic.website_owner_visit_reports_enabled ?? true;
 
-  const visits = await fetchOwnerVisitSummaries(clinic.id, 40);
+  const visits = await fetchOwnerVisitSummaries(user.id, clinic.id, 40);
 
   return (
     <main className="bg-surface pb-20 pt-8 text-on-background sm:pt-12">
@@ -37,8 +38,10 @@ export default async function AccountVisitsPage() {
         </Link>
         <h1 className="mt-4 font-headline text-3xl font-extrabold tracking-tight">Past visits</h1>
         <p className="mt-2 text-on-surface-variant">
-          A simple timeline for <strong className="text-on-surface">{clinic.name}</strong>. Diagnoses, prescriptions, and file downloads are not
-          shown on the website — use the clinic or the mobile app for full records.
+          A simple timeline for <strong className="text-on-surface">{clinic.name}</strong>.{" "}
+          {reportsEnabled
+            ? "Generated visit-report PDFs can be opened here when the clinic has saved them."
+            : "Visit-report downloads are currently hidden by the clinic admin."}
         </p>
 
         <ul className="mt-8 space-y-3">
@@ -58,6 +61,21 @@ export default async function AccountVisitsPage() {
                     <p className="text-xs text-primary">{v.status_label}</p>
                   </div>
                 </div>
+                {reportsEnabled ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {v.report_ready ? (
+                      <Link
+                        href={`/account/visits/${v.id}/report`}
+                        className="inline-flex items-center rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/10"
+                        target="_blank"
+                      >
+                        Open visit report PDF
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-on-surface-variant">PDF will appear here after the doctor saves the visit report.</span>
+                    )}
+                  </div>
+                ) : null}
               </li>
             ))
           ) : (

@@ -4,7 +4,7 @@ import { getUserAccess } from "@/lib/auth/get-user-access";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/web/submit-button";
-import { updateClinicBranchWebLicenseSettings, updateClinicProfileImage } from "./actions";
+import { updateClinicBranchWebLicenseSettings, updateClinicProfileImage, updateClinicWebsiteVisitReportAccess } from "./actions";
 
 function canAccessClinicProfile(role: string | null | undefined, isSuperAdmin: boolean): boolean {
   if (isSuperAdmin) return true;
@@ -122,6 +122,27 @@ export default async function ClinicProfilePage() {
             <div className="sm:col-span-2">
               <SubmitButton className="btn-primary w-fit">Save license pricing</SubmitButton>
             </div>
+          </form>
+        </section>
+
+        <section className="mt-10 border-t border-outline-variant/15 pt-8">
+          <h2 className="font-headline text-lg font-bold text-on-background">Website owner visit reports</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Control whether pet owners can open saved visit-report PDFs from the public website account area.
+          </p>
+          <form action={updateClinicWebsiteVisitReportAccess} className="mt-4 max-w-xl space-y-4 rounded-2xl border border-outline-variant/15 bg-surface-container-low px-4 py-4">
+            <label className="flex items-start gap-3 text-sm text-on-surface">
+              <input
+                type="checkbox"
+                name="website_owner_visit_reports_enabled"
+                defaultChecked={(clinic?.website_owner_visit_reports_enabled as boolean | null | undefined) ?? true}
+                className="mt-1 rounded border-outline-variant"
+              />
+              <span>
+                Allow owners to download visit-report PDFs from the website profile section while the app is not launched.
+              </span>
+            </label>
+            <SubmitButton className="btn-primary w-fit">Save website report access</SubmitButton>
           </form>
         </section>
 

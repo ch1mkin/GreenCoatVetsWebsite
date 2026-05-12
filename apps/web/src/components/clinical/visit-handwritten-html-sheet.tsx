@@ -11,6 +11,7 @@ type Props = {
   state: HandwrittenVisitSheetState;
   registerCheckboxRef: (checkboxId: HandwrittenVisitCheckboxId, node: HTMLInputElement | null) => void;
   onCheckboxChange: (checkboxId: HandwrittenVisitCheckboxId, checked: boolean) => void;
+  logoUrl?: string | null;
 };
 
 function StaticFieldArea({
@@ -53,8 +54,10 @@ export function VisitHandwrittenHtmlSheet({
   state,
   registerCheckboxRef,
   onCheckboxChange,
+  logoUrl,
 }: Props) {
   const { checkboxes, fields } = state;
+  const brandingLogoUrl = logoUrl?.trim() || "/platform-logo.png";
 
   return (
     <div className="sheet-shell">
@@ -64,8 +67,9 @@ export function VisitHandwrittenHtmlSheet({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               className="top-logo"
-              src="/platform-logo.png"
+              src={brandingLogoUrl}
               alt="GreenCoatVets logo"
+              loading="eager"
             />
           </div>
 
@@ -123,7 +127,7 @@ export function VisitHandwrittenHtmlSheet({
             </div>
           </div>
 
-          <div className="row row-gap-medium">
+          <div className="row row-gap-medium owner-meta-row">
             <div className="item">
               Owner Name : <StaticFieldArea className="dotted-line owner-line" value={fields.ownerName} />
             </div>
@@ -157,8 +161,9 @@ export function VisitHandwrittenHtmlSheet({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="watermark"
-            src="/platform-logo.png"
+            src={brandingLogoUrl}
             alt=""
+            loading="eager"
           />
 
           <div className="left">
@@ -400,7 +405,7 @@ export function VisitHandwrittenHtmlSheet({
         }
 
         .row-gap-medium {
-          gap: 10px;
+          gap: 24px;
         }
 
         .species-row {
@@ -448,15 +453,20 @@ export function VisitHandwrittenHtmlSheet({
         }
 
         .mobile-line {
-          width: 190px;
+          width: 175px;
         }
 
         .date-line {
-          width: 185px;
+          width: 155px;
         }
 
         .owner-line {
-          width: 280px;
+          width: 250px;
+        }
+
+        .owner-meta-row {
+          justify-content: space-between;
+          gap: 18px;
         }
 
         .small-fields {
@@ -506,7 +516,7 @@ export function VisitHandwrittenHtmlSheet({
           width: 390px;
           right: 40px;
           bottom: 120px;
-          opacity: 0.06;
+          opacity: 0.12;
           z-index: 0;
           pointer-events: none;
         }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
+import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { createClient } from "@/lib/supabase/server";
@@ -34,9 +35,13 @@ export async function submitGuestBooking(formData: FormData) {
   const notes = String(formData.get("notes") ?? "").trim();
   const allergies = String(formData.get("allergies") ?? "").trim();
   const currentMedications = String(formData.get("current_medications") ?? "").trim();
+  const consentAccepted = String(formData.get("booking_consent") ?? "") === "on";
 
   if (!branchId || !startsAtRaw || !fullName || !phone || !email || !petName) {
     throw new Error("Please fill in branch, date & time, your details, and pet name.");
+  }
+  if (!consentAccepted) {
+    throw new Error("You must accept the booking consent before submitting.");
   }
   if (!appointmentTypes.includes(appointmentType as (typeof appointmentTypes)[number])) {
     throw new Error("Invalid appointment type.");
@@ -59,6 +64,9 @@ export async function submitGuestBooking(formData: FormData) {
     p_notes: notes,
     p_allergies: allergies,
     p_current_medications: currentMedications,
+    p_consent_accepted: true,
+    p_consent_text: APPOINTMENT_BOOKING_CONSENT_TEXT,
+    p_consent_version: APPOINTMENT_BOOKING_CONSENT_VERSION,
   });
 
   if (error) throw new Error(error.message);

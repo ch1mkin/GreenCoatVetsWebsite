@@ -171,3 +171,25 @@ export async function updateClinicBranchWebLicenseSettings(formData: FormData) {
   revalidatePath("/clinic-profile");
   revalidatePath("/billing/branch-portal");
 }
+
+export async function updateClinicWebsiteVisitReportAccess(formData: FormData) {
+  const access = await getUserAccess();
+  const role = access.membership?.role ?? "";
+  const clinicId = access.membership?.clinic_id ?? "";
+  if (!clinicId || !canManageClinicProfile(role, access.isSuperAdmin)) {
+    throw new Error("Only clinic admins or branch admins can update website visit-report access.");
+  }
+
+  const websiteOwnerVisitReportsEnabled = String(formData.get("website_owner_visit_reports_enabled") ?? "") === "on";
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      website_owner_visit_reports_enabled: websiteOwnerVisitReportsEnabled,
+    })
+    .eq("id", clinicId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/clinic-profile");
+}

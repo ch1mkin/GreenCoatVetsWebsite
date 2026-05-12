@@ -171,7 +171,7 @@ export default async function VisitDetailsPage({
   const ic = (k: string) => String(intakeObj?.[k] ?? "").trim();
   const hasOwnerIntake =
     !!intakeObj &&
-    ["chief_complaint", "allergies", "current_medications", "contact_phone", "contact_email"].some((k) => ic(k));
+    ["chief_complaint", "allergies", "current_medications", "contact_name", "contact_phone", "contact_email"].some((k) => ic(k));
 
   const species = pet?.species ? formatSpeciesDisplay(String(pet.species)) : "Pet";
   const defaultSpeciesClass = inferSpeciesClass(species);
@@ -212,6 +212,7 @@ export default async function VisitDetailsPage({
     { data: rxItems, error: rxItemsError },
     { data: attachments, error: attachmentsError },
     { data: clinicRow, error: clinicRowError },
+    { data: brandingRow },
     medicineCatalog,
   ] = await Promise.all([
     supabase
@@ -226,6 +227,7 @@ export default async function VisitDetailsPage({
     .eq("clinic_id", clinic_id)
       .order("created_at", { ascending: false }),
     supabase.from("clinics").select("*").eq("id", clinic_id).maybeSingle(),
+    supabase.from("platform_branding").select("logo_url").eq("id", "default").maybeSingle(),
     loadMedicineCatalogOrFallback(supabase, clinic_id),
   ]);
 
@@ -233,6 +235,7 @@ export default async function VisitDetailsPage({
   if (attachmentsError) throw new Error(attachmentsError.message);
   if (clinicRowError) throw new Error(clinicRowError.message);
   const ownerName = ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string } | null);
+  const intakeOwnerName = ic("contact_name");
   const petId = String(pet?.id ?? "");
   const branchId = String(branch?.id ?? "");
   const visitDate = new Date(String((visit as { started_at?: string | null }).started_at ?? appt?.starts_at ?? Date.now()));
@@ -241,7 +244,7 @@ export default async function VisitDetailsPage({
     patientAge:
       evaluation?.patient_age ??
       patientAgeLabel(pet as { date_of_birth?: string | null; age_months?: number | null }),
-    ownerName: evaluation?.owner_name ?? ownerName,
+    ownerName: evaluation?.owner_name ?? (intakeOwnerName || ownerName),
     mobile: ic("contact_phone") || String(owner?.phone ?? ""),
     date: Number.isNaN(visitDate.getTime()) ? "" : visitDate.toLocaleDateString(),
     species: evaluation?.species_class ?? species,
@@ -357,6 +360,7 @@ export default async function VisitDetailsPage({
               petId={petId}
               storedAt={(visit.visit_report_pdf_generated_at as string | null) ?? null}
               source={(visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source ?? null}
+              shareEmail={ic("contact_email") || String(owner?.email ?? "").trim() || null}
             />
           ) : null}
           <VisitSection
@@ -380,8 +384,9 @@ export default async function VisitDetailsPage({
               hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
               clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
               petName={String(pet?.name ?? "Patient")}
-              ownerName={ownerName}
+              ownerName={intakeOwnerName || ownerName}
               doctorName={doctorDisplayName ?? "Doctor"}
+              logoUrl={(brandingRow?.logo_url as string | null | undefined) ?? null}
               initialState={initialHandwrittenState}
             />
           </VisitSection>
@@ -463,6 +468,11 @@ export default async function VisitDetailsPage({
                   <span className="font-medium">{ic("current_medications")}</span>
                 </p>
               ) : null}
+              {intakeOwnerName ? (
+                <p>
+                  <span className="text-on-surface-variant">Owner name (confirmed):</span> <span className="font-medium">{intakeOwnerName}</span>
+                </p>
+              ) : null}
               {ic("contact_phone") ? (
                 <p>
                   <span className="text-on-surface-variant">Contact phone (confirmed):</span>{" "}
@@ -483,7 +493,7 @@ export default async function VisitDetailsPage({
           <div className="grid gap-2 md:grid-cols-2">
             <p>
               <span className="text-on-surface-variant">Owner:</span>{" "}
-              <strong>{ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string })}</strong>
+              <strong>{intakeOwnerName || ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string })}</strong>
             </p>
             <p>
               <span className="text-on-surface-variant">Patient:</span> <strong>{String(pet?.name ?? "—")}</strong> ({species})
@@ -585,7 +595,8 @@ export default async function VisitDetailsPage({
                   name="owner_name"
                   defaultValue={
                     evaluation?.owner_name ??
-                    ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string })
+                    (intakeOwnerName ||
+                      ownerDisplayName(owner as { first_name?: string; last_name?: string; full_name?: string }))
                   }
                 />
               </label>

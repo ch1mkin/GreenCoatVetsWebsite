@@ -94,7 +94,15 @@ export function SignupForm({
 
     const supabase = createClient();
     if (!oauthMode) {
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+          },
+        },
+      });
       if (signUpError) {
         setIsSubmitting(false);
         setError(mapAuthError(signUpError.message));
@@ -137,7 +145,10 @@ export function SignupForm({
       return;
     }
 
-    await supabase.rpc("ensure_primary_clinic_customer_membership");
+    await supabase.rpc("ensure_primary_clinic_customer_membership", {
+      p_full_name: fullName.trim() || null,
+      p_phone: null,
+    });
     router.push("/dashboard");
     router.refresh();
     setIsSubmitting(false);
@@ -193,7 +204,13 @@ export function SignupForm({
                   <span className="h-px flex-1 bg-outline-variant/20" />
                 </div>
               </div>
-              <input className="input-soft w-full px-4 py-3.5" placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+              <input
+                className="input-soft w-full px-4 py-3.5"
+                placeholder="Full name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                required
+              />
               {inviteRole === "doctor" ? (
                 <input
                   className="input-soft w-full px-4 py-3.5"

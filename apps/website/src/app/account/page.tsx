@@ -104,8 +104,8 @@ export default async function AccountPage({
         ) : (
           <>
             <p className="mb-6 text-sm text-on-surface-variant">
-              Book visits, register pets, and see recent appointments. Prescriptions, downloads, and full medical records stay in-clinic or in
-              the mobile app — here you get scheduling and a simple visit history only.
+              Book visits, register pets, and see recent appointments. Full medical records remain clinician-managed, and visit-report PDF access
+              appears here whenever your clinic has enabled website downloads.
             </p>
 
             <ul className="grid gap-4 sm:grid-cols-2">
@@ -146,7 +146,7 @@ export default async function AccountPage({
                 >
                   <span className="material-symbols-outlined text-3xl text-primary">history</span>
                   <span className="mt-3 font-headline text-lg font-bold text-on-surface">Past visits</span>
-                  <span className="mt-1 text-sm text-on-surface-variant">Dates and locations only — no clinical detail here.</span>
+                  <span className="mt-1 text-sm text-on-surface-variant">Timeline plus saved visit-report PDFs when available.</span>
                 </Link>
               </li>
             </ul>

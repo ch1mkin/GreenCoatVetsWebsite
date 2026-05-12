@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DEFAULT_PET_SPECIES_BOOKING_VALUE, PET_SPECIES_BOOKING_OPTIONS } from "@saasclinics/lib";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
+import { APPOINTMENT_BOOKING_CONSENT_TEXT } from "@/lib/booking/appointment-consent";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { clinicMetadata } from "@/lib/seo/clinic-metadata";
 import { createClient } from "@/lib/supabase/server";
@@ -23,7 +24,11 @@ export async function generateMetadata() {
   });
 }
 
-export default async function BookAppointmentPage() {
+export default async function BookAppointmentPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const siteClinic = await resolveClinic();
   const supabase = createClient();
   const {
@@ -53,6 +58,11 @@ export default async function BookAppointmentPage() {
 
   const branchRows = (branches ?? []) as { id: string; name: string }[];
   const hasOwnerPets = Boolean((pets?.length ?? 0) > 0);
+  const walkInMode = searchParams?.walk_in === "1" || searchParams?.walk_in === "true";
+  const ownerName = owner?.full_name?.trim() ?? "";
+  const ownerPhone = owner?.phone?.trim() ?? "";
+  const ownerNeedsName = ownerName.length < 2;
+  const ownerNeedsPhone = ownerPhone.length < 8 || ownerPhone.toUpperCase() === "NA";
 
   const showOwnerForm = Boolean(user && owner);
 
@@ -67,6 +77,11 @@ export default async function BookAppointmentPage() {
                 ? `Signed in — booking with ${bookingClinic.name}.`
                 : `No login required. You’re booking with ${bookingClinic.name}. Create an account later with the same email to see visits in your portal.`}
             </p>
+            {walkInMode ? (
+              <div className="mt-4 max-w-2xl rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-on-surface">
+                Walk-in self check-in is active. Complete this form at reception and the appointment will appear in the clinic schedule for the doctor.
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {user ? (
@@ -106,6 +121,7 @@ export default async function BookAppointmentPage() {
 
         {showOwnerForm ? (
           <form action={submitOwnerBooking} data-booking-form className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
+            {!ownerNeedsName ? <input type="hidden" name="contact_full_name" value={ownerName} /> : null}
             <div className="space-y-8 lg:col-span-8">
               <section className="clinical-shadow rounded-xl bg-surface-container-lowest p-6 sm:p-8">
                 <h2 className="mb-6 flex items-center gap-2 font-headline text-xl font-bold text-on-surface">
@@ -194,11 +210,35 @@ export default async function BookAppointmentPage() {
                     </label>
                     <input className={field} name="current_medications" placeholder="None or list as prescribed" defaultValue="" />
                   </div>
+                  {ownerNeedsName ? (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
+                        Owner full name
+                      </label>
+                      <input
+                        className={field}
+                        name="contact_full_name"
+                        type="text"
+                        defaultValue={ownerName}
+                        required
+                        autoComplete="name"
+                        placeholder="Enter your full name"
+                      />
+                    </div>
+                  ) : null}
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                       Contact phone (confirm)
                     </label>
-                    <input className={field} name="contact_phone" type="tel" defaultValue={owner!.phone ?? ""} required />
+                    <input
+                      className={field}
+                      name="contact_phone"
+                      type="tel"
+                      defaultValue={ownerNeedsPhone ? "" : ownerPhone}
+                      required
+                      autoComplete="tel"
+                      placeholder="+91 98765 43210"
+                    />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
@@ -209,6 +249,17 @@ export default async function BookAppointmentPage() {
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Notes (optional)</label>
                     <textarea className={`${field} min-h-[100px]`} name="notes" placeholder="Anything else for the team" rows={3} />
+                  </div>
+                  <div className="sm:col-span-2 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-4">
+                    <label className="flex items-start gap-3 text-sm text-on-surface">
+                      <input
+                        type="checkbox"
+                        name="booking_consent"
+                        required
+                        className="mt-1 h-4 w-4 rounded border-outline-variant"
+                      />
+                      <span>{APPOINTMENT_BOOKING_CONSENT_TEXT}</span>
+                    </label>
                   </div>
                 </div>
               </section>
@@ -338,6 +389,17 @@ export default async function BookAppointmentPage() {
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Notes (optional)</label>
                     <textarea className={`${field} min-h-[100px]`} name="notes" placeholder="Anything else for the team" rows={3} />
+                  </div>
+                  <div className="sm:col-span-2 rounded-2xl border border-primary/15 bg-primary/5 px-4 py-4">
+                    <label className="flex items-start gap-3 text-sm text-on-surface">
+                      <input
+                        type="checkbox"
+                        name="booking_consent"
+                        required
+                        className="mt-1 h-4 w-4 rounded border-outline-variant"
+                      />
+                      <span>{APPOINTMENT_BOOKING_CONSENT_TEXT}</span>
+                    </label>
                   </div>
                 </div>
               </section>

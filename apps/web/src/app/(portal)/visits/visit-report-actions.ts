@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { fetchClinicLogoBytesForPdf } from "@/lib/invoicing/fetch-clinic-logo";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { buildHandwrittenCanvasPdfBytes } from "@/lib/pdf/clinic-documents";
 import { createClient } from "@/lib/supabase/server";
@@ -129,9 +131,12 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
     }
 
     const uploadedImageBytes = await readHandwrittenImageUpload(formData);
+    const { data: brandingRow } = await supabase.from("platform_branding").select("logo_url").eq("id", "default").maybeSingle();
+    const logoBytes = await fetchClinicLogoBytesForPdf(supabase, (brandingRow?.logo_url as string | null | undefined) ?? null);
     const pdfBytes = await buildHandwrittenCanvasPdfBytes({
       imageBytes: uploadedImageBytes,
       footerText: `Handwritten visit sheet saved ${new Date().toLocaleString()}.`,
+      logoBytes,
     });
     const path = `${visit.clinic_id}/pets/${visit.pet_id}/visits/${visitId}/visit-report-handwritten.pdf`;
     const stateJson = String(formData.get("editor_state_json") ?? "").trim();
@@ -184,5 +189,90 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
     return { ok: true, pdfPath: path };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to save handwritten visit PDF." };
+  }
+}
+
+type ShareVisitReportPdfResult = { ok: true; sentTo: string } | { ok: false; error: string };
+
+export async function shareVisitReportPdfByEmailAction(formData: FormData): Promise<ShareVisitReportPdfResult> {
+  try {
+    const access = await getUserAccess();
+    if (access.membership?.role === "pet_owner") {
+      return { ok: false, error: "Only clinic staff can share visit PDFs by email." };
+    }
+
+    const visitId = String(formData.get("visit_id") ?? "").trim();
+    if (!visitId) {
+      return { ok: false, error: "Visit id is required." };
+    }
+
+    const manualRecipient = String(formData.get("recipient_email") ?? "").trim().toLowerCase();
+    const supabase = createClient();
+    await assertVisitReportAccess(supabase, access, visitId);
+
+    const { data: visit, error: visitError } = await supabase
+      .from("visits")
+      .select("id, clinic_id, visit_report_pdf_path, pets(name), owners(full_name, email), appointments(owner_intake)")
+      .eq("id", visitId)
+      .maybeSingle();
+    if (visitError || !visit) {
+      return { ok: false, error: visitError?.message ?? "Visit not found." };
+    }
+
+    const path = String((visit as { visit_report_pdf_path?: string | null }).visit_report_pdf_path ?? "").trim();
+    if (!path) {
+      return { ok: false, error: "Save the visit report PDF before sharing it." };
+    }
+
+    const appointmentRaw = (visit as { appointments?: Record<string, unknown> | Record<string, unknown>[] | null }).appointments ?? null;
+    const appointment = Array.isArray(appointmentRaw) ? appointmentRaw[0] ?? null : appointmentRaw;
+    const intake =
+      appointment?.owner_intake && typeof appointment.owner_intake === "object" && !Array.isArray(appointment.owner_intake)
+        ? (appointment.owner_intake as Record<string, unknown>)
+        : null;
+    const intakeEmail = String(intake?.contact_email ?? "").trim().toLowerCase();
+    const owner = visit.owners as { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
+    const ownerRow = Array.isArray(owner) ? owner[0] ?? null : owner;
+    const recipient = manualRecipient || intakeEmail || String(ownerRow?.email ?? "").trim().toLowerCase();
+    if (!recipient) {
+      return { ok: false, error: "No recipient email is available for this visit." };
+    }
+
+    const transporter = createHostingerTransport();
+    const from = getHostingerFromAddress();
+    if (!transporter || !from) {
+      return { ok: false, error: "Hostinger SMTP is not configured on the server." };
+    }
+
+    const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET).download(path);
+    if (downloadError || !blob) {
+      return { ok: false, error: "Visit report file is missing from storage." };
+    }
+
+    const pet = visit.pets as { name?: string | null } | { name?: string | null }[] | null;
+    const petRow = Array.isArray(pet) ? pet[0] ?? null : pet;
+    const ownerName = String(ownerRow?.full_name ?? "").trim() || "pet owner";
+    const petName = String(petRow?.name ?? "").trim() || "patient";
+    const attachmentName = `visit-report-${petName.replace(/[^a-zA-Z0-9._-]+/g, "-").toLowerCase() || visitId.slice(0, 8)}.pdf`;
+    const fileBytes = Buffer.from(await blob.arrayBuffer());
+
+    await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: `Visit report for ${petName}`,
+      text: `Hello ${ownerName},\n\nAttached is the saved visit report PDF for ${petName}.\n\nRegards,\nGreenCoatVets`,
+      attachments: [
+        {
+          filename: attachmentName,
+          content: fileBytes,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+
+    revalidatePath(`/visits/${visitId}`);
+    return { ok: true, sentTo: recipient };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to email the visit report." };
   }
 }
