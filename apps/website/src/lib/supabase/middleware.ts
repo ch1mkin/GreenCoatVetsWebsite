@@ -22,18 +22,7 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Booking requires an authenticated pet owner (same as server check on /book).
-  const path = request.nextUrl.pathname;
-  if ((path === "/book" || path.startsWith("/book/")) && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", "/book");
-    return NextResponse.redirect(url);
-  }
+  await supabase.auth.getUser();
 
   return supabaseResponse;
 }

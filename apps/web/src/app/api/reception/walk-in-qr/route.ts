@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 const BRAND_GREEN = "#006c50";
 const BRAND_GREEN_SOFT = "#0d8b68";
 const BRAND_GREEN_DARK = "#084f3b";
+const TEXT_DARK = "#111827";
+const TEXT_MUTED = "#5f6f68";
 
 function escapeXml(value: string): string {
   return value
@@ -62,8 +64,8 @@ export async function GET(request: Request) {
   }
 
   const safeLabel = escapeXml(label.slice(0, 42));
-  const safeDomain = escapeXml(new URL(normalizedTarget).host);
-  const safePath = escapeXml(new URL(normalizedTarget).pathname + new URL(normalizedTarget).search);
+  const targetUrl = new URL(normalizedTarget);
+  const safeDisplayUrl = escapeXml(`${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`.replace(/\/$/, ""));
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1400" viewBox="0 0 1080 1400" role="img" aria-label="${safeLabel} walk-in booking QR">
@@ -84,18 +86,25 @@ export async function GET(request: Request) {
       ${pawPrint(960, 1216, 1.3)}
       ${pawPrint(850, 310, 0.85, 0.1)}
       ${pawPrint(245, 1010, 0.9, 0.1)}
+      ${pawPrint(292, 226, 0.95, 0.08)}
+      ${pawPrint(760, 196, 0.92, 0.08)}
+      ${pawPrint(886, 438, 1.05, 0.09)}
+      ${pawPrint(174, 560, 0.88, 0.08)}
+      ${pawPrint(924, 846, 0.98, 0.08)}
+      ${pawPrint(352, 1188, 1.02, 0.08)}
 
       <rect x="74" y="74" width="932" height="1252" rx="42" fill="white" filter="url(#cardShadow)" />
 
-      <rect x="118" y="118" width="844" height="188" rx="32" fill="${BRAND_GREEN}" />
-      ${logoDataUrl ? `<image href="${logoDataUrl}" x="162" y="148" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
-      <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="white">
+      <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="#d9e6e0" stroke-width="4" />
+      ${logoDataUrl ? `<rect x="154" y="144" width="120" height="120" rx="24" fill="white" stroke="#d9e6e0" stroke-width="2" />` : ""}
+      ${logoDataUrl ? `<image href="${logoDataUrl}" x="161" y="151" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
+      <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="${TEXT_DARK}">
         ${safeLabel}
       </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="236" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="600" fill="rgba(255,255,255,0.9)">
+      <text x="${logoDataUrl ? 300 : 160}" y="236" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="600" fill="${TEXT_DARK}">
         Walk-in self check-in
       </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="274" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="rgba(255,255,255,0.88)">
+      <text x="${logoDataUrl ? 300 : 160}" y="274" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
         Scan to open the booking form on your clinic website
       </text>
 
@@ -105,11 +114,8 @@ export async function GET(request: Request) {
       <text x="540" y="1148" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="${BRAND_GREEN}">
         Scan here to book
       </text>
-      <text x="540" y="1194" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600" fill="#4b635b">
-        ${safeDomain}
-      </text>
-      <text x="540" y="1232" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="19" font-weight="500" fill="#70857e">
-        ${safePath}
+      <text x="540" y="1204" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600" fill="${TEXT_MUTED}">
+        ${safeDisplayUrl}
       </text>
     </svg>
   `.trim();
