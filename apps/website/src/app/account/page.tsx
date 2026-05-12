@@ -25,6 +25,7 @@ export default async function AccountPage({
   const owner = portal?.owner ?? null;
   const claimed = searchParams.claimed === "1" || searchParams.claimed === "true";
   const booked = searchParams.booked === "1" || searchParams.booked === "true";
+  const completed = searchParams.completed === "1" || searchParams.completed === "true";
   const bookedBranchRaw = searchParams.branch;
   const bookedBranch = typeof bookedBranchRaw === "string" ? bookedBranchRaw : Array.isArray(bookedBranchRaw) ? bookedBranchRaw[0] : "";
 
@@ -89,6 +90,12 @@ export default async function AccountPage({
             </p>
           </div>
         ) : null}
+        {completed ? (
+          <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/90 px-5 py-4 text-emerald-950">
+            <p className="font-headline font-bold text-emerald-900">Profile completed</p>
+            <p className="mt-1 text-sm opacity-90">Your pet owner profile and first pet have been linked to this account.</p>
+          </div>
+        ) : null}
 
         {!owner ? (
           <div className="clinical-shadow rounded-2xl border border-amber-200 bg-amber-50/90 p-6 text-amber-950">
@@ -99,11 +106,7 @@ export default async function AccountPage({
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
-                href={
-                  user.email
-                    ? `/signup?email=${encodeURIComponent(user.email)}`
-                    : "/signup"
-                }
+                href="/account/complete-profile"
                 className="rounded-xl bg-primary px-5 py-2.5 font-headline text-sm font-bold text-on-primary"
               >
                 Complete pet owner signup
