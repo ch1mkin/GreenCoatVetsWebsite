@@ -287,6 +287,60 @@ function exportRegionCanvasImage(canvas: FabricCanvas, bounds: StrokeBounds) {
   });
 }
 
+function shouldCompactHandwriting(fieldId: HandwrittenVisitFieldId) {
+  return fieldId === "diagnosis" || fieldId === "prescription";
+}
+
+function compactLatestHandwrittenObject(fieldId: HandwrittenVisitFieldId, canvas: FabricCanvas) {
+  if (!shouldCompactHandwriting(fieldId)) return;
+  const objects = canvas.getObjects();
+  const latestObject = objects[objects.length - 1] as
+    | (Partial<{
+        scaleX: number;
+        scaleY: number;
+        left: number;
+        top: number;
+        setCoords: () => void;
+        getBoundingRect: (
+          absolute?: boolean,
+          calculate?: boolean,
+        ) => { left: number; top: number; width: number; height: number };
+      }> & {
+        getBoundingRect?: (
+          absolute?: boolean,
+          calculate?: boolean,
+        ) => { left: number; top: number; width: number; height: number };
+      })
+    | undefined;
+  if (!latestObject?.getBoundingRect) return;
+
+  const initialRect = latestObject.getBoundingRect(true, true);
+  if (!initialRect.width || !initialRect.height) return;
+
+  const targetHeight = fieldId === "prescription" ? 18 : 20;
+  const maxWidth = canvas.getWidth() - 18;
+  const scaleFactor = Math.min(1, targetHeight / initialRect.height, maxWidth / initialRect.width);
+  if (!Number.isFinite(scaleFactor) || scaleFactor >= 0.999) return;
+
+  latestObject.scaleX = (latestObject.scaleX ?? 1) * scaleFactor;
+  latestObject.scaleY = (latestObject.scaleY ?? 1) * scaleFactor;
+  latestObject.setCoords?.();
+
+  const scaledRect = latestObject.getBoundingRect(true, true);
+  latestObject.left = (latestObject.left ?? 0) + (initialRect.left - scaledRect.left);
+  latestObject.top = (latestObject.top ?? 0) + (initialRect.top - scaledRect.top);
+  latestObject.setCoords?.();
+
+  const alignedRect = latestObject.getBoundingRect(true, true);
+  if (alignedRect.left < 4) {
+    latestObject.left = (latestObject.left ?? 0) + (4 - alignedRect.left);
+  }
+  if (alignedRect.top < 4) {
+    latestObject.top = (latestObject.top ?? 0) + (4 - alignedRect.top);
+  }
+  latestObject.setCoords?.();
+}
+
 export function VisitHandwrittenPrescription({
   visitId,
   embed,
@@ -542,6 +596,7 @@ export function VisitHandwrittenPrescription({
             pushUndoSnapshot();
             const nextCanvas = drawCanvasesRef.current[fieldId];
             if (!nextCanvas) return;
+            compactLatestHandwrittenObject(fieldId, nextCanvas);
             const inkBounds = getCanvasInkBounds(nextCanvas);
             setEditorState((prev) => {
               const next = cloneSheetState(prev);
@@ -917,8 +972,9 @@ export function VisitHandwrittenPrescription({
       setError(ocrError instanceof Error ? ocrError.message : "Failed to convert handwriting to text.");
     } finally {
       setOcrPendingFieldId(null);
+      void applyWritableCanvasSettings();
     }
-  }, [clearOcrIdleTimer, pushUndoSnapshot, visitId]);
+  }, [applyWritableCanvasSettings, clearOcrIdleTimer, pushUndoSnapshot, visitId]);
 
   useEffect(() => {
     convertPendingOcrRegionRef.current = (fieldId: HandwrittenVisitFieldId) => {
