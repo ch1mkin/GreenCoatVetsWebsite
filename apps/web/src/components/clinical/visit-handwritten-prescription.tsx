@@ -79,6 +79,28 @@ async function waitForImages(root: HTMLElement) {
   );
 }
 
+async function waitForNextPaint(frameCount = 1) {
+  await new Promise<void>((resolve) => {
+    const step = (remaining: number) => {
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(() => step(remaining - 1));
+    };
+    step(frameCount);
+  });
+}
+
+function buildStaticCanvasImage(sourceCanvas: HTMLCanvasElement) {
+  const image = document.createElement("img");
+  image.alt = "";
+  image.src = sourceCanvas.toDataURL("image/png");
+  image.className = "pointer-events-none absolute inset-0 h-full w-full";
+  image.style.objectFit = "fill";
+  return image;
+}
+
 function toolButtonClass(active: boolean) {
   return active
     ? "flex h-12 w-12 items-center justify-center rounded-2xl border border-primary bg-primary text-white shadow-sm shadow-primary/20"
@@ -1062,28 +1084,35 @@ export function VisitHandwrittenPrescription({
         document.activeElement.blur();
       }
 
-       for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+      for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
         if (canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
           await recognizePendingOcrRegion(fieldId);
         }
       }
 
-      await new Promise<void>((resolve) => {
-        window.requestAnimationFrame(() => resolve());
-      });
+      await waitForNextPaint(2);
 
-      await waitForImages(captureRef.current);
+      const captureNode = buildStaticPdfCapture();
+      if (!captureNode) {
+        throw new Error("Failed to prepare the handwritten visit sheet for PDF export.");
+      }
 
-      const imageBlob = await domToBlob(captureRef.current, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "#ffffff",
-      });
+      let imageBlob: Blob | null = null;
+      try {
+        await waitForImages(captureNode);
+        imageBlob = await domToBlob(captureNode, {
+          pixelRatio: 2,
+          cacheBust: true,
+          backgroundColor: "#ffffff",
+        });
+      } finally {
+        captureNode.remove();
+      }
       if (!imageBlob) throw new Error("Failed to capture the handwritten visit sheet.");
 
       const fd = new FormData();
       fd.set("visit_id", visitId);
-      fd.set("editor_state_json", JSON.stringify(editorState));
+      fd.set("editor_state_json", JSON.stringify(editorStateRef.current));
       fd.set("image_file", new File([imageBlob], `visit-${visitId}.jpg`, { type: EXPORT_MIME }));
 
       const result = await saveHandwrittenVisitPdfAction(fd);
@@ -1137,6 +1166,49 @@ export function VisitHandwrittenPrescription({
     hasSerializedFabricObjects(selectedRegion?.ocrFabricJson) ||
     Boolean(selectedRegion?.text.trim()) ||
     selectedRegionTokens.length > 0;
+  const selectedRegionHasPendingOcrInk =
+    canvasHasObjects(ocrCanvasesRef.current[selectedFieldId]) || hasSerializedFabricObjects(selectedRegion?.ocrFabricJson);
+
+  const buildStaticPdfCapture = useCallback(() => {
+    const root = captureRef.current;
+    if (!root) return null;
+
+    const clone = root.cloneNode(true) as HTMLElement;
+    clone.style.position = "fixed";
+    clone.style.left = "-10000px";
+    clone.style.top = "0";
+    clone.style.zIndex = "-1";
+    clone.style.pointerEvents = "none";
+    clone.style.margin = "0";
+
+    for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+      const overlay = clone.querySelector<HTMLElement>(`[data-writable-overlay="${fieldId}"]`);
+      if (!overlay) continue;
+
+      const insertionPoint = overlay.firstChild;
+      const drawCloneCanvas = clone.querySelector<HTMLCanvasElement>(
+        `[data-canvas-layer="draw"][data-field-id="${fieldId}"]`,
+      );
+      const ocrCloneCanvas = clone.querySelector<HTMLCanvasElement>(
+        `[data-canvas-layer="ocr"][data-field-id="${fieldId}"]`,
+      );
+      drawCloneCanvas?.closest(".canvas-container")?.remove();
+      ocrCloneCanvas?.closest(".canvas-container")?.remove();
+
+      const drawSourceCanvas = drawCanvasElementsRef.current[fieldId];
+      if (drawSourceCanvas && canvasHasObjects(drawCanvasesRef.current[fieldId])) {
+        overlay.insertBefore(buildStaticCanvasImage(drawSourceCanvas), insertionPoint);
+      }
+
+      const ocrSourceCanvas = ocrCanvasElementsRef.current[fieldId];
+      if (ocrSourceCanvas && canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
+        overlay.insertBefore(buildStaticCanvasImage(ocrSourceCanvas), insertionPoint);
+      }
+    }
+
+    document.body.appendChild(clone);
+    return clone;
+  }, []);
 
   const renderWritableRegion = useCallback(
     (fieldId: HandwrittenVisitFieldId) => {
@@ -1146,7 +1218,7 @@ export function VisitHandwrittenPrescription({
         .filter((token) => token.fieldId === fieldId)
         .sort((a, b) => a.y - b.y || a.x - b.x);
       return (
-        <div className="absolute inset-0 z-[2] pointer-events-none">
+        <div data-writable-overlay={fieldId} className="absolute inset-0 z-[2] pointer-events-none">
           {!capturingPdf ? (
             <div
               className={`absolute inset-0 rounded-[4px] ${isSelected ? "shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]" : ""}`}
@@ -1154,12 +1226,16 @@ export function VisitHandwrittenPrescription({
           ) : null}
           <canvas
             ref={(node) => registerDrawCanvasRef(fieldId, node)}
+            data-canvas-layer="draw"
+            data-field-id={fieldId}
             className={`absolute inset-0 h-full w-full ${
               tool === "draw" ? "pointer-events-auto" : "pointer-events-none"
             }`}
           />
           <canvas
             ref={(node) => registerOcrCanvasRef(fieldId, node)}
+            data-canvas-layer="ocr"
+            data-field-id={fieldId}
             className={`absolute inset-0 h-full w-full ${
               tool === "ocr" ? "pointer-events-auto" : "pointer-events-none"
             }`}
@@ -1224,7 +1300,7 @@ export function VisitHandwrittenPrescription({
           <button type="button" aria-label="Normal write" title="Normal write" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
             <ToolIcon tool="draw" />
           </button>
-          <button type="button" aria-label="Instant OCR" title="Instant OCR" className={toolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+          <button type="button" aria-label="OCR write" title="OCR write" className={toolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
             <ToolIcon tool="ocr" />
           </button>
           <button type="button" aria-label="Highlight" title="Highlight" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
@@ -1301,7 +1377,7 @@ export function VisitHandwrittenPrescription({
         <p className="font-semibold text-slate-800">Tips</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>`Normal write` keeps your handwriting exactly as ink and never sends it for OCR.</li>
-          <li>`Instant OCR` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
+          <li>`OCR write` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
           <li>Normal ink and OCR text can live together in the same field without changing each other.</li>
           <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
           <li>Use `Convert to PDF` when the page looks right.</li>
@@ -1319,6 +1395,14 @@ export function VisitHandwrittenPrescription({
             onClick={() => clearWritableRegion(selectedFieldId)}
           >
             Clear region
+          </button>
+          <button
+            type="button"
+            className="btn-primary btn-compact text-xs"
+            disabled={!selectedRegionHasPendingOcrInk || ocrPendingFieldId === selectedFieldId}
+            onClick={() => void recognizePendingOcrRegion(selectedFieldId)}
+          >
+            {ocrPendingFieldId === selectedFieldId ? "Running OCR..." : "Convert OCR to text"}
           </button>
         </div>
         {ocrPendingFieldId === selectedFieldId ? (
@@ -1342,7 +1426,7 @@ export function VisitHandwrittenPrescription({
         ) : null}
         {selectedRegionTokens.length ? (
           <div className="mt-3 space-y-2">
-            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Instant OCR snippets</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">OCR snippets</p>
             {selectedRegionTokens.map((token, index) => (
               <label key={token.id} className="block">
                 <span className="text-[11px] text-slate-500">Snippet {index + 1}</span>
@@ -1359,7 +1443,8 @@ export function VisitHandwrittenPrescription({
           </div>
         ) : !selectedRegion.text.trim() ? (
           <p className="mt-3 text-[11px] text-slate-500">
-            Use either normal writing or instant OCR in this region. Instant OCR only converts the strokes drawn in OCR mode.
+            Use either normal writing or OCR write in this region. The button under the pen switches to OCR writing, and
+            `Convert OCR to text` replaces only those OCR strokes with typed text.
           </p>
         ) : null}
         <button type="button" className="btn-primary btn-compact mt-4 text-xs" disabled={pending} onClick={() => void savePdf()}>
@@ -1388,7 +1473,7 @@ export function VisitHandwrittenPrescription({
         <button type="button" aria-label="Normal write" title="Normal write" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
           <ToolIcon tool="draw" />
         </button>
-        <button type="button" aria-label="Instant OCR" title="Instant OCR" className={compactToolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+        <button type="button" aria-label="OCR write" title="OCR write" className={compactToolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
           <ToolIcon tool="ocr" />
         </button>
         <button type="button" aria-label="Highlight" title="Highlight" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
@@ -1459,6 +1544,14 @@ export function VisitHandwrittenPrescription({
           onClick={clearAnnotations}
         >
           Clear
+        </button>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-primary/25 bg-white px-2 py-1.5 text-[11px] font-semibold text-primary disabled:opacity-50"
+          disabled={!selectedRegionHasPendingOcrInk || ocrPendingFieldId === selectedFieldId}
+          onClick={() => void recognizePendingOcrRegion(selectedFieldId)}
+        >
+          {ocrPendingFieldId === selectedFieldId ? "Running OCR..." : "OCR to text"}
         </button>
         <button
           type="button"
@@ -1556,8 +1649,8 @@ export function VisitHandwrittenPrescription({
           <div className="space-y-1">
             <p className="text-sm font-semibold text-on-background">Interactive handwritten full visit sheet</p>
             <p className="text-[12px] text-on-surface-variant">
-              Use two writing methods on the visit template: normal handwriting that stays as ink, and instant OCR that
-              turns only OCR-mode strokes into typed text after a short pause.
+              Use two writing methods on the visit template: normal handwriting that stays as ink, and OCR write that turns
+              only OCR-mode strokes into typed text after a short pause.
             </p>
             <p className="text-[11px] text-on-surface-variant">
               Patient: {petName || "—"} | Owner: {ownerName || "—"} | Doctor: {doctorName || "—"} | Clinic: {clinicName || "—"}
@@ -1608,7 +1701,7 @@ export function VisitHandwrittenPrescription({
                   <div>
                     <p className="font-headline text-base font-bold text-slate-900">Interactive handwritten full visit studio</p>
                     <p className="text-[12px] text-slate-600">
-                      Normal write keeps your ink. Instant OCR converts only OCR-mode writing. Convert the finished page to PDF when ready.
+                      Normal write keeps your ink. OCR write converts only OCR-mode writing. Convert the finished page to PDF when ready.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1644,7 +1737,7 @@ export function VisitHandwrittenPrescription({
                             : tool === "erase"
                               ? "Eraser mode clears the writable region you tap."
                               : tool === "ocr"
-                                ? "Instant OCR mode converts the latest OCR stroke group about 2 seconds after you stop writing."
+                                ? "OCR write mode converts the latest OCR stroke group about 2 seconds after you stop writing, or when you press OCR to text."
                                 : "Normal write mode lets you handwrite inside the dedicated writable regions without OCR."}
                       </div>
                       <button type="button" className="btn-primary btn-compact text-xs" disabled={pending} onClick={() => void savePdf()}>
