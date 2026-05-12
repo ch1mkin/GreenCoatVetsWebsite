@@ -13,6 +13,7 @@ type PrepareVariantOptions = {
   scale: number;
   threshold: number;
   boostStrokes?: boolean;
+  paddingRatio?: number;
 };
 
 function normalizeRecognizedText(input: string) {
@@ -35,8 +36,9 @@ async function loadImage(src: string) {
 
 async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions) {
   const image = await loadImage(dataUrl);
-  const width = Math.max(1, Math.round(image.width * options.scale));
-  const height = Math.max(1, Math.round(image.height * options.scale));
+  const padding = Math.max(8, Math.round(Math.max(image.width, image.height) * (options.paddingRatio ?? 0.18)));
+  const width = Math.max(1, Math.round((image.width + padding * 2) * options.scale));
+  const height = Math.max(1, Math.round((image.height + padding * 2) * options.scale));
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -47,7 +49,13 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
 
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(image, 0, 0, width, height);
+  ctx.drawImage(
+    image,
+    Math.round(padding * options.scale),
+    Math.round(padding * options.scale),
+    Math.round(image.width * options.scale),
+    Math.round(image.height * options.scale),
+  );
 
   if (options.boostStrokes) {
     ctx.globalAlpha = 0.24;
@@ -76,13 +84,15 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
 
 async function createImageVariants(dataUrl: string) {
   const contrastDataUrl = await drawPreparedImage(dataUrl, {
-    scale: 3,
-    threshold: 210,
+    scale: 4,
+    threshold: 198,
+    paddingRatio: 0.2,
   });
   const boostedDataUrl = await drawPreparedImage(dataUrl, {
-    scale: 4,
-    threshold: 225,
+    scale: 5,
+    threshold: 222,
     boostStrokes: true,
+    paddingRatio: 0.24,
   });
   return {
     rawDataUrl: dataUrl,

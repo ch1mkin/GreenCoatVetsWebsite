@@ -56,6 +56,39 @@ const WRITABLE_REGION_LABELS: Record<HandwrittenVisitFieldId, string> = {
   diagnosis: "Diagnosis",
   prescription: "Prescription",
 };
+const MULTILINE_OCR_FIELDS = new Set<HandwrittenVisitFieldId>([
+  "ccHp",
+  "dewormingText",
+  "vaccinationText",
+  "otherTests",
+  "physicalExamination",
+  "diagnosis",
+  "prescription",
+]);
+const OCR_REGION_SHORTCUTS: HandwrittenVisitFieldId[] = [
+  "ccHp",
+  "rt",
+  "rr",
+  "hr",
+  "crt",
+  "allergic",
+  "bw",
+  "physicalExamination",
+  "diagnosis",
+  "prescription",
+];
+const OCR_REGION_SHORTCUT_LABELS: Partial<Record<HandwrittenVisitFieldId, string>> = {
+  ccHp: "CC / HP",
+  physicalExamination: "Physical exam",
+  diagnosis: "Dx",
+  prescription: "Rx",
+  rt: "RT",
+  rr: "RR",
+  hr: "HR",
+  crt: "CRT",
+  allergic: "Allergic",
+  bw: "B/W",
+};
 
 async function waitForImages(root: HTMLElement) {
   const images = Array.from(root.querySelectorAll("img"));
@@ -214,6 +247,10 @@ function canvasHasObjects(canvas: FabricCanvas | null | undefined) {
   return Boolean(canvas?.getObjects().length);
 }
 
+function isSingleLineOcrField(fieldId: HandwrittenVisitFieldId) {
+  return !MULTILINE_OCR_FIELDS.has(fieldId);
+}
+
 function clampRect(bounds: StrokeBounds, maxWidth: number, maxHeight: number): StrokeBounds {
   const x = Math.max(0, Math.min(bounds.x, maxWidth));
   const y = Math.max(0, Math.min(bounds.y, maxHeight));
@@ -305,7 +342,7 @@ function exportRegionCanvasImage(canvas: FabricCanvas, bounds: StrokeBounds) {
     top: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    multiplier: 2,
+    multiplier: 4,
   });
 }
 
@@ -514,7 +551,7 @@ export function VisitHandwrittenPrescription({
             : new fabric.PencilBrush(ocrCanvas);
         ocrBrush.color = "#111827";
         ocrBrush.width = Math.max(0.8, strokeWidth);
-        ocrBrush.decimate = 0.4;
+        ocrBrush.decimate = 0.05;
         ocrCanvas.freeDrawingBrush = ocrBrush;
         ocrCanvas.isDrawingMode = tool === "ocr";
         ocrCanvas.selection = false;
@@ -646,7 +683,7 @@ export function VisitHandwrittenPrescription({
           const ocrBrush = new fabric.PencilBrush(ocrCanvas);
           ocrBrush.color = "#111827";
           ocrBrush.width = Math.max(0.8, strokeWidth);
-          ocrBrush.decimate = 0.4;
+          ocrBrush.decimate = 0.05;
           ocrCanvas.freeDrawingBrush = ocrBrush;
           ocrCanvas.on("mouse:down", () => {
             setSelectedFieldId(fieldId);
@@ -942,7 +979,7 @@ export function VisitHandwrittenPrescription({
     setError(null);
 
     try {
-      const singleLine = canvas.getHeight() <= 52;
+      const singleLine = isSingleLineOcrField(fieldId);
       const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
       const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
       const result = await recognizeHandwrittenRegionAction({
@@ -1214,6 +1251,7 @@ export function VisitHandwrittenPrescription({
     (fieldId: HandwrittenVisitFieldId) => {
       const region = editorState.ocrRegions[fieldId];
       const isSelected = selectedFieldId === fieldId;
+      const showOcrGuide = tool === "ocr" && !capturingPdf;
       const tokens = editorState.wordTokens
         .filter((token) => token.fieldId === fieldId)
         .sort((a, b) => a.y - b.y || a.x - b.x);
@@ -1221,7 +1259,13 @@ export function VisitHandwrittenPrescription({
         <div data-writable-overlay={fieldId} className="absolute inset-0 z-[2] pointer-events-none">
           {!capturingPdf ? (
             <div
-              className={`absolute inset-0 rounded-[4px] ${isSelected ? "shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]" : ""}`}
+              className={`absolute inset-0 rounded-[4px] ${
+                isSelected
+                  ? "bg-primary/5 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]"
+                  : showOcrGuide
+                    ? "bg-sky-100/30 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.28)]"
+                    : ""
+              }`}
             />
           ) : null}
           <canvas
@@ -1378,10 +1422,39 @@ export function VisitHandwrittenPrescription({
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>`Normal write` keeps your handwriting exactly as ink and never sends it for OCR.</li>
           <li>`OCR write` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
+          <li>Blue guided boxes show OCR-ready areas across `CC / HP`, parameters, `Dx`, physical exam, and `Rx`.</li>
           <li>Normal ink and OCR text can live together in the same field without changing each other.</li>
           <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
           <li>Use `Convert to PDF` when the page looks right.</li>
         </ul>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
+        <p className="font-semibold text-slate-800">Quick OCR targets</p>
+        <p className="mt-1 text-[11px] text-slate-500">
+          Pick a region, then write inside its highlighted box in `OCR write` mode.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {OCR_REGION_SHORTCUTS.map((fieldId) => (
+            <button
+              key={fieldId}
+              type="button"
+              className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold ${
+                selectedFieldId === fieldId && tool === "ocr"
+                  ? "border-primary bg-primary text-white"
+                  : "border-slate-300 bg-white text-slate-700"
+              }`}
+              onClick={() => {
+                setSelectedFieldId(fieldId);
+                setTool("ocr");
+                setMessage(null);
+                setError(null);
+              }}
+            >
+              {OCR_REGION_SHORTCUT_LABELS[fieldId] ?? WRITABLE_REGION_LABELS[fieldId]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-[12px] text-slate-600">

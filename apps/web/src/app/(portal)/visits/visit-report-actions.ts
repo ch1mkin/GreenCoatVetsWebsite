@@ -24,11 +24,18 @@ const HANDWRITTEN_FIELD_TRANSCRIPTION_HINTS: Record<string, string> = {
   mobile: "This should usually be digits, spaces, plus signs, or hyphens only.",
   date: "This should usually be a date, often numbers with / or - separators.",
   age: "This is usually a short age value such as 2y, 8m, 4 years, or similar.",
+  ccHp: "This may contain short complaint or history notes, abbreviations, and multiple words. Preserve veterinary shorthand exactly.",
+  dewormingText: "This may contain dates, medicine names, or brief note text. Preserve short handwritten note wording exactly.",
+  vaccinationText: "This may contain dates, vaccine names, or brief note text. Preserve short handwritten note wording exactly.",
   rt: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
   rr: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
   hr: "This is a short vital measurement. Keep digits, decimals, and brief units exactly as written.",
   crt: "This is a short clinical value. Keep digits, decimals, symbols, and brief units exactly as written.",
+  allergic: "This is usually a short allergy note or yes/no style entry. Preserve the visible characters exactly.",
   bw: "This is a short body-weight value. Keep digits, decimals, and units exactly as written.",
+  otherTests: "This may contain test names, abbreviations, or short clinical note text. Preserve spelling exactly.",
+  physicalExamination: "This may contain multiple lines of veterinary examination notes. Preserve abbreviations and line breaks exactly.",
+  diagnosis: "This may contain diagnosis names, abbreviations, and multiple words. Preserve medical spelling exactly as written.",
   prescription: "This may include medicine names, doses, numbers, short abbreviations, and line breaks.",
 };
 
@@ -132,12 +139,11 @@ export async function recognizeHandwrittenRegionAction(input: {
       };
     }
 
-    const model = process.env.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_OCR_MODEL || "openai/gpt-4o-mini";
+    const model = process.env.OPENROUTER_VISION_MODEL || process.env.OPENROUTER_OCR_MODEL || "openai/gpt-4.1";
     const fieldLabel = String(input.fieldLabel ?? "").trim() || "clinical handwritten field";
     const fieldHint =
       HANDWRITTEN_FIELD_TRANSCRIPTION_HINTS[String(input.fieldId ?? "").trim()] ||
       "Transcribe the handwriting exactly as seen. Do not autocorrect names, spellings, abbreviations, or numbers.";
-    const localCandidateText = localCandidates.length ? localCandidates.join(" | ") : "none";
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -148,12 +154,12 @@ export async function recognizeHandwrittenRegionAction(input: {
       body: JSON.stringify({
         model,
         temperature: 0,
-        max_tokens: 180,
+        max_tokens: 240,
         messages: [
           {
             role: "system",
             content:
-              "You are an expert handwriting transcription model for veterinary notes. Compare all provided images of the same handwritten crop and return the exact visible text. Preserve spelling, case, numbers, abbreviations, and line breaks. Never autocorrect. If a single letter is written, return that single letter only. Respond with JSON only: {\"text\":\"...\",\"confidence\":\"high|medium|low\"}.",
+              "You are an expert handwriting transcription model for veterinary notes. Compare all provided images of the same handwritten crop and return the exact visible text. Preserve spelling, case, numbers, abbreviations, and line breaks. Never autocorrect. For short or messy handwriting, prefer the closest visible characters over guessing a common English word. If a single letter is written, return that single letter only. Respond with JSON only: {\"text\":\"...\",\"confidence\":\"high|medium|low\"}.",
           },
           {
             role: "user",
@@ -164,10 +170,10 @@ export async function recognizeHandwrittenRegionAction(input: {
                   `Field label: ${fieldLabel}`,
                   `Layout: ${input.singleLine ? "single-line region" : "multi-line region"}`,
                   `Field-specific hint: ${fieldHint}`,
-                  `Weak OCR candidate hints: ${localCandidateText}`,
                   "Task: read the handwritten text exactly from these three images of the same crop.",
                   "Rules:",
-                  "- use the images, not the candidate hints, if they disagree",
+                  "- inspect the characters visually before deciding on a word",
+                  "- prefer the literal visible letters or numbers over dictionary-style corrections",
                   "- do not add words that are not visible",
                   "- do not normalize spelling",
                   "- do not wrap the result in markdown or quotes outside JSON",
