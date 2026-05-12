@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 
@@ -8,6 +10,8 @@ const GOLD_LIGHT = "#f7dc6f";
 const GOLD_DARK = "#c99a1a";
 const TEXT_DARK = "#111827";
 const TEXT_MUTED = "#5f6f68";
+
+let embeddedQrFontCssPromise: Promise<string> | null = null;
 
 function escapeXml(value: string): string {
   return value
@@ -45,6 +49,57 @@ function pawPrint(x: number, y: number, scale: number, opacity = 0.12): string {
   `;
 }
 
+async function getEmbeddedQrFontCss(): Promise<string> {
+  if (!embeddedQrFontCssPromise) {
+    const candidateRoots = [
+      process.cwd(),
+      path.resolve(process.cwd(), ".."),
+      path.resolve(process.cwd(), "../.."),
+    ];
+    const mediumPathCandidates = candidateRoots.map((root) =>
+      path.join(root, "node_modules", "@fontsource", "inter", "files", "inter-latin-500-normal.woff"),
+    );
+    const boldPathCandidates = candidateRoots.map((root) =>
+      path.join(root, "node_modules", "@fontsource", "inter", "files", "inter-latin-800-normal.woff"),
+    );
+
+    const readFirstAvailable = async (candidates: string[]) => {
+      for (const candidate of candidates) {
+        try {
+          return await readFile(candidate);
+        } catch {
+          // Try the next possible monorepo location.
+        }
+      }
+
+      throw new Error("Embedded QR font files not found.");
+    };
+
+    embeddedQrFontCssPromise = Promise.all([readFirstAvailable(mediumPathCandidates), readFirstAvailable(boldPathCandidates)])
+      .then(([mediumFont, boldFont]) => {
+        const mediumBase64 = mediumFont.toString("base64");
+        const boldBase64 = boldFont.toString("base64");
+        return `
+          @font-face {
+            font-family: "QrInter";
+            src: url("data:font/woff;base64,${mediumBase64}") format("woff");
+            font-style: normal;
+            font-weight: 500;
+          }
+          @font-face {
+            font-family: "QrInter";
+            src: url("data:font/woff;base64,${boldBase64}") format("woff");
+            font-style: normal;
+            font-weight: 800;
+          }
+        `.trim();
+      })
+      .catch(() => "");
+  }
+
+  return embeddedQrFontCssPromise;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const target = String(searchParams.get("target") ?? "").trim();
@@ -64,7 +119,11 @@ export async function GET(request: Request) {
 
   const qrSourceUrl = `https://api.qrserver.com/v1/create-qr-code/?size=720x720&margin=0&data=${encodeURIComponent(normalizedTarget)}`;
   const logoSourceUrl = new URL("/platform-logo.png", origin).toString();
-  const [qrDataUrl, logoDataUrl] = await Promise.all([fetchAsDataUrl(qrSourceUrl), fetchAsDataUrl(logoSourceUrl)]);
+  const [qrDataUrl, logoDataUrl, embeddedQrFontCss] = await Promise.all([
+    fetchAsDataUrl(qrSourceUrl),
+    fetchAsDataUrl(logoSourceUrl),
+    getEmbeddedQrFontCss(),
+  ]);
 
   if (!qrDataUrl) {
     return NextResponse.json({ error: "Could not build the QR image." }, { status: 502 });
@@ -77,6 +136,11 @@ export async function GET(request: Request) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1400" viewBox="0 0 1080 1400" role="img" aria-label="${safeLabel} walk-in booking QR">
       <defs>
+        <style>
+          <![CDATA[
+            ${embeddedQrFontCss}
+          ]]>
+        </style>
         <linearGradient id="brandBg" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="${BRAND_GREEN_SOFT}" />
           <stop offset="100%" stop-color="${BRAND_GREEN_DARK}" />
@@ -114,23 +178,23 @@ export async function GET(request: Request) {
       <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="url(#goldBorder)" stroke-width="4" />
       ${logoDataUrl ? `<rect x="154" y="144" width="120" height="120" rx="24" fill="white" stroke="#d9e6e0" stroke-width="2" />` : ""}
       ${logoDataUrl ? `<image href="${logoDataUrl}" x="161" y="151" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
-      <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="${TEXT_DARK}">
+      <text x="${logoDataUrl ? 300 : 160}" y="188" font-family="QrInter, Inter, Arial, sans-serif" font-size="54" font-weight="800" fill="${TEXT_DARK}">
         ${safeLabel}
       </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="236" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="600" fill="${TEXT_DARK}">
+      <text x="${logoDataUrl ? 300 : 160}" y="236" font-family="QrInter, Inter, Arial, sans-serif" font-size="26" font-weight="800" fill="${TEXT_DARK}">
         Walk-in self check-in
       </text>
-      <text x="${logoDataUrl ? 300 : 160}" y="274" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
+      <text x="${logoDataUrl ? 300 : 160}" y="274" font-family="QrInter, Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
         Scan to open the booking form on your clinic website
       </text>
 
       <rect x="188" y="372" width="704" height="704" rx="34" fill="white" stroke="url(#goldBorder)" stroke-width="10" />
       <image href="${qrDataUrl}" x="242" y="426" width="596" height="596" preserveAspectRatio="xMidYMid meet" />
 
-      <text x="540" y="1148" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="${BRAND_GREEN}">
+      <text x="540" y="1148" text-anchor="middle" font-family="QrInter, Inter, Arial, sans-serif" font-size="36" font-weight="800" fill="${BRAND_GREEN}">
         Scan here to book
       </text>
-      <text x="540" y="1204" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="600" fill="${TEXT_MUTED}">
+      <text x="540" y="1204" text-anchor="middle" font-family="QrInter, Inter, Arial, sans-serif" font-size="22" font-weight="500" fill="${TEXT_MUTED}">
         ${safeDisplayUrl}
       </text>
     </svg>
