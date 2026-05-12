@@ -192,7 +192,7 @@ export function VisitHandwrittenPrescription({
 
   const [open, setOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("draw");
-  const [strokeWidth, setStrokeWidth] = useState(5);
+  const [strokeWidth, setStrokeWidth] = useState(0.9);
   const [editorState, setEditorState] = useState<HandwrittenVisitSheetState>(() => cloneSheetState(initialState));
   const [currentStroke, setCurrentStroke] = useState<StrokeLike | null>(null);
   const [undoStack, setUndoStack] = useState<EditorSnapshot[]>([]);
@@ -421,7 +421,7 @@ export function VisitHandwrittenPrescription({
 
     const stroke: StrokeLike = {
       id: crypto.randomUUID(),
-      width: tool === "highlight" ? Math.max(18, strokeWidth * 4) : Math.max(4, strokeWidth),
+      width: tool === "highlight" ? Math.max(10, strokeWidth * 4) : Math.max(0.8, strokeWidth),
       points: [point],
     };
 
@@ -602,9 +602,9 @@ export function VisitHandwrittenPrescription({
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Stroke size</span>
         <input
           type="range"
-          min={2}
-          max={12}
-          step={1}
+          min={0.5}
+          max={6}
+          step={0.1}
           value={strokeWidth}
           onChange={(event) => setStrokeWidth(Number(event.target.value))}
           className="mt-2 w-full"
@@ -674,9 +674,9 @@ export function VisitHandwrittenPrescription({
           <span className="block text-[10px] font-bold uppercase tracking-wide text-slate-500">Size</span>
           <input
             type="range"
-            min={2}
-            max={12}
-            step={1}
+            min={0.5}
+            max={6}
+            step={0.1}
             value={strokeWidth}
             onChange={(event) => setStrokeWidth(Number(event.target.value))}
             className="mt-1 w-full"
