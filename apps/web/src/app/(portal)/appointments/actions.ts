@@ -108,15 +108,14 @@ export async function createAppointment(formData: FormData) {
 }
 
 export async function sendWebsiteAppointmentsDeleteCodeAction() {
-  let errorMessage: string | null = null;
+  const { clinicId, userId, userEmail } = await assertWebsiteAppointmentPurgeAccess();
+  const serviceRole = createServiceRoleClient();
+  if (!serviceRole) {
+    redirect(appointmentsUrl({ purge_error: "SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification." }));
+  }
 
+  let targetCount = 0;
   try {
-    const { clinicId, userId, userEmail } = await assertWebsiteAppointmentPurgeAccess();
-    const serviceRole = createServiceRoleClient();
-    if (!serviceRole) {
-      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification.");
-    }
-
     const cutoffIso = new Date().toISOString();
     const { count, error: countError } = await serviceRole
       .from("appointments")
@@ -128,6 +127,7 @@ export async function sendWebsiteAppointmentsDeleteCodeAction() {
     if (!count) {
       throw new Error("There are no existing website-booked appointments to delete for this clinic.");
     }
+    targetCount = count;
 
     const transporter = createHostingerTransport();
     const from = getHostingerFromAddress();
@@ -185,36 +185,33 @@ export async function sendWebsiteAppointmentsDeleteCodeAction() {
       text: mail.text,
       html: mail.html,
     });
-
-    redirect(appointmentsUrl({ purge_code_sent: 1, purge_target_count: count }));
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "Could not send the verification code.";
+    const errorMessage = error instanceof Error ? error.message : "Could not send the verification code.";
+    redirect(appointmentsUrl({ purge_error: errorMessage }));
   }
 
-  redirect(appointmentsUrl({ purge_error: errorMessage }));
+  redirect(appointmentsUrl({ purge_code_sent: 1, purge_target_count: targetCount }));
 }
 
 export async function confirmDeleteWebsiteAppointmentsAction(formData: FormData) {
-  let errorMessage: string | null = null;
+  const { clinicId, userId } = await assertWebsiteAppointmentPurgeAccess();
+  const code = String(formData.get("verification_code") ?? "").trim();
+  const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
+    .trim()
+    .toLowerCase();
+  if (!/^\d{6}$/.test(code)) {
+    redirect(appointmentsUrl({ purge_error: "Enter the 6-digit code sent to your email." }));
+  }
+  if (confirmPhrase !== "delete") {
+    redirect(appointmentsUrl({ purge_error: 'Type "delete" to confirm removing website-booked appointments.' }));
+  }
+
+  const serviceRole = createServiceRoleClient();
+  if (!serviceRole) {
+    redirect(appointmentsUrl({ purge_error: "SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification." }));
+  }
 
   try {
-    const { clinicId, userId } = await assertWebsiteAppointmentPurgeAccess();
-    const code = String(formData.get("verification_code") ?? "").trim();
-    const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
-      .trim()
-      .toLowerCase();
-    if (!/^\d{6}$/.test(code)) {
-      throw new Error("Enter the 6-digit code sent to your email.");
-    }
-    if (confirmPhrase !== "delete") {
-      throw new Error('Type "delete" to confirm removing website-booked appointments.');
-    }
-
-    const serviceRole = createServiceRoleClient();
-    if (!serviceRole) {
-      throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for destructive admin verification.");
-    }
-
     const { data: challenge, error: challengeError } = await serviceRole
       .from("admin_email_action_codes")
       .select("id, code_hash, expires_at, consumed_at, payload")
@@ -264,10 +261,9 @@ export async function confirmDeleteWebsiteAppointmentsAction(formData: FormData)
     revalidatePath("/dashboard");
     redirect(appointmentsUrl({ purged: 1, purged_count: deletedCount ?? 0 }));
   } catch (error) {
-    errorMessage = error instanceof Error ? error.message : "Could not delete website-booked appointments.";
+    const errorMessage = error instanceof Error ? error.message : "Could not delete website-booked appointments.";
+    redirect(appointmentsUrl({ purge_error: errorMessage }));
   }
-
-  redirect(appointmentsUrl({ purge_error: errorMessage }));
 }
 
 export async function updateAppointmentStatus(formData: FormData) {

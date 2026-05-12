@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { parse, type Font } from "opentype.js";
+import QRCode from "qrcode";
 import sharp from "sharp";
 
 const BRAND_GREEN = "#006c50";
@@ -12,7 +13,7 @@ const GOLD_DARK = "#c99a1a";
 const TEXT_DARK = "#111827";
 const TEXT_MUTED = "#5f6f68";
 
-let qrFontsPromise: Promise<{ medium: Font; bold: Font }> | null = null;
+let qrFontsPromise: Promise<{ medium: Font; bold: Font } | null> | null = null;
 
 function escapeXml(value: string): string {
   return value
@@ -71,7 +72,7 @@ function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 }
 
-async function getQrFonts(): Promise<{ medium: Font; bold: Font }> {
+async function getQrFonts(): Promise<{ medium: Font; bold: Font } | null> {
   if (!qrFontsPromise) {
     qrFontsPromise = Promise.all([
       readFirstAvailable(getFontPathCandidates("inter-latin-500-normal.woff")),
@@ -79,7 +80,7 @@ async function getQrFonts(): Promise<{ medium: Font; bold: Font }> {
     ]).then(([mediumFont, boldFont]) => ({
       medium: parse(bufferToArrayBuffer(mediumFont)),
       bold: parse(bufferToArrayBuffer(boldFont)),
-    }));
+    })).catch(() => null);
   }
 
   return qrFontsPromise;
@@ -116,6 +117,42 @@ function renderTextPath({
   return `<path d="${pathData}" fill="${fill}" />`;
 }
 
+function renderTextElement({
+  font,
+  text,
+  x,
+  y,
+  fontSize,
+  fill,
+  anchor = "start",
+  fontWeight = 500,
+}: {
+  font: Font | null;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  fill: string;
+  anchor?: "start" | "middle" | "end";
+  fontWeight?: number;
+}) {
+  if (font) {
+    return renderTextPath({
+      font,
+      text,
+      x,
+      y,
+      fontSize,
+      fill,
+      anchor,
+    });
+  }
+
+  const safeText = escapeXml(text);
+  const textAnchor = anchor === "middle" ? ' text-anchor="middle"' : anchor === "end" ? ' text-anchor="end"' : "";
+  return `<text x="${x}" y="${y}"${textAnchor} font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${fill}">${safeText}</text>`;
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const target = String(searchParams.get("target") ?? "").trim();
@@ -133,12 +170,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "A valid absolute target URL is required." }, { status: 400 });
   }
 
-  const qrSourceUrl = `https://api.qrserver.com/v1/create-qr-code/?size=720x720&margin=0&data=${encodeURIComponent(normalizedTarget)}`;
   const logoSourceUrl = new URL("/platform-logo.png", origin).toString();
-  const [qrDataUrl, logoDataUrl, qrFonts] = await Promise.all([
-    fetchAsDataUrl(qrSourceUrl),
+  const [logoDataUrl, qrFonts, qrDataUrl] = await Promise.all([
     fetchAsDataUrl(logoSourceUrl),
     getQrFonts(),
+    QRCode.toDataURL(normalizedTarget, {
+      errorCorrectionLevel: "M",
+      margin: 0,
+      width: 720,
+      color: {
+        dark: "#111111",
+        light: "#FFFFFF",
+      },
+    }).catch(() => null),
   ]);
 
   if (!qrDataUrl) {
@@ -149,17 +193,13 @@ export async function GET(request: Request) {
   const safeLabel = escapeXml(labelText);
   const targetUrl = new URL(normalizedTarget);
   const displayUrlText = `${targetUrl.host}${targetUrl.pathname}${targetUrl.search}`.replace(/\/$/, "");
-  const labelFontSize = fitTextSize(qrFonts.bold, labelText, 54, 36, logoDataUrl ? 620 : 760);
-  const subtitleFontSize = fitTextSize(qrFonts.bold, "Walk-in self check-in", 26, 22, logoDataUrl ? 620 : 760);
-  const descriptionFontSize = fitTextSize(
-    qrFonts.medium,
-    "Scan to open the booking form on your clinic website",
-    22,
-    17,
-    logoDataUrl ? 620 : 760,
-  );
-  const footerTitleFontSize = fitTextSize(qrFonts.bold, "Scan here to book", 36, 28, 500);
-  const footerUrlFontSize = fitTextSize(qrFonts.medium, displayUrlText, 22, 14, 780);
+  const labelFontSize = qrFonts ? fitTextSize(qrFonts.bold, labelText, 54, 36, logoDataUrl ? 620 : 760) : 50;
+  const subtitleFontSize = qrFonts ? fitTextSize(qrFonts.bold, "Walk-in self check-in", 26, 22, logoDataUrl ? 620 : 760) : 26;
+  const descriptionFontSize = qrFonts
+    ? fitTextSize(qrFonts.medium, "Scan to open the booking form on your clinic website", 22, 17, logoDataUrl ? 620 : 760)
+    : 22;
+  const footerTitleFontSize = qrFonts ? fitTextSize(qrFonts.bold, "Scan here to book", 36, 28, 500) : 34;
+  const footerUrlFontSize = qrFonts ? fitTextSize(qrFonts.medium, displayUrlText, 22, 14, 780) : 20;
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1400" viewBox="0 0 1080 1400" role="img" aria-label="${safeLabel} walk-in booking QR">
@@ -201,51 +241,56 @@ export async function GET(request: Request) {
       <rect x="118" y="118" width="844" height="188" rx="32" fill="white" stroke="url(#goldBorder)" stroke-width="4" />
       ${logoDataUrl ? `<rect x="154" y="144" width="120" height="120" rx="24" fill="white" stroke="#d9e6e0" stroke-width="2" />` : ""}
       ${logoDataUrl ? `<image href="${logoDataUrl}" x="161" y="151" width="106" height="106" preserveAspectRatio="xMidYMid meet" />` : ""}
-      ${renderTextPath({
-        font: qrFonts.bold,
+      ${renderTextElement({
+        font: qrFonts?.bold ?? null,
         text: labelText,
         x: logoDataUrl ? 300 : 160,
         y: 188,
         fontSize: labelFontSize,
         fill: TEXT_DARK,
+        fontWeight: 800,
       })}
-      ${renderTextPath({
-        font: qrFonts.bold,
+      ${renderTextElement({
+        font: qrFonts?.bold ?? null,
         text: "Walk-in self check-in",
         x: logoDataUrl ? 300 : 160,
         y: 236,
         fontSize: subtitleFontSize,
         fill: TEXT_DARK,
+        fontWeight: 800,
       })}
-      ${renderTextPath({
-        font: qrFonts.medium,
+      ${renderTextElement({
+        font: qrFonts?.medium ?? null,
         text: "Scan to open the booking form on your clinic website",
         x: logoDataUrl ? 300 : 160,
         y: 274,
         fontSize: descriptionFontSize,
         fill: TEXT_MUTED,
+        fontWeight: 500,
       })}
 
       <rect x="188" y="372" width="704" height="704" rx="34" fill="white" stroke="url(#goldBorder)" stroke-width="10" />
       <image href="${qrDataUrl}" x="242" y="426" width="596" height="596" preserveAspectRatio="xMidYMid meet" />
 
-      ${renderTextPath({
-        font: qrFonts.bold,
+      ${renderTextElement({
+        font: qrFonts?.bold ?? null,
         text: "Scan here to book",
         x: 540,
         y: 1148,
         fontSize: footerTitleFontSize,
         fill: BRAND_GREEN,
         anchor: "middle",
+        fontWeight: 800,
       })}
-      ${renderTextPath({
-        font: qrFonts.medium,
+      ${renderTextElement({
+        font: qrFonts?.medium ?? null,
         text: displayUrlText,
         x: 540,
         y: 1204,
         fontSize: footerUrlFontSize,
         fill: TEXT_MUTED,
         anchor: "middle",
+        fontWeight: 500,
       })}
     </svg>
   `.trim();
