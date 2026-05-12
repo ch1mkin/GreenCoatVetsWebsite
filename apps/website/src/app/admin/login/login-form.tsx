@@ -14,7 +14,7 @@ export function AdminLoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    err === "forbidden" ? "Access denied — super admin or marketing editor only." : null,
+    err === "forbidden" ? "Access denied — super admin or website editor only." : null,
   );
 
   async function onSubmit(e: React.FormEvent) {
@@ -42,7 +42,7 @@ export function AdminLoginForm() {
       .eq("is_active", true)
       .maybeSingle();
     router.refresh();
-    router.push(editor?.clinic_id ? "/admin/blog" : "/admin/login?error=forbidden");
+    router.push(editor?.clinic_id ? "/admin/settings" : "/admin/login?error=forbidden");
   }
 
   return (
@@ -72,7 +72,7 @@ export function AdminLoginForm() {
 
           <p className="mb-6 text-sm leading-relaxed text-slate-600">
             For <span className="font-semibold text-slate-800">super administrators</span> (full site) and{" "}
-            <span className="font-semibold text-slate-800">marketing editors</span> (blog only). Accounts are managed in the main platform.
+            <span className="font-semibold text-slate-800">website editors</span> (blog, homepage images, and reviews). Accounts are managed in the main platform.
           </p>
 
           {message ? (

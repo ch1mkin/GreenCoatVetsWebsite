@@ -2,7 +2,7 @@ import { refreshInstagramEmbedsFromGraph, updateMarketingSettings } from "@/app/
 import { AdminFlashMessages } from "@/components/admin/admin-flash-messages";
 import { AdminSubmitButton } from "@/components/admin/admin-submit-button";
 import { MarketingImageFields } from "@/components/admin/marketing-image-fields";
-import { requireSuperAdmin } from "@/lib/admin/auth";
+import { requireMarketingManager } from "@/lib/admin/auth";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_HOMEPAGE_COPY, DEFAULT_HOMEPAGE_IMAGES, type HomepageImageKey } from "@/lib/marketing/defaults";
 import { getMarketingSiteSettings, mergeHomepageImages } from "@/lib/marketing/get-marketing-site";
@@ -23,7 +23,7 @@ export default async function AdminSettingsPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  await requireSuperAdmin();
+  await requireMarketingManager();
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
   const igSync = searchParams.ig_sync === "1" || searchParams.ig_sync === "true";
   const errorParam = searchParams.error;

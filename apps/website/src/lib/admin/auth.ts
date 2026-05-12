@@ -35,6 +35,10 @@ export async function requireSuperAdmin(): Promise<void> {
   if (ctx.role !== "super_admin") redirect("/admin/blog");
 }
 
+export async function requireMarketingManager(): Promise<AdminContext> {
+  return requireAdmin();
+}
+
 /** Target clinic for blog CMS: editor is fixed; super admin uses form value or default / first active clinic. */
 export async function resolveBlogAdminClinicId(ctx: AdminContext, formClinicId: string | null | undefined): Promise<string> {
   if (ctx.role === "marketing_editor") {

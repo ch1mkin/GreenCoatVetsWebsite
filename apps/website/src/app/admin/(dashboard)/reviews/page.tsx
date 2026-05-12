@@ -1,7 +1,7 @@
 import { addMarketingReview, deleteMarketingReview, updateMarketingReview } from "@/app/admin/(dashboard)/actions";
 import { AdminFlashMessages } from "@/components/admin/admin-flash-messages";
 import { AdminSubmitButton } from "@/components/admin/admin-submit-button";
-import { requireSuperAdmin } from "@/lib/admin/auth";
+import { requireMarketingManager } from "@/lib/admin/auth";
 import { createClient } from "@/lib/supabase/server";
 
 type ReviewRow = {
@@ -20,7 +20,7 @@ export default async function AdminReviewsPage({
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  await requireSuperAdmin();
+  await requireMarketingManager();
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
   const deleted = searchParams.deleted === "1" || searchParams.deleted === "true";
   const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;

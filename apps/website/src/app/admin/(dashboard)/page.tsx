@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 
 export default async function AdminHomePage() {
   const ctx = await requireAdmin();
-  if (ctx.role === "marketing_editor") redirect("/admin/blog");
+  if (ctx.role === "marketing_editor") redirect("/admin/settings");
 
   return (
     <div className="space-y-8">
@@ -83,7 +83,7 @@ export default async function AdminHomePage() {
         </li>
       </ul>
       <p className="text-xs text-slate-500">
-        Super admins manage site settings; <strong>marketing editors</strong> can sign in to manage blog posts only.
+        Super admins have full website admin access; <strong>website editors</strong> can manage blog posts, homepage images, and reviews.
       </p>
     </div>
   );

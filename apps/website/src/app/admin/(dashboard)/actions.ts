@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireSuperAdmin as assertSuperAdmin } from "@/lib/admin/auth";
+import { requireMarketingManager, requireSuperAdmin as assertSuperAdmin } from "@/lib/admin/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { HomepageCopy, SocialLinks } from "@/lib/marketing/defaults";
 import { DEFAULT_HOMEPAGE_IMAGES, type HomepageImageKey } from "@/lib/marketing/defaults";
@@ -14,6 +14,11 @@ async function requireSuperAdmin() {
   return createClient();
 }
 
+async function requireMarketingManagerClient() {
+  await requireMarketingManager();
+  return createClient();
+}
+
 export async function signOut() {
   const supabase = createClient();
   await supabase.auth.signOut();
@@ -21,7 +26,7 @@ export async function signOut() {
 }
 
 export async function updateMarketingSettings(formData: FormData) {
-  const supabase = await requireSuperAdmin();
+  const supabase = await requireMarketingManagerClient();
 
   const { data: existingRow } = await supabase
     .from("marketing_site_settings")
@@ -316,7 +321,7 @@ export async function deleteMarketingFaq(formData: FormData) {
 }
 
 export async function addMarketingReview(formData: FormData) {
-  const supabase = await requireSuperAdmin();
+  const supabase = await requireMarketingManagerClient();
   const reviewer_name = (formData.get("reviewer_name") as string | null)?.trim() ?? "";
   const pet_name = (formData.get("pet_name") as string | null)?.trim() ?? "";
   const message = (formData.get("message") as string | null)?.trim() ?? "";
@@ -342,7 +347,7 @@ export async function addMarketingReview(formData: FormData) {
 }
 
 export async function updateMarketingReview(formData: FormData) {
-  const supabase = await requireSuperAdmin();
+  const supabase = await requireMarketingManagerClient();
   const id = (formData.get("id") as string | null)?.trim() ?? "";
   const reviewer_name = (formData.get("reviewer_name") as string | null)?.trim() ?? "";
   const pet_name = (formData.get("pet_name") as string | null)?.trim() ?? "";
@@ -372,7 +377,7 @@ export async function updateMarketingReview(formData: FormData) {
 }
 
 export async function deleteMarketingReview(formData: FormData) {
-  const supabase = await requireSuperAdmin();
+  const supabase = await requireMarketingManagerClient();
   const id = (formData.get("id") as string | null)?.trim() ?? "";
   if (!id) redirect("/admin/reviews?error=Missing%20review%20id.");
   const { error } = await supabase.from("marketing_reviews").delete().eq("id", id);

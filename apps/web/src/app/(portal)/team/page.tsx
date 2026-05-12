@@ -9,6 +9,7 @@ const ASSIGN_ROLES = [
   { value: "doctor", label: "Doctor" },
   { value: "receptionist", label: "Receptionist" },
   { value: "branch_admin", label: "Branch admin" },
+  { value: "marketing_editor", label: "Website editor" },
   { value: "lab_technician", label: "Lab technician" },
   { value: "pharmacist", label: "Pharmacist" },
   { value: "pet_owner", label: "Pet owner" },

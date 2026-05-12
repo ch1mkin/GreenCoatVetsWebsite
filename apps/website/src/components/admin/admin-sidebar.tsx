@@ -46,10 +46,22 @@ export function AdminSidebar({ isSuper }: { isSuper: boolean }) {
         </div>
         <nav className="p-3">
           <Link
+            href="/admin/settings"
+            className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/settings")}`}
+          >
+            Site settings
+          </Link>
+          <Link
             href="/admin/blog"
             className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/blog" || pathname.startsWith("/admin/blog/"))}`}
           >
             Blog
+          </Link>
+          <Link
+            href="/admin/reviews"
+            className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/reviews" || pathname.startsWith("/admin/reviews/"))}`}
+          >
+            Reviews
           </Link>
         </nav>
       </aside>
@@ -96,10 +108,22 @@ export function AdminMobileNav({ isSuper }: { isSuper: boolean }) {
     return (
       <div className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 md:hidden">
         <Link
+          href="/admin/settings"
+          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/settings"))}`}
+        >
+          Settings
+        </Link>
+        <Link
           href="/admin/blog"
           className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/blog"))}`}
         >
           Blog
+        </Link>
+        <Link
+          href="/admin/reviews"
+          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/reviews"))}`}
+        >
+          Reviews
         </Link>
       </div>
     );

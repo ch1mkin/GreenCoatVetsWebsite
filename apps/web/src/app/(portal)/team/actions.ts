@@ -37,6 +37,7 @@ export async function assignUserToClinicAction(formData: FormData) {
   const role = String(formData.get("role") ?? "").trim() as
     | "branch_admin"
     | "doctor"
+    | "marketing_editor"
     | "receptionist"
     | "lab_technician"
     | "pharmacist"
