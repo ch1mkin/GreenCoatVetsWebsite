@@ -139,7 +139,7 @@ export const HANDWRITTEN_VISIT_FIELD_IDS: HandwrittenVisitFieldId[] = [
   "prescription",
 ];
 
-const CHECKBOX_IDS: HandwrittenVisitCheckboxId[] = [
+export const HANDWRITTEN_VISIT_CHECKBOX_IDS: HandwrittenVisitCheckboxId[] = [
   "speciesCanine",
   "speciesFeline",
   "speciesExotic",
@@ -216,7 +216,7 @@ function createEmptyWritableRegions(): Record<HandwrittenVisitFieldId, Handwritt
 }
 
 function createEmptyCheckboxes(): Record<HandwrittenVisitCheckboxId, boolean> {
-  return CHECKBOX_IDS.reduce(
+  return HANDWRITTEN_VISIT_CHECKBOX_IDS.reduce(
     (acc, checkboxId) => {
       acc[checkboxId] = false;
       return acc;
@@ -328,7 +328,7 @@ export function normalizeHandwrittenVisitSheetState(
         typeof rawRegion?.fontSize === "number" && Number.isFinite(rawRegion.fontSize) ? rawRegion.fontSize : null,
     };
   }
-  for (const checkboxId of CHECKBOX_IDS) {
+  for (const checkboxId of HANDWRITTEN_VISIT_CHECKBOX_IDS) {
     checkboxes[checkboxId] =
       typeof value.checkboxes?.[checkboxId] === "boolean" ? value.checkboxes[checkboxId] : fallback.checkboxes[checkboxId];
   }

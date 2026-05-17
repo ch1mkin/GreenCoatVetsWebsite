@@ -847,7 +847,6 @@ export default async function VisitDetailsPage({
                   <VisitHandwrittenPrescription
                     visitId={visit.id}
                     embed={false}
-                    inkOnly
                     hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
                     clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
                     petName={String(pet?.name ?? "Patient")}

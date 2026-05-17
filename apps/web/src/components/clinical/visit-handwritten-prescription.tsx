@@ -19,6 +19,7 @@ import type {
   HandwrittenVisitWritableRegionState,
 } from "@/lib/visits/handwritten-visit-sheet";
 import {
+  HANDWRITTEN_VISIT_CHECKBOX_IDS,
   HANDWRITTEN_VISIT_FIELD_IDS,
   HANDWRITTEN_VISIT_SHEET_HEIGHT,
   HANDWRITTEN_VISIT_SHEET_WIDTH,
@@ -132,6 +133,33 @@ function buildStaticCanvasImage(sourceCanvas: HTMLCanvasElement) {
   image.className = "pointer-events-none absolute inset-0 h-full w-full";
   image.style.objectFit = "fill";
   return image;
+}
+
+function applyEditorStateToCaptureClone(clone: HTMLElement, state: HandwrittenVisitSheetState) {
+  for (const checkboxId of HANDWRITTEN_VISIT_CHECKBOX_IDS) {
+    const input = clone.querySelector<HTMLInputElement>(`input[data-checkbox-id="${checkboxId}"]`);
+    if (input) input.checked = Boolean(state.checkboxes[checkboxId]);
+  }
+
+  for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+    const fieldRoot = clone.querySelector<HTMLElement>(`[data-writable-field="${fieldId}"]`);
+    if (!fieldRoot) continue;
+    const valueNode = fieldRoot.querySelector(".field-value");
+    const value = state.fields[fieldId]?.trim() ?? "";
+    if (valueNode) {
+      valueNode.textContent = value;
+    } else if (value) {
+      const span = document.createElement("span");
+      span.className = "field-value";
+      span.textContent = value;
+      fieldRoot.insertBefore(span, fieldRoot.firstChild);
+    }
+  }
+}
+
+function setCanvasContainerPointerEvents(canvasNode: HTMLCanvasElement | null | undefined, enabled: boolean) {
+  const container = canvasNode?.closest(".canvas-container") as HTMLElement | null;
+  if (container) container.style.pointerEvents = enabled ? "auto" : "none";
 }
 
 function toolButtonClass(active: boolean) {
@@ -451,7 +479,7 @@ export function VisitHandwrittenPrescription({
   const toolbarDragRafRef = useRef<number | null>(null);
 
   const [open, setOpen] = useState(false);
-  const [tool, setTool] = useState<Tool>("draw");
+  const [tool, setTool] = useState<Tool>("scroll");
   const [strokeWidth, setStrokeWidth] = useState(0.9);
   const [editorState, setEditorState] = useState<HandwrittenVisitSheetState>(() => cloneSheetState(initialState));
   const [currentStroke, setCurrentStroke] = useState<StrokeLike | null>(null);
@@ -547,6 +575,7 @@ export function VisitHandwrittenPrescription({
         drawCanvas.selection = false;
         drawCanvas.skipTargetFind = true;
         drawCanvas.requestRenderAll();
+        setCanvasContainerPointerEvents(drawCanvasElementsRef.current[fieldId], tool === "draw");
       }
       if (enableOcr && ocrCanvas) {
         const ocrBrush =
@@ -561,9 +590,10 @@ export function VisitHandwrittenPrescription({
         ocrCanvas.selection = false;
         ocrCanvas.skipTargetFind = true;
         ocrCanvas.requestRenderAll();
+        setCanvasContainerPointerEvents(ocrCanvasElementsRef.current[fieldId], tool === "ocr");
       }
     }
-  }, [ensureFabricModule, open, strokeWidth, tool]);
+  }, [enableOcr, ensureFabricModule, open, strokeWidth, tool]);
 
   const restoreSnapshot = useCallback((snapshot: EditorSnapshot) => {
     const next = cloneSheetState(snapshot);
@@ -576,6 +606,12 @@ export function VisitHandwrittenPrescription({
     setUndoStack((prev) => [...prev, createSnapshot()]);
     setRedoStack([]);
   }, [createSnapshot]);
+
+  useEffect(() => {
+    if (open) {
+      setTool("scroll");
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -1133,6 +1169,28 @@ export function VisitHandwrittenPrescription({
         }
       }
 
+      const flushed = cloneSheetState(editorStateRef.current);
+      for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+        const drawCanvas = drawCanvasesRef.current[fieldId];
+        const ocrCanvas = ocrCanvasesRef.current[fieldId];
+        if (drawCanvas && canvasHasObjects(drawCanvas)) {
+          flushed.ocrRegions[fieldId] = {
+            ...flushed.ocrRegions[fieldId],
+            mode: "ink",
+            fabricJson: serializeRegionCanvas(drawCanvas),
+            inkBounds: getCanvasInkBounds(drawCanvas) ?? flushed.ocrRegions[fieldId].inkBounds,
+          };
+        }
+        if (enableOcr && ocrCanvas && canvasHasObjects(ocrCanvas)) {
+          flushed.ocrRegions[fieldId] = {
+            ...flushed.ocrRegions[fieldId],
+            mode: flushed.ocrRegions[fieldId].text.trim() ? flushed.ocrRegions[fieldId].mode : "ocr",
+            ocrFabricJson: serializeRegionCanvas(ocrCanvas),
+          };
+        }
+      }
+      editorStateRef.current = flushed;
+
       await waitForNextPaint(2);
 
       const captureNode = buildStaticPdfCapture();
@@ -1224,6 +1282,8 @@ export function VisitHandwrittenPrescription({
     clone.style.pointerEvents = "none";
     clone.style.margin = "0";
 
+    applyEditorStateToCaptureClone(clone, editorStateRef.current);
+
     for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
       const overlay = clone.querySelector<HTMLElement>(`[data-writable-overlay="${fieldId}"]`);
       if (!overlay) continue;
@@ -1244,14 +1304,14 @@ export function VisitHandwrittenPrescription({
       }
 
       const ocrSourceCanvas = ocrCanvasElementsRef.current[fieldId];
-      if (ocrSourceCanvas && canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
+      if (enableOcr && ocrSourceCanvas && canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
         overlay.insertBefore(buildStaticCanvasImage(ocrSourceCanvas), insertionPoint);
       }
     }
 
     document.body.appendChild(clone);
     return clone;
-  }, []);
+  }, [enableOcr]);
 
   const renderWritableRegion = useCallback(
     (fieldId: HandwrittenVisitFieldId) => {
@@ -1339,6 +1399,7 @@ export function VisitHandwrittenPrescription({
       handleWritableRegionPointerDown,
       registerDrawCanvasRef,
       registerOcrCanvasRef,
+      enableOcr,
       selectedFieldId,
       tool,
     ],
@@ -1690,7 +1751,7 @@ export function VisitHandwrittenPrescription({
       />
       <svg
         viewBox={`0 0 ${HANDWRITTEN_VISIT_SHEET_WIDTH} ${HANDWRITTEN_VISIT_SHEET_HEIGHT}`}
-        className={`absolute inset-0 z-10 h-full w-full ${overlayPointerClass}`}
+        className={`absolute inset-0 z-[5] h-full w-full ${overlayPointerClass}`}
         onPointerDown={startStroke}
         onPointerMove={moveStroke}
         onPointerUp={endStroke}

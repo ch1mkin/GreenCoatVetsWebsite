@@ -50,6 +50,7 @@ function SheetCheckbox({
     <input
       ref={(node) => registerCheckboxRef(checkboxId, node)}
       type="checkbox"
+      data-checkbox-id={checkboxId}
       checked={checked}
       onChange={(event) => onCheckboxChange(checkboxId, event.target.checked)}
     />
@@ -434,7 +435,7 @@ export function VisitHandwrittenHtmlSheet({
           position: relative;
           vertical-align: middle;
           flex: 0 0 auto;
-          z-index: 8;
+          z-index: 30;
           pointer-events: auto;
         }
 

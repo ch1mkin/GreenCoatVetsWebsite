@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/web/app-shell";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { AppointmentDateTimeField } from "@/components/booking/appointment-datetime-field";
+import { AppointmentsAdminDangerZone } from "@/components/booking/appointments-admin-danger-zone";
 import { SubmitButton } from "@/components/web/submit-button";
 
 type SearchParams = {
@@ -330,101 +331,85 @@ export default async function AppointmentsPage({
       </section>
 
       {canManageWebsiteDeletes ? (
-        <section className="mt-6 card-soft">
-          <h2 className="font-headline text-lg font-bold">Website booking cleanup</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Delete the current clinic&apos;s existing website-booked appointments after confirming with a code sent to{" "}
-            <strong>{user?.email ?? "your admin email"}</strong>. New bookings created after the code is sent are not included.
-          </p>
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Existing website-booked appointments in this clinic: <strong>{websiteBookingCount}</strong>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <form action={sendWebsiteAppointmentsDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
-              <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
-              <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
-                Send delete code
-              </SubmitButton>
-            </form>
-            <form action={confirmDeleteWebsiteAppointmentsAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
-              <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
-              <p className="mt-1 text-sm text-red-900/80">
-                Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-booked rows.
-              </p>
-              <div className="mt-4 grid gap-3">
-                <input
-                  className="input-soft bg-white"
-                  name="verification_code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  placeholder="6-digit code"
-                  required
-                />
-                <input
-                  className="input-soft bg-white"
-                  name="confirm_delete_text"
-                  placeholder='Type "delete"'
-                  required
-                />
-              </div>
-              <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
-                Delete website-booked appointments
-              </SubmitButton>
-            </form>
-          </div>
-        </section>
-      ) : null}
-
-      {canManageWebsiteDeletes ? (
-        <section className="mt-6 card-soft">
-          <h2 className="font-headline text-lg font-bold">Website owner and patient cleanup</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Delete eligible website-created test owners and patients after confirming with a code sent to{" "}
-            <strong>{user?.email ?? "your admin email"}</strong>. The cleanup excludes that admin email and only targets conservative website-origin
-            records that do not already show clinic-side activity.
-          </p>
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Eligible website-created owners: <strong>{websiteOwnerPurgeCount}</strong>
-            <span className="mx-2 text-amber-700">|</span>
-            Eligible website-created patients: <strong>{websitePetPurgeCount}</strong>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <form action={sendWebsiteOwnerPetDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
-              <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
-              <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
-                Send owner/patient delete code
-              </SubmitButton>
-            </form>
-            <form action={confirmDeleteWebsiteOwnerPetAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
-              <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
-              <p className="mt-1 text-sm text-red-900/80">
-                Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-created owner
-                and patient rows.
-              </p>
-              <div className="mt-4 grid gap-3">
-                <input
-                  className="input-soft bg-white"
-                  name="verification_code"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  placeholder="6-digit code"
-                  required
-                />
-                <input
-                  className="input-soft bg-white"
-                  name="confirm_delete_text"
-                  placeholder='Type "delete"'
-                  required
-                />
-              </div>
-              <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
-                Delete website-created owners and patients
-              </SubmitButton>
-            </form>
-          </div>
-        </section>
+        <AppointmentsAdminDangerZone
+          userEmail={user?.email ?? "your admin email"}
+          websiteBookingCount={websiteBookingCount}
+          websiteOwnerPurgeCount={websiteOwnerPurgeCount}
+          websitePetPurgeCount={websitePetPurgeCount}
+          appointmentsCleanup={
+            <div className="grid gap-4 lg:grid-cols-2">
+              <form action={sendWebsiteAppointmentsDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
+                <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
+                <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
+                  Send delete code
+                </SubmitButton>
+              </form>
+              <form action={confirmDeleteWebsiteAppointmentsAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+                <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
+                <p className="mt-1 text-sm text-red-900/80">
+                  Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-booked rows.
+                </p>
+                <div className="mt-4 grid gap-3">
+                  <input
+                    className="input-soft bg-white"
+                    name="verification_code"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    placeholder="6-digit code"
+                    required
+                  />
+                  <input
+                    className="input-soft bg-white"
+                    name="confirm_delete_text"
+                    placeholder='Type "delete"'
+                    required
+                  />
+                </div>
+                <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
+                  Delete website-booked appointments
+                </SubmitButton>
+              </form>
+            </div>
+          }
+          ownersPetsCleanup={
+            <div className="grid gap-4 lg:grid-cols-2">
+              <form action={sendWebsiteOwnerPetDeleteCodeAction} className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-900">Step 1: Email a verification code</p>
+                <p className="mt-1 text-sm text-slate-600">Request a fresh 6-digit code before the delete step below.</p>
+                <SubmitButton className="btn-secondary mt-4" pendingLabel="Sending code…">
+                  Send owner/patient delete code
+                </SubmitButton>
+              </form>
+              <form action={confirmDeleteWebsiteOwnerPetAction} className="rounded-xl border border-red-200 bg-red-50/60 p-4">
+                <p className="text-sm font-semibold text-red-950">Step 2: Confirm deletion</p>
+                <p className="mt-1 text-sm text-red-900/80">
+                  Type <span className="rounded bg-white px-1 font-mono">delete</span> and enter the emailed code to remove those website-created owner
+                  and patient rows.
+                </p>
+                <div className="mt-4 grid gap-3">
+                  <input
+                    className="input-soft bg-white"
+                    name="verification_code"
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    placeholder="6-digit code"
+                    required
+                  />
+                  <input
+                    className="input-soft bg-white"
+                    name="confirm_delete_text"
+                    placeholder='Type "delete"'
+                    required
+                  />
+                </div>
+                <SubmitButton className="btn-secondary mt-4 border-red-300 bg-red-600 text-white" pendingLabel="Deleting…">
+                  Delete website-created owners and patients
+                </SubmitButton>
+              </form>
+            </div>
+          }
+        />
       ) : null}
 
       <section className="mt-6 card-soft" id="create-appointment">
