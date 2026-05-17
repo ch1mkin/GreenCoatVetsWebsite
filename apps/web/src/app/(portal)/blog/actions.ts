@@ -46,7 +46,7 @@ export async function generateBlogDraft(formData: FormData) {
   if (!topic) throw new Error("Topic is required.");
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-r1-0528";
+  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
   if (!apiKey) {
     throw new Error("Missing OPENROUTER_API_KEY in environment.");
   }

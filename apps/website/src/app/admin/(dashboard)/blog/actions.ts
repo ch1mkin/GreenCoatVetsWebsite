@@ -151,7 +151,7 @@ export async function generateBlogDraft(formData: FormData) {
   await assertCanPostForClinic(ctx, clinicId);
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-r1-0528";
+  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
   if (!apiKey) throw new Error("Missing OPENROUTER_API_KEY in environment.");
 
   // Fetch clinic name to personalize the draft.

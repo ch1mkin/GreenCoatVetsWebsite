@@ -26,10 +26,10 @@ export type GenerateInstagramPromptPackResult =
   | { ok: true; pack: InstagramPromptPack; model: string }
   | { ok: false; error: string; model: string };
 
-const DEFAULT_DEEPSEEK_MODEL = "deepseek/deepseek-r1-0528";
+const DEFAULT_DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash:free";
 const DEEPSEEK_MODEL_FALLBACKS = [
+  "deepseek/deepseek-v4-flash:free",
   "deepseek/deepseek-r1-0528",
-  "deepseek/deepseek-chat-v3-0324:free",
 ] as const;
 
 function extractJsonObject(text: string): string {
@@ -77,8 +77,8 @@ function resolveOpenRouterModel(): string {
   const configured = process.env.OPENROUTER_MODEL?.trim();
   if (!configured) return DEFAULT_DEEPSEEK_MODEL;
   if (/^deepseek\/deepseek-r1(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
-  if (/^deepseek\/deepseek-r1-0528:free$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
-  if (/^deepseek\/deepseek-chat-v3-0324$/i.test(configured)) return "deepseek/deepseek-chat-v3-0324:free";
+  if (/^deepseek\/deepseek-r1-0528(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
+  if (/^deepseek\/deepseek-chat-v3-0324(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
   return configured;
 }
 
