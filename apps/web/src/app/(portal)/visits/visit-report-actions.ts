@@ -278,7 +278,8 @@ export async function regenerateVisitReportPdfAttachment(visitId: string, option
     .single();
 
   if (vErr || !visit) throw new Error(vErr?.message ?? "Visit not found.");
-  if ((visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source === "handwritten" && !options?.force) {
+  const pdfSource = (visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source;
+  if ((pdfSource === "handwritten" || pdfSource === "photo_sheet") && !options?.force) {
     return;
   }
 
@@ -437,6 +438,78 @@ export async function saveHandwrittenVisitPdfAction(formData: FormData): Promise
     return { ok: true, pdfPath: path };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Failed to save handwritten visit PDF." };
+  }
+}
+
+export async function saveVisitPhotoSheetPdfAction(formData: FormData): Promise<SaveHandwrittenVisitPdfResult> {
+  try {
+    const access = await getUserAccess();
+    if (access.membership?.role === "pet_owner") {
+      return { ok: false, error: "Only clinic staff can save visit photo sheets." };
+    }
+
+    const visitId = String(formData.get("visit_id") ?? "").trim();
+    if (!visitId) {
+      return { ok: false, error: "Visit and photo are required." };
+    }
+
+    const supabase = createClient();
+    await assertVisitReportAccess(supabase, access, visitId);
+
+    const { data: visit, error: visitError } = await supabase
+      .from("visits")
+      .select("id, clinic_id, pet_id, branch_id")
+      .eq("id", visitId)
+      .single();
+
+    if (visitError || !visit) {
+      return { ok: false, error: visitError?.message ?? "Visit not found." };
+    }
+
+    const uploadedImageBytes = await readHandwrittenImageUpload(formData);
+    const { data: brandingRow } = await supabase.from("platform_branding").select("logo_url").eq("id", "default").maybeSingle();
+    const logoBytes = await fetchClinicLogoBytesForPdf(supabase, (brandingRow?.logo_url as string | null | undefined) ?? null);
+    const pdfBytes = await buildHandwrittenCanvasPdfBytes({
+      imageBytes: uploadedImageBytes,
+      footerText: `Photo visit sheet scanned ${new Date().toLocaleString()}.`,
+      logoBytes,
+    });
+    const path = `${visit.clinic_id}/pets/${visit.pet_id}/visits/${visitId}/visit-report-photo.pdf`;
+
+    const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, pdfBytes, {
+      contentType: "application/pdf",
+      upsert: true,
+    });
+    if (uploadError) return { ok: false, error: uploadError.message };
+
+    const nowIso = new Date().toISOString();
+    let { error: visitUpdateError } = await supabase
+      .from("visits")
+      .update({
+        visit_report_pdf_path: path,
+        visit_report_pdf_generated_at: nowIso,
+        visit_report_pdf_source: "photo_sheet",
+      })
+      .eq("id", visitId)
+      .eq("clinic_id", visit.clinic_id as string);
+    if (visitUpdateError && /visit_report_pdf_source/i.test(visitUpdateError.message)) {
+      const fallback = await supabase
+        .from("visits")
+        .update({
+          visit_report_pdf_path: path,
+          visit_report_pdf_generated_at: nowIso,
+        })
+        .eq("id", visitId)
+        .eq("clinic_id", visit.clinic_id as string);
+      visitUpdateError = fallback.error;
+    }
+    if (visitUpdateError) return { ok: false, error: visitUpdateError.message };
+
+    revalidatePath(`/visits/${visitId}`);
+    revalidatePath(`/pets/${visit.pet_id}`);
+    return { ok: true, pdfPath: path };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Failed to save photo visit sheet PDF." };
   }
 }
 

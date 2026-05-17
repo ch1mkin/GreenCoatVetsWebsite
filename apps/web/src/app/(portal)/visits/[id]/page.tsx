@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
 import { createVaccinationAlertFromVisit } from "../../vaccinations/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
@@ -12,9 +13,11 @@ import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-te
 import { inferSpeciesClass, SPECIES_CLASS_OPTIONS } from "@/lib/clinical/species-class";
 import { SubmitButton } from "@/components/web/submit-button";
 import { VisitSection } from "@/components/clinical/visit-section";
-import { VisitAnchorNav } from "@/components/clinical/visit-anchor-nav";
 import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-window-button";
+import { VisitDocumentationTabs } from "@/components/clinical/visit-documentation-tabs";
 import { VisitHandwrittenPrescription } from "@/components/clinical/visit-handwritten-prescription";
+import { VisitPhotoSheetReport } from "@/components/clinical/visit-photo-sheet-report";
+import type { VisitAppointmentContextProps } from "@/components/clinical/visit-appointment-context";
 import { VisitPrescriptionBlockClient } from "@/components/clinical/visit-prescription-block-client";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
 import { VisitReportToolbar } from "@/components/clinical/visit-report-toolbar";
@@ -321,123 +324,32 @@ export default async function VisitDetailsPage({
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
 
+  const appointmentStartsAtLabel = appt?.starts_at
+    ? new Date(String(appt.starts_at)).toLocaleString()
+    : null;
+  const appointmentContext: VisitAppointmentContextProps = {
+    petName: String(pet?.name ?? "Patient"),
+    species,
+    ownerName: intakeOwnerName || ownerName,
+    doctorName: doctorDisplayName ?? "—",
+    branchName: branch?.name ?? "—",
+    appointmentStatus: String(appt?.status ?? "—"),
+    appointmentReason: String(appt?.reason ?? "").trim() || ic("chief_complaint"),
+    appointmentNotes: String(appt?.notes ?? "").trim(),
+    appointmentStartsAt: appointmentStartsAtLabel,
+    chiefComplaint: ic("chief_complaint"),
+    allergies: ic("allergies"),
+    currentMedications: ic("current_medications"),
+    contactPhone: ic("contact_phone") || String(owner?.phone ?? ""),
+    contactEmail: ic("contact_email") || String(owner?.email ?? ""),
+  };
+
   const bannerClass = embed
     ? "rounded-lg border px-3 py-2 text-[12px]"
     : "mx-auto max-w-5xl rounded-xl border px-4 py-3 text-[13px] shadow-sm";
 
-  const body = (
+  const visitFormMain = (
     <>
-      <div className={embed ? "space-y-3" : "mx-auto flex max-w-5xl flex-col gap-6"}>
-      {showVisitSavedBanner ? (
-        <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
-          <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
-          <p className={embed ? "mt-0.5 text-[11px] text-emerald-900/90" : "mt-1 text-emerald-800/95"}>
-            Clinical evaluation and consultation updates are stored for this visit.
-          </p>
-        </div>
-      ) : null}
-      {showRxItemBanner ? (
-        <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
-          <p className="font-headline font-bold text-sky-900">Medicine line added</p>
-          <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
-            Lines are saved on this visit and will appear in the visit report PDF under Prescription.
-          </p>
-        </div>
-      ) : null}
-      {showRxEditBanner ? (
-        <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
-          <p className="font-headline font-bold text-sky-900">Instructions updated</p>
-          <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
-            Regenerate the visit report PDF if you need the printed summary to match.
-          </p>
-        </div>
-      ) : null}
-      {!embed ? <VisitAnchorNav showIntake={hasOwnerIntake} /> : null}
-      {!embed ? (
-        <>
-          {petId ? (
-            <VisitReportToolbar
-              visitId={visit.id}
-              petId={petId}
-              storedAt={(visit.visit_report_pdf_generated_at as string | null) ?? null}
-              source={(visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source ?? null}
-              shareEmail={ic("contact_email") || String(owner?.email ?? "").trim() || null}
-            />
-          ) : null}
-          <VisitSection
-            embed={embed}
-            id="section-handwritten"
-            title="Handwritten full visit sheet"
-            defaultOpen={!embed}
-            className={
-              embed
-                ? ""
-                : "!rounded-none !border-0 !shadow-none border-t border-outline-variant/25 bg-surface-container-lowest/90 px-4 py-4"
-            }
-          >
-            <p className="mb-3 text-[11px] text-on-surface-variant">
-              Use this when the doctor wants to complete the entire visit on the handwritten template instead of only writing
-              a prescription. Saving here updates the visit PDF used by report download and owner-facing visit reports.
-            </p>
-            <VisitHandwrittenPrescription
-              visitId={visit.id}
-              embed={embed}
-              hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
-              clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
-              petName={String(pet?.name ?? "Patient")}
-              ownerName={intakeOwnerName || ownerName}
-              doctorName={doctorDisplayName ?? "Doctor"}
-              logoUrl={(brandingRow?.logo_url as string | null | undefined) ?? null}
-              initialState={initialHandwrittenState}
-            />
-          </VisitSection>
-          {previousVisits.length > 0 ? (
-            <div className="rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
-              <p className="font-headline font-bold">Earlier visits for this patient ({previousVisits.length})</p>
-              <p className="mt-1 text-[11px] opacity-90">
-                Open a prior visit in the side panel or its PDF in a new tab to compare clinical context.
-              </p>
-              <ul className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
-                {previousVisits.map((pv) => (
-                  <li key={pv.id} className="flex flex-wrap items-center gap-2">
-                    <span className="text-on-surface-variant">{pv.when}</span>
-                    <a
-                      href={`/visits/${pv.id}?embed=1`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-primary underline"
-                    >
-                      Side panel
-                    </a>
-                    <a
-                      href={`/visits/${pv.id}/report`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-primary underline"
-                    >
-                      PDF report
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          <a
-            className="btn-secondary btn-compact text-[11px]"
-            href={`/visits/${visit.id}/report`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            PDF report
-          </a>
-        </div>
-      )}
-      {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
-      </div>
-      <div className={visitMainClass}>
         {hasOwnerIntake ? (
           <VisitSection
             embed={embed}
@@ -843,6 +755,127 @@ export default async function VisitDetailsPage({
           defaultCompleted={Boolean(visit.completed_at)}
           showSavedSuccess={showVisitSavedBanner}
         />
+    </>
+  );
+
+  const body = (
+    <>
+      <div className={embed ? "space-y-3" : "mx-auto flex max-w-5xl flex-col gap-6"}>
+        {showVisitSavedBanner ? (
+          <div role="status" className={`${bannerClass} border-emerald-200 bg-emerald-50 text-emerald-950`}>
+            <p className="font-headline font-bold text-emerald-900">Visit information saved</p>
+            <p className={embed ? "mt-0.5 text-[11px] text-emerald-900/90" : "mt-1 text-emerald-800/95"}>
+              Clinical evaluation and consultation updates are stored for this visit.
+            </p>
+          </div>
+        ) : null}
+        {showRxItemBanner ? (
+          <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
+            <p className="font-headline font-bold text-sky-900">Medicine line added</p>
+            <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
+              Lines are saved on this visit and will appear in the visit report PDF under Prescription.
+            </p>
+          </div>
+        ) : null}
+        {showRxEditBanner ? (
+          <div role="status" className={`${bannerClass} border-sky-200 bg-sky-50 text-sky-950`}>
+            <p className="font-headline font-bold text-sky-900">Instructions updated</p>
+            <p className={embed ? "mt-0.5 text-[11px]" : "mt-1 text-sky-900/90"}>
+              Regenerate the visit report PDF if you need the printed summary to match.
+            </p>
+          </div>
+        ) : null}
+        {!embed ? (
+          <>
+            {petId ? (
+              <VisitReportToolbar
+                visitId={visit.id}
+                petId={petId}
+                storedAt={(visit.visit_report_pdf_generated_at as string | null) ?? null}
+                source={(visit as { visit_report_pdf_source?: string | null }).visit_report_pdf_source ?? null}
+                shareEmail={ic("contact_email") || String(owner?.email ?? "").trim() || null}
+              />
+            ) : null}
+            {previousVisits.length > 0 ? (
+              <div className="rounded-xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-[12px] text-amber-950">
+                <p className="font-headline font-bold">Earlier visits for this patient ({previousVisits.length})</p>
+                <p className="mt-1 text-[11px] opacity-90">
+                  Open a prior visit in the side panel or its PDF in a new tab to compare clinical context.
+                </p>
+                <ul className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-2">
+                  {previousVisits.map((pv) => (
+                    <li key={pv.id} className="flex flex-wrap items-center gap-2">
+                      <span className="text-on-surface-variant">{pv.when}</span>
+                      <a
+                        href={`/visits/${pv.id}?embed=1`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-primary underline"
+                      >
+                        Side panel
+                      </a>
+                      <a
+                        href={`/visits/${pv.id}/report`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-primary underline"
+                      >
+                        PDF report
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <Suspense fallback={<p className="text-sm text-on-surface-variant">Loading documentation options…</p>}>
+              <VisitDocumentationTabs
+                visitId={visit.id}
+                formPanel={
+                  <>
+                    {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
+                    <div className={visitMainClass}>{visitFormMain}</div>
+                  </>
+                }
+                photoPanel={
+                  <VisitPhotoSheetReport
+                    visitId={visit.id}
+                    hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
+                    appointmentContext={appointmentContext}
+                  />
+                }
+                digitalPanel={
+                  <VisitHandwrittenPrescription
+                    visitId={visit.id}
+                    embed={false}
+                    inkOnly
+                    hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
+                    clinicName={(clinicRow?.name as string | null | undefined) ?? "Clinic"}
+                    petName={String(pet?.name ?? "Patient")}
+                    ownerName={intakeOwnerName || ownerName}
+                    doctorName={doctorDisplayName ?? "Doctor"}
+                    logoUrl={(brandingRow?.logo_url as string | null | undefined) ?? null}
+                    initialState={initialHandwrittenState}
+                  />
+                }
+              />
+            </Suspense>
+          </>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <a
+                className="btn-secondary btn-compact text-[11px]"
+                href={`/visits/${visit.id}/report`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                PDF report
+              </a>
+            </div>
+            {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
+            <div className={visitMainClass}>{visitFormMain}</div>
+          </>
+        )}
       </div>
     </>
   );

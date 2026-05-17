@@ -14,6 +14,7 @@ import { getUserAccess } from "@/lib/auth/get-user-access";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/web/app-shell";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
+import { AppointmentDateTimeField } from "@/components/booking/appointment-datetime-field";
 import { SubmitButton } from "@/components/web/submit-button";
 
 type SearchParams = {
@@ -480,7 +481,7 @@ export default async function AppointmentsPage({
               </option>
             ))}
           </select>
-          <input className="input-soft" type="datetime-local" name="starts_at" required />
+          <AppointmentDateTimeField className="input-soft" />
           <textarea
             className="input-soft md:col-span-2"
             name="notes"

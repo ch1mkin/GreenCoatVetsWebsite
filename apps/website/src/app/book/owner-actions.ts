@@ -1,6 +1,10 @@
 "use server";
 
-import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
+import {
+  assertAppointmentStartsInFuture,
+  DEFAULT_PET_SPECIES_BOOKING_VALUE,
+  normalizeLegacySpeciesToCanonical,
+} from "@saasclinics/lib";
 import { redirect } from "next/navigation";
 import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
 import { formatBookingAgeYearsLabel, normalizeBookingPetGender, parseBookingAgeYearsToMonths } from "@/lib/booking/pet-demographics";
@@ -74,7 +78,7 @@ export async function submitOwnerBooking(formData: FormData) {
     throw new Error("Contact phone is required.");
   }
 
-  const startsAt = new Date(startsAtRaw).toISOString();
+  const startsAt = assertAppointmentStartsInFuture(startsAtRaw).toISOString();
   const branchName = await resolvePublicBranchNameForClinic(clinic.id, branchId);
   const patientAgeLabel = formatBookingAgeYearsLabel(petAgeYears);
   let petId = existingPetId;

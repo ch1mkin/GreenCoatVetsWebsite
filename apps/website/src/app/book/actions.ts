@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { DEFAULT_PET_SPECIES_BOOKING_VALUE, normalizeLegacySpeciesToCanonical } from "@saasclinics/lib";
+import {
+  assertAppointmentStartsInFuture,
+  DEFAULT_PET_SPECIES_BOOKING_VALUE,
+  normalizeLegacySpeciesToCanonical,
+} from "@saasclinics/lib";
 import { APPOINTMENT_BOOKING_CONSENT_TEXT, APPOINTMENT_BOOKING_CONSENT_VERSION } from "@/lib/booking/appointment-consent";
 import { normalizeBookingPetGender, parseBookingAgeYearsToMonths } from "@/lib/booking/pet-demographics";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
@@ -67,7 +71,7 @@ export async function submitGuestBooking(formData: FormData) {
     throw new Error("Invalid appointment type.");
   }
 
-  const startsAt = new Date(startsAtRaw).toISOString();
+  const startsAt = assertAppointmentStartsInFuture(startsAtRaw).toISOString();
   const branchName = await resolvePublicBranchNameForClinic(clinic.id, branchId);
 
   const { data, error } = await supabase.rpc("create_guest_website_booking", {

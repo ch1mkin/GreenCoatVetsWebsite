@@ -6,6 +6,7 @@ import { BOOKING_PET_GENDER_OPTIONS } from "@/lib/booking/pet-demographics";
 import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { clinicMetadata } from "@/lib/seo/clinic-metadata";
 import { createClient } from "@/lib/supabase/server";
+import { AppointmentDateTimeField } from "@/components/site/appointment-datetime-field";
 import { BookingProgressIndicator } from "@/components/site/booking-progress-indicator";
 import { BookingSubmitButton } from "@/components/site/booking-submit-button";
 import { submitGuestBooking } from "@/app/book/actions";
@@ -238,7 +239,7 @@ export default async function BookAppointmentPage({
                   </div>
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
-                    <input className={field} type="datetime-local" name="starts_at" required />
+                    <AppointmentDateTimeField className={field} />
                   </div>
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
@@ -441,7 +442,7 @@ export default async function BookAppointmentPage({
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
-                    <input className={field} type="datetime-local" name="starts_at" required />
+                    <AppointmentDateTimeField className={field} />
                   </div>
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">

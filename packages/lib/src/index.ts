@@ -19,3 +19,9 @@ export {
   SPECIES_OR_FILTER_FELINE,
   type PetSpeciesBookingOption,
 } from "./pet-species-booking";
+
+export {
+  assertAppointmentStartsInFuture,
+  getMinAppointmentDateTimeLocalValue,
+  parseAppointmentDateTimeLocal,
+} from "./appointment-datetime";

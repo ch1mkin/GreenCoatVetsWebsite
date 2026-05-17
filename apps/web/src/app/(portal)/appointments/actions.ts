@@ -1,5 +1,6 @@
 "use server";
 
+import { assertAppointmentStartsInFuture } from "@saasclinics/lib";
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -106,7 +107,7 @@ export async function createAppointment(formData: FormData) {
     doctor_id: doctorId || null,
     appointment_type: appointmentType,
     booking_source: "clinic_portal",
-    starts_at: new Date(startsAt).toISOString(),
+    starts_at: assertAppointmentStartsInFuture(startsAt).toISOString(),
     notes: notes || null,
     created_by: user?.id ?? null,
   });

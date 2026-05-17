@@ -410,6 +410,7 @@ export function VisitHandwrittenPrescription({
   doctorName,
   logoUrl,
   initialState,
+  inkOnly = false,
 }: {
   visitId: string;
   embed: boolean;
@@ -420,7 +421,10 @@ export function VisitHandwrittenPrescription({
   doctorName: string;
   logoUrl?: string | null;
   initialState: HandwrittenVisitSheetState;
+  /** When true, drawing-only digital sheet — no OCR layer (use Photo sheet tab for scanned notes). */
+  inkOnly?: boolean;
 }) {
+  const enableOcr = !inkOnly;
   const router = useRouter();
   const studioRef = useRef<HTMLDivElement | null>(null);
   const fullscreenToolbarRef = useRef<HTMLDivElement | null>(null);
@@ -544,7 +548,7 @@ export function VisitHandwrittenPrescription({
         drawCanvas.skipTargetFind = true;
         drawCanvas.requestRenderAll();
       }
-      if (ocrCanvas) {
+      if (enableOcr && ocrCanvas) {
         const ocrBrush =
           ocrCanvas.freeDrawingBrush instanceof fabric.PencilBrush
             ? ocrCanvas.freeDrawingBrush
@@ -671,7 +675,7 @@ export function VisitHandwrittenPrescription({
           });
           drawCanvasesRef.current[fieldId] = drawCanvas;
         }
-        if (ocrNode && !ocrCanvasesRef.current[fieldId]) {
+        if (enableOcr && ocrNode && !ocrCanvasesRef.current[fieldId]) {
           const ocrCanvas = new fabric.Canvas(ocrNode, {
             width,
             height,
@@ -1121,9 +1125,11 @@ export function VisitHandwrittenPrescription({
         document.activeElement.blur();
       }
 
-      for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-        if (canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
-          await recognizePendingOcrRegion(fieldId);
+      if (enableOcr) {
+        for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+          if (canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
+            await recognizePendingOcrRegion(fieldId);
+          }
         }
       }
 
@@ -1251,7 +1257,7 @@ export function VisitHandwrittenPrescription({
     (fieldId: HandwrittenVisitFieldId) => {
       const region = editorState.ocrRegions[fieldId];
       const isSelected = selectedFieldId === fieldId;
-      const showOcrGuide = tool === "ocr" && !capturingPdf;
+      const showOcrGuide = enableOcr && tool === "ocr" && !capturingPdf;
       const tokens = editorState.wordTokens
         .filter((token) => token.fieldId === fieldId)
         .sort((a, b) => a.y - b.y || a.x - b.x);
@@ -1276,14 +1282,16 @@ export function VisitHandwrittenPrescription({
               tool === "draw" ? "pointer-events-auto" : "pointer-events-none"
             }`}
           />
-          <canvas
-            ref={(node) => registerOcrCanvasRef(fieldId, node)}
-            data-canvas-layer="ocr"
-            data-field-id={fieldId}
-            className={`absolute inset-0 h-full w-full ${
-              tool === "ocr" ? "pointer-events-auto" : "pointer-events-none"
-            }`}
-          />
+          {enableOcr ? (
+            <canvas
+              ref={(node) => registerOcrCanvasRef(fieldId, node)}
+              data-canvas-layer="ocr"
+              data-field-id={fieldId}
+              className={`absolute inset-0 h-full w-full ${
+                tool === "ocr" ? "pointer-events-auto" : "pointer-events-none"
+              }`}
+            />
+          ) : null}
           {tool === "erase" || tool === "scroll" ? (
             <button
               type="button"
@@ -1344,9 +1352,11 @@ export function VisitHandwrittenPrescription({
           <button type="button" aria-label="Normal write" title="Normal write" className={toolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
             <ToolIcon tool="draw" />
           </button>
-          <button type="button" aria-label="OCR write" title="OCR write" className={toolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
-            <ToolIcon tool="ocr" />
-          </button>
+          {enableOcr ? (
+            <button type="button" aria-label="OCR write" title="OCR write" className={toolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+              <ToolIcon tool="ocr" />
+            </button>
+          ) : null}
           <button type="button" aria-label="Highlight" title="Highlight" className={toolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
             <ToolIcon tool="highlight" />
           </button>
@@ -1420,15 +1430,26 @@ export function VisitHandwrittenPrescription({
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-800">Tips</p>
         <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>`Normal write` keeps your handwriting exactly as ink and never sends it for OCR.</li>
-          <li>`OCR write` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
-          <li>Blue guided boxes show OCR-ready areas across `CC / HP`, parameters, `Dx`, physical exam, and `Rx`.</li>
-          <li>Normal ink and OCR text can live together in the same field without changing each other.</li>
-          <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
+          {inkOnly ? (
+            <>
+              <li>Draw on the clinic template; ink is saved in the visit PDF.</li>
+              <li>For paper notes from a phone camera, use the Photo sheet tab.</li>
+              <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
+            </>
+          ) : (
+            <>
+              <li>`Normal write` keeps your handwriting exactly as ink and never sends it for OCR.</li>
+              <li>`OCR write` watches only the OCR layer. About 2 seconds after you stop writing, that stroke group becomes typed text.</li>
+              <li>Blue guided boxes show OCR-ready areas across `CC / HP`, parameters, `Dx`, physical exam, and `Rx`.</li>
+              <li>Normal ink and OCR text can live together in the same field without changing each other.</li>
+              <li>`Scroll / Edit` lets you move around the sheet and use the checkboxes safely.</li>
+            </>
+          )}
           <li>Use `Convert to PDF` when the page looks right.</li>
         </ul>
       </div>
 
+      {enableOcr ? (
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-800">Quick OCR targets</p>
         <p className="mt-1 text-[11px] text-slate-500">
@@ -1456,6 +1477,7 @@ export function VisitHandwrittenPrescription({
           ))}
         </div>
       </div>
+      ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-[12px] text-slate-600">
         <p className="font-semibold text-slate-900">Selected region</p>
@@ -1469,16 +1491,18 @@ export function VisitHandwrittenPrescription({
           >
             Clear region
           </button>
-          <button
-            type="button"
-            className="btn-primary btn-compact text-xs"
-            disabled={!selectedRegionHasPendingOcrInk || ocrPendingFieldId === selectedFieldId}
-            onClick={() => void recognizePendingOcrRegion(selectedFieldId)}
-          >
-            {ocrPendingFieldId === selectedFieldId ? "Running OCR..." : "Convert OCR to text"}
-          </button>
+          {enableOcr ? (
+            <button
+              type="button"
+              className="btn-primary btn-compact text-xs"
+              disabled={!selectedRegionHasPendingOcrInk || ocrPendingFieldId === selectedFieldId}
+              onClick={() => void recognizePendingOcrRegion(selectedFieldId)}
+            >
+              {ocrPendingFieldId === selectedFieldId ? "Running OCR..." : "Convert OCR to text"}
+            </button>
+          ) : null}
         </div>
-        {ocrPendingFieldId === selectedFieldId ? (
+        {enableOcr && ocrPendingFieldId === selectedFieldId ? (
           <p className="mt-3 text-[11px] font-medium text-primary">Converting your latest OCR stroke to typed text…</p>
         ) : null}
         {selectedRegion.text.trim() ? (
@@ -1546,9 +1570,11 @@ export function VisitHandwrittenPrescription({
         <button type="button" aria-label="Normal write" title="Normal write" className={compactToolButtonClass(tool === "draw")} onClick={() => setTool("draw")}>
           <ToolIcon tool="draw" />
         </button>
-        <button type="button" aria-label="OCR write" title="OCR write" className={compactToolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
-          <ToolIcon tool="ocr" />
-        </button>
+        {enableOcr ? (
+          <button type="button" aria-label="OCR write" title="OCR write" className={compactToolButtonClass(tool === "ocr")} onClick={() => setTool("ocr")}>
+            <ToolIcon tool="ocr" />
+          </button>
+        ) : null}
         <button type="button" aria-label="Highlight" title="Highlight" className={compactToolButtonClass(tool === "highlight")} onClick={() => setTool("highlight")}>
           <ToolIcon tool="highlight" />
         </button>
