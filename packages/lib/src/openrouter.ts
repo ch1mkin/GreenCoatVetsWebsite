@@ -24,14 +24,18 @@ export function resolveOpenRouterModel(configured?: string | null): string {
 
 /** DeepSeek V4 endpoints on OpenRouter require reasoning and reject `enabled: false`. */
 export function modelRequiresMandatoryReasoning(model: string): boolean {
-  return /deepseek-v4-flash|deepseek-v4-pro|deepseek\/deepseek-v4/i.test(model);
+  return /deepseek\/deepseek-v4-flash|deepseek\/deepseek-v4-pro|deepseek\/deepseek-v4\b/i.test(model);
 }
 
-function buildReasoningRequestBody(model: string): Record<string, unknown> | undefined {
-  if (modelRequiresMandatoryReasoning(model)) {
-    return { effort: "low" };
+function buildReasoningRequestBody(model: string, forceEnable = false): Record<string, unknown> | undefined {
+  if (forceEnable || modelRequiresMandatoryReasoning(model)) {
+    return { enabled: true, effort: "low" };
   }
-  return { enabled: false };
+  return undefined;
+}
+
+function isReasoningRequiredError(message: string): boolean {
+  return /reasoning is mandatory|cannot be disabled|reasoning.*required/i.test(message);
 }
 
 function readMessageContent(message: OpenRouterChatMessage | null | undefined): string {
@@ -103,24 +107,24 @@ export type OpenRouterChatResult =
   | { ok: true; model: string; text: string }
   | { ok: false; model: string; error: string };
 
-export async function requestOpenRouterChatCompletion(
-  input: OpenRouterChatRequest & { modelOverride?: string },
-): Promise<OpenRouterChatResult> {
-  const model = input.modelOverride?.trim() || resolveOpenRouterModel(input.model);
-  const body: Record<string, unknown> = {
-    model,
-    max_tokens: input.max_tokens ?? 2200,
-    messages: input.messages,
+async function postOpenRouterChatCompletion(
+  apiKey: string,
+  body: Record<string, unknown>,
+): Promise<{
+  ok: boolean;
+  status: number;
+  model: string;
+  payload: {
+    choices?: Array<{ message?: OpenRouterChatMessage }>;
+    error?: { message?: string };
   };
-  const reasoning = buildReasoningRequestBody(model);
-  if (reasoning) body.reasoning = reasoning;
-  if (input.temperature !== undefined) body.temperature = input.temperature;
-  if (input.jsonMode) body.response_format = { type: "json_object" };
-
+  raw: string;
+}> {
+  const model = String(body.model ?? "");
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${input.apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -136,15 +140,40 @@ export async function requestOpenRouterChatCompletion(
     try {
       payload = JSON.parse(raw) as typeof payload;
     } catch {
-      return { ok: false, model, error: "OpenRouter returned a non-JSON response." };
+      return { ok: false, status: response.status, model, payload: {}, raw };
     }
   }
 
-  if (!response.ok) {
-    return { ok: false, model, error: payload.error?.message ?? "AI generation failed." };
+  return { ok: response.ok, status: response.status, model, payload, raw };
+}
+
+export async function requestOpenRouterChatCompletion(
+  input: OpenRouterChatRequest & { modelOverride?: string },
+): Promise<OpenRouterChatResult> {
+  const model = input.modelOverride?.trim() || resolveOpenRouterModel(input.model);
+  const body: Record<string, unknown> = {
+    model,
+    max_tokens: input.max_tokens ?? 2200,
+    messages: input.messages,
+  };
+  if (input.temperature !== undefined) body.temperature = input.temperature;
+  if (input.jsonMode) body.response_format = { type: "json_object" };
+
+  const reasoning = buildReasoningRequestBody(model);
+  if (reasoning) body.reasoning = reasoning;
+
+  let attempt = await postOpenRouterChatCompletion(input.apiKey, body);
+  const firstError = attempt.payload.error?.message ?? "";
+  if (!attempt.ok && isReasoningRequiredError(firstError)) {
+    body.reasoning = buildReasoningRequestBody(model, true);
+    attempt = await postOpenRouterChatCompletion(input.apiKey, body);
   }
 
-  const text = extractOpenRouterMessageText(payload.choices?.[0]?.message, { preferJson: input.jsonMode });
+  if (!attempt.ok) {
+    return { ok: false, model, error: attempt.payload.error?.message ?? "AI generation failed." };
+  }
+
+  const text = extractOpenRouterMessageText(attempt.payload.choices?.[0]?.message, { preferJson: input.jsonMode });
   if (!text) {
     return { ok: false, model, error: "No content returned by the selected OpenRouter model." };
   }
@@ -164,7 +193,7 @@ export async function requestOpenRouterChatWithFallbacks(
     const result = await requestOpenRouterChatCompletion({ ...input, model });
     if (result.ok) return result;
     lastError = result.error;
-    if (!/no content|empty|non-json/i.test(result.error)) break;
+    if (!/no content|empty|non-json|reasoning is mandatory|cannot be disabled/i.test(result.error)) break;
   }
 
   return { ok: false, model: primary, error: lastError };

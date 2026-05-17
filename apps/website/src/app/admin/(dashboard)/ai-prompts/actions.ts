@@ -23,8 +23,8 @@ export type GenerateInstagramPromptPackResult =
   | { ok: false; error: string; model: string };
 
 const INSTAGRAM_PROMPT_MODELS = [
-  "deepseek/deepseek-r1-0528",
   "deepseek/deepseek-v4-flash:free",
+  "deepseek/deepseek-r1-0528",
 ] as const;
 
 function finalizePromptPack(pack: InstagramPromptPackFields): InstagramPromptPack {
