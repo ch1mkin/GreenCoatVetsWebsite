@@ -1,5 +1,6 @@
 "use server";
 
+import { requestOpenRouterChatWithFallbacks } from "@saasclinics/lib";
 import { requireSuperAdmin } from "@/lib/admin/auth";
 
 export type InstagramPromptRequest = {
@@ -25,12 +26,6 @@ export type InstagramPromptPack = {
 export type GenerateInstagramPromptPackResult =
   | { ok: true; pack: InstagramPromptPack; model: string }
   | { ok: false; error: string; model: string };
-
-const DEFAULT_DEEPSEEK_MODEL = "deepseek/deepseek-v4-flash:free";
-const DEEPSEEK_MODEL_FALLBACKS = [
-  "deepseek/deepseek-v4-flash:free",
-  "deepseek/deepseek-r1-0528",
-] as const;
 
 function extractJsonObject(text: string): string {
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
@@ -73,123 +68,75 @@ function normalizePromptPack(value: unknown): InstagramPromptPack {
   };
 }
 
-function resolveOpenRouterModel(): string {
-  const configured = process.env.OPENROUTER_MODEL?.trim();
-  if (!configured) return DEFAULT_DEEPSEEK_MODEL;
-  if (/^deepseek\/deepseek-r1(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
-  if (/^deepseek\/deepseek-r1-0528(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
-  if (/^deepseek\/deepseek-chat-v3-0324(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
-  return configured;
-}
+function buildPromptMessages(input: InstagramPromptRequest) {
+  const clinicName = input.clinicName?.trim() || "GreenCoatVets";
+  const theme = input.theme.trim();
+  const audience = input.audience?.trim() || "pet parents in India";
+  const campaignGoal = input.campaignGoal?.trim() || "increase engagement and shares";
+  const season = input.season?.trim() || "current month";
+  const tone = input.tone?.trim() || "warm, trustworthy, playful";
 
-function modelHelpMessage(model: string): string {
-  const fallbackList = DEEPSEEK_MODEL_FALLBACKS.map((item) => `\`${item}\``).join(", ");
-  return `OpenRouter rejected model \`${model}\`. Try one of these DeepSeek models: ${fallbackList}.`;
-}
-
-async function parseOpenRouterResponse(response: Response): Promise<{
-  choices?: Array<{ message?: { content?: string } }>;
-  error?: { message?: string };
-}> {
-  const raw = await response.text();
-  if (!raw.trim()) return {};
-  try {
-    return JSON.parse(raw) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      error?: { message?: string };
-    };
-  } catch {
-    throw new Error("OpenRouter returned a non-JSON response. Check the API key, model slug, and provider status.");
-  }
+  return [
+    {
+      role: "system" as const,
+      content:
+        "You are a veterinary Instagram strategist. You must respond with a single valid JSON object only — no markdown fences, no commentary, no reasoning preamble.",
+    },
+    {
+      role: "user" as const,
+      content: [
+        `Clinic brand: ${clinicName}`,
+        `Theme: ${theme}`,
+        `Audience: ${audience}`,
+        `Campaign goal: ${campaignGoal}`,
+        `Season or event context: ${season}`,
+        `Tone: ${tone}`,
+        "",
+        "Return JSON with exactly these keys:",
+        "conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection",
+        "",
+        "Rules:",
+        "- hashtags: array of 5-10 strings",
+        "- postIdeas: array of exactly 5 strings",
+        "- artDirection: array of 3-6 short strings",
+        "- geminiPrompt: detailed 2D illustrated, non-photorealistic Instagram art prompt for Gemini",
+        "- Keep ideas specific to veterinary clinics in India",
+      ].join("\n"),
+    },
+  ];
 }
 
 export async function generateInstagramPromptPack(
   input: InstagramPromptRequest,
 ): Promise<GenerateInstagramPromptPackResult> {
-  const model = resolveOpenRouterModel();
-
   try {
     await requireSuperAdmin();
 
     const theme = input.theme.trim();
-    if (!theme) return { ok: false, error: "Theme is required.", model };
+    if (!theme) return { ok: false, error: "Theme is required.", model: "deepseek/deepseek-v4-flash:free" };
 
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) {
-      return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model };
+      return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model: "deepseek/deepseek-v4-flash:free" };
     }
 
-    const clinicName = input.clinicName?.trim() || "GreenCoatVets";
-    const audience = input.audience?.trim() || "pet parents in India";
-    const campaignGoal = input.campaignGoal?.trim() || "increase engagement and shares";
-    const season = input.season?.trim() || "current month";
-    const tone = input.tone?.trim() || "warm, trustworthy, playful";
-
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 2200,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a veterinary Instagram strategist and prompt engineer. Return strict JSON only. Focus on high-performing veterinary post ideas that feel timely, shareable, and suitable for 2D illustrated art. Avoid realistic photo language. Always make the art prompt explicitly non-photorealistic, hand-drawn, and suitable for Gemini image generation.",
-          },
-          {
-            role: "user",
-            content: [
-              `Clinic brand: ${clinicName}`,
-              `Theme: ${theme}`,
-              `Audience: ${audience}`,
-              `Campaign goal: ${campaignGoal}`,
-              `Season or event context: ${season}`,
-              `Tone: ${tone}`,
-              "",
-              "Return a JSON object with these exact keys:",
-              "{",
-              '  "conceptTitle": "short concept title",',
-              '  "trendAngle": "why this concept works now",',
-              '  "captionHook": "1 short hook line",',
-              '  "captionBody": "2-4 sentence Instagram caption body",',
-              '  "hashtags": ["5-10 hashtags"],',
-              '  "postIdeas": ["exactly 5 trending post ideas"],',
-              '  "geminiPrompt": "one detailed prompt for Gemini to generate a 2D illustrated non-realistic Instagram post",',
-              '  "artDirection": ["3-6 short bullets about palette, composition, and illustration style"]',
-              "}",
-              "",
-              "Requirements:",
-              "- Keep the post ideas specific to a veterinary clinic audience.",
-              "- The Gemini prompt must mention: 2D illustration, non-realistic, clean outlines, social-media friendly square composition, and no photo realism.",
-              "- Do not include markdown fences, explanations, or extra keys.",
-            ].join("\n"),
-          },
-        ],
-      }),
+    const completion = await requestOpenRouterChatWithFallbacks({
+      apiKey,
+      model: process.env.OPENROUTER_MODEL,
+      messages: buildPromptMessages(input),
+      max_tokens: 2800,
+      temperature: 0.8,
+      jsonMode: true,
     });
 
-    const payload = await parseOpenRouterResponse(response);
-    if (!response.ok) {
-      const providerMessage = payload.error?.message ?? "AI generation failed.";
-      const extra = /model|provider|not found|unsupported|unknown/i.test(providerMessage)
-        ? ` ${modelHelpMessage(model)}`
-        : "";
-      return { ok: false, error: `${providerMessage}${extra}`, model };
+    if (!completion.ok) {
+      return { ok: false, error: completion.error, model: completion.model };
     }
 
-    const content = payload.choices?.[0]?.message?.content?.trim();
-    if (!content) {
-      return { ok: false, error: "No content returned by the selected OpenRouter model.", model };
-    }
-
-    return { ok: true, pack: normalizePromptPack(JSON.parse(extractJsonObject(content))), model };
+    const pack = normalizePromptPack(JSON.parse(extractJsonObject(completion.text)));
+    return { ok: true, pack, model: completion.model };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to generate prompt.";
-    return { ok: false, error: `${message} ${modelHelpMessage(model)}`.trim(), model };
+    const message = error instanceof Error ? error.message : "Failed to generate prompt.";
+    return { ok: false, error: message, model: "deepseek/deepseek-v4-flash:free" };
   }
 }

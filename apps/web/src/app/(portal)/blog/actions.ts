@@ -1,5 +1,6 @@
 "use server";
 
+import { requestOpenRouterChatWithFallbacks } from "@saasclinics/lib";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
@@ -46,44 +47,33 @@ export async function generateBlogDraft(formData: FormData) {
   if (!topic) throw new Error("Topic is required.");
 
   const apiKey = process.env.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash:free";
   if (!apiKey) {
     throw new Error("Missing OPENROUTER_API_KEY in environment.");
   }
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 3000,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a veterinary clinic content writer. Produce clean markdown with headings, bullet lists, and practical advice.",
-        },
-        {
-          role: "user",
-          content: `Write an SEO-friendly veterinary blog draft about: ${topic}`,
-        },
-      ],
-    }),
+  const completion = await requestOpenRouterChatWithFallbacks({
+    apiKey,
+    model: process.env.OPENROUTER_MODEL,
+    max_tokens: 3000,
+    temperature: 0.7,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a veterinary clinic content writer. Produce clean markdown with headings, bullet lists, and practical advice.",
+      },
+      {
+        role: "user",
+        content: `Write an SEO-friendly veterinary blog draft about: ${topic}`,
+      },
+    ],
   });
 
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message?: string };
-  };
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? "AI generation failed.");
+  if (!completion.ok) {
+    throw new Error(completion.error);
   }
 
-  const markdown = payload.choices?.[0]?.message?.content?.trim();
-  if (!markdown) throw new Error("No content returned by AI model.");
+  const markdown = completion.text;
 
   const title = topic;
   const slug = topic

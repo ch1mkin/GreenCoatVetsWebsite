@@ -25,3 +25,15 @@ export {
   getMinAppointmentDateTimeLocalValue,
   parseAppointmentDateTimeLocal,
 } from "./appointment-datetime";
+
+export {
+  DEFAULT_OPENROUTER_MODEL,
+  OPENROUTER_MODEL_FALLBACKS,
+  extractOpenRouterMessageText,
+  requestOpenRouterChatCompletion,
+  requestOpenRouterChatWithFallbacks,
+  resolveOpenRouterModel,
+  type OpenRouterChatMessage,
+  type OpenRouterChatRequest,
+  type OpenRouterChatResult,
+} from "./openrouter";

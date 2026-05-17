@@ -81,7 +81,7 @@ export function PromptGenerator() {
         <div>
           <h2 className="font-headline text-xl font-bold text-slate-900">Generate a post concept</h2>
           <p className="mt-2 text-sm text-slate-600">
-            DeepSeek R1 creates the strategy and Gemini-ready art prompt. The output stays focused on illustrated, 2D,
+            DeepSeek V4 Flash creates the strategy and Gemini-ready art prompt. The output stays focused on illustrated, 2D,
             non-realistic Instagram creatives.
           </p>
           <p className="mt-2 text-xs text-slate-500">
