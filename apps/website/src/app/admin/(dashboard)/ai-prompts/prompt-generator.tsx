@@ -85,7 +85,7 @@ export function PromptGenerator() {
             non-realistic Instagram creatives.
           </p>
           <p className="mt-2 text-xs text-slate-500">
-            Recommended free OpenRouter model: <code className="rounded bg-slate-100 px-1 py-0.5">deepseek/deepseek-r1-0528:free</code>
+            Recommended OpenRouter model: <code className="rounded bg-slate-100 px-1 py-0.5">deepseek/deepseek-r1-0528</code>
           </p>
         </div>
 

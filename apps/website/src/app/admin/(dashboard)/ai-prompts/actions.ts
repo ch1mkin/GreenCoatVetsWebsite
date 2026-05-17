@@ -26,10 +26,9 @@ export type GenerateInstagramPromptPackResult =
   | { ok: true; pack: InstagramPromptPack; model: string }
   | { ok: false; error: string; model: string };
 
-const DEFAULT_FREE_DEEPSEEK_MODEL = "deepseek/deepseek-r1-0528:free";
-const DEEPSEEK_FREE_FALLBACKS = [
-  "deepseek/deepseek-r1-0528:free",
-  "deepseek/deepseek-r1:free",
+const DEFAULT_DEEPSEEK_MODEL = "deepseek/deepseek-r1-0528";
+const DEEPSEEK_MODEL_FALLBACKS = [
+  "deepseek/deepseek-r1-0528",
   "deepseek/deepseek-chat-v3-0324:free",
 ] as const;
 
@@ -76,17 +75,16 @@ function normalizePromptPack(value: unknown): InstagramPromptPack {
 
 function resolveOpenRouterModel(): string {
   const configured = process.env.OPENROUTER_MODEL?.trim();
-  if (!configured) return DEFAULT_FREE_DEEPSEEK_MODEL;
-  if (/^deepseek\/.+:free$/i.test(configured)) return configured;
-  if (/^deepseek\/deepseek-r1-0528$/i.test(configured)) return "deepseek/deepseek-r1-0528:free";
-  if (/^deepseek\/deepseek-r1$/i.test(configured)) return "deepseek/deepseek-r1:free";
+  if (!configured) return DEFAULT_DEEPSEEK_MODEL;
+  if (/^deepseek\/deepseek-r1(:free)?$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
+  if (/^deepseek\/deepseek-r1-0528:free$/i.test(configured)) return DEFAULT_DEEPSEEK_MODEL;
   if (/^deepseek\/deepseek-chat-v3-0324$/i.test(configured)) return "deepseek/deepseek-chat-v3-0324:free";
   return configured;
 }
 
 function modelHelpMessage(model: string): string {
-  const fallbackList = DEEPSEEK_FREE_FALLBACKS.map((item) => `\`${item}\``).join(", ");
-  return `OpenRouter rejected model \`${model}\`. Try one of these free DeepSeek models: ${fallbackList}.`;
+  const fallbackList = DEEPSEEK_MODEL_FALLBACKS.map((item) => `\`${item}\``).join(", ");
+  return `OpenRouter rejected model \`${model}\`. Try one of these DeepSeek models: ${fallbackList}.`;
 }
 
 async function parseOpenRouterResponse(response: Response): Promise<{
