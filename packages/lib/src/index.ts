@@ -37,3 +37,5 @@ export {
   type OpenRouterChatRequest,
   type OpenRouterChatResult,
 } from "./openrouter";
+
+export { parseJsonFromLlmOutput } from "./parse-llm-json";

@@ -130,7 +130,7 @@ export async function requestOpenRouterChatWithFallbacks(
     const result = await requestOpenRouterChatCompletion({ ...input, model });
     if (result.ok) return result;
     lastError = result.error;
-    if (!/no content|empty/i.test(result.error)) break;
+    if (!/no content|empty|non-json/i.test(result.error)) break;
   }
 
   return { ok: false, model: primary, error: lastError };
