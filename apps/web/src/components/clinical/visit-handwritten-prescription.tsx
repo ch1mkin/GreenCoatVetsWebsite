@@ -157,9 +157,24 @@ function applyEditorStateToCaptureClone(clone: HTMLElement, state: HandwrittenVi
   }
 }
 
+function styleFabricCanvasContainer(canvasNode: HTMLCanvasElement | null | undefined, layerZIndex: number) {
+  const container = canvasNode?.closest(".canvas-container") as HTMLElement | null;
+  if (!container) return;
+  container.style.position = "absolute";
+  container.style.inset = "0";
+  container.style.width = "100%";
+  container.style.height = "100%";
+  container.style.zIndex = String(layerZIndex);
+}
+
 function setCanvasContainerPointerEvents(canvasNode: HTMLCanvasElement | null | undefined, enabled: boolean) {
   const container = canvasNode?.closest(".canvas-container") as HTMLElement | null;
-  if (container) container.style.pointerEvents = enabled ? "auto" : "none";
+  if (!container) return;
+  container.style.pointerEvents = enabled ? "auto" : "none";
+  const upper = container.querySelector(".upper-canvas") as HTMLElement | null;
+  const lower = container.querySelector(".lower-canvas") as HTMLElement | null;
+  if (upper) upper.style.pointerEvents = enabled ? "auto" : "none";
+  if (lower) lower.style.pointerEvents = enabled ? "auto" : "none";
 }
 
 function toolButtonClass(active: boolean) {
@@ -575,6 +590,7 @@ export function VisitHandwrittenPrescription({
         drawCanvas.selection = false;
         drawCanvas.skipTargetFind = true;
         drawCanvas.requestRenderAll();
+        styleFabricCanvasContainer(drawCanvasElementsRef.current[fieldId], 5);
         setCanvasContainerPointerEvents(drawCanvasElementsRef.current[fieldId], tool === "draw");
       }
       if (enableOcr && ocrCanvas) {
@@ -590,6 +606,7 @@ export function VisitHandwrittenPrescription({
         ocrCanvas.selection = false;
         ocrCanvas.skipTargetFind = true;
         ocrCanvas.requestRenderAll();
+        styleFabricCanvasContainer(ocrCanvasElementsRef.current[fieldId], 6);
         setCanvasContainerPointerEvents(ocrCanvasElementsRef.current[fieldId], tool === "ocr");
       }
     }
@@ -710,6 +727,7 @@ export function VisitHandwrittenPrescription({
             });
           });
           drawCanvasesRef.current[fieldId] = drawCanvas;
+          styleFabricCanvasContainer(drawNode, 5);
         }
         if (enableOcr && ocrNode && !ocrCanvasesRef.current[fieldId]) {
           const ocrCanvas = new fabric.Canvas(ocrNode, {
@@ -750,6 +768,7 @@ export function VisitHandwrittenPrescription({
             }, 2000);
           });
           ocrCanvasesRef.current[fieldId] = ocrCanvas;
+          styleFabricCanvasContainer(ocrNode, 6);
         }
       }
 
@@ -1322,14 +1341,15 @@ export function VisitHandwrittenPrescription({
         .filter((token) => token.fieldId === fieldId)
         .sort((a, b) => a.y - b.y || a.x - b.x);
       return (
-        <div data-writable-overlay={fieldId} className="absolute inset-0 z-[2] pointer-events-none">
+        <div data-writable-overlay={fieldId} className="absolute inset-0 z-[2]">
           {!capturingPdf ? (
             <div
-              className={`absolute inset-0 rounded-[4px] ${
+              aria-hidden
+              className={`pointer-events-none absolute inset-0 z-[1] rounded-[4px] ${
                 isSelected
-                  ? "bg-primary/5 shadow-[inset_0_0_0_1px_rgba(37,99,235,0.75)]"
+                  ? "bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.35)]"
                   : showOcrGuide
-                    ? "bg-sky-100/30 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.28)]"
+                    ? "bg-sky-400/[0.05] shadow-[inset_0_0_0_1px_rgba(59,130,246,0.18)]"
                     : ""
               }`}
             />
@@ -1338,8 +1358,8 @@ export function VisitHandwrittenPrescription({
             ref={(node) => registerDrawCanvasRef(fieldId, node)}
             data-canvas-layer="draw"
             data-field-id={fieldId}
-            className={`absolute inset-0 h-full w-full ${
-              tool === "draw" ? "pointer-events-auto" : "pointer-events-none"
+            className={`absolute inset-0 z-[5] h-full w-full ${
+              tool === "draw" ? "pointer-events-auto touch-none" : "pointer-events-none"
             }`}
           />
           {enableOcr ? (
@@ -1347,8 +1367,8 @@ export function VisitHandwrittenPrescription({
               ref={(node) => registerOcrCanvasRef(fieldId, node)}
               data-canvas-layer="ocr"
               data-field-id={fieldId}
-              className={`absolute inset-0 h-full w-full ${
-                tool === "ocr" ? "pointer-events-auto" : "pointer-events-none"
+              className={`absolute inset-0 z-[6] h-full w-full ${
+                tool === "ocr" ? "pointer-events-auto touch-none" : "pointer-events-none"
               }`}
             />
           ) : null}
