@@ -30,6 +30,7 @@ export {
   DEFAULT_OPENROUTER_MODEL,
   OPENROUTER_MODEL_FALLBACKS,
   extractOpenRouterMessageText,
+  modelRequiresMandatoryReasoning,
   requestOpenRouterChatCompletion,
   requestOpenRouterChatWithFallbacks,
   resolveOpenRouterModel,

@@ -22,23 +22,40 @@ export function resolveOpenRouterModel(configured?: string | null): string {
   return model;
 }
 
-function collectMessageTextParts(message: OpenRouterChatMessage | null | undefined): string[] {
-  if (!message) return [];
-  const parts: string[] = [];
+/** DeepSeek V4 endpoints on OpenRouter require reasoning and reject `enabled: false`. */
+export function modelRequiresMandatoryReasoning(model: string): boolean {
+  return /deepseek-v4-flash|deepseek-v4-pro|deepseek\/deepseek-v4/i.test(model);
+}
 
+function buildReasoningRequestBody(model: string): Record<string, unknown> | undefined {
+  if (modelRequiresMandatoryReasoning(model)) {
+    return { effort: "low" };
+  }
+  return { enabled: false };
+}
+
+function readMessageContent(message: OpenRouterChatMessage | null | undefined): string {
+  if (!message) return "";
   const content = message.content;
-  if (typeof content === "string" && content.trim()) parts.push(content.trim());
+  if (typeof content === "string" && content.trim()) return content.trim();
   if (Array.isArray(content)) {
-    const joined = content
+    return content
       .map((part) => (part?.type === "text" && typeof part.text === "string" ? part.text : ""))
       .join("\n")
       .trim();
-    if (joined) parts.push(joined);
   }
+  return "";
+}
 
-  if (typeof message.reasoning === "string" && message.reasoning.trim()) parts.push(message.reasoning.trim());
+function readMessageReasoning(message: OpenRouterChatMessage | null | undefined): string {
+  if (!message) return "";
+  const chunks: string[] = [];
+
+  if (typeof message.reasoning === "string" && message.reasoning.trim()) {
+    chunks.push(message.reasoning.trim());
+  }
   if (typeof message.reasoning_content === "string" && message.reasoning_content.trim()) {
-    parts.push(message.reasoning_content.trim());
+    chunks.push(message.reasoning_content.trim());
   }
 
   const details = message.reasoning_details;
@@ -51,25 +68,26 @@ function collectMessageTextParts(message: OpenRouterChatMessage | null | undefin
       })
       .join("\n")
       .trim();
-    if (fromDetails) parts.push(fromDetails);
+    if (fromDetails) chunks.push(fromDetails);
   }
 
-  return parts;
+  return chunks.join("\n\n").trim();
 }
 
 export function extractOpenRouterMessageText(
   message: OpenRouterChatMessage | null | undefined,
   options?: { preferJson?: boolean },
 ): string {
-  const parts = collectMessageTextParts(message);
-  if (!parts.length) return "";
+  const content = readMessageContent(message);
+  const reasoning = readMessageReasoning(message);
 
   if (options?.preferJson) {
-    const jsonPart = parts.find((part) => part.includes("{"));
-    if (jsonPart) return jsonPart;
+    if (content.includes("{")) return content;
+    if (reasoning.includes("{")) return reasoning;
   }
 
-  return parts.join("\n\n").trim();
+  if (content) return content;
+  return reasoning;
 }
 
 export type OpenRouterChatRequest = {
@@ -93,8 +111,9 @@ export async function requestOpenRouterChatCompletion(
     model,
     max_tokens: input.max_tokens ?? 2200,
     messages: input.messages,
-    reasoning: { enabled: false },
   };
+  const reasoning = buildReasoningRequestBody(model);
+  if (reasoning) body.reasoning = reasoning;
   if (input.temperature !== undefined) body.temperature = input.temperature;
   if (input.jsonMode) body.response_format = { type: "json_object" };
 
