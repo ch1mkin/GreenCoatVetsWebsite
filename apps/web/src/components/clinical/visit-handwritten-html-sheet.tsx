@@ -321,6 +321,7 @@ export function VisitHandwrittenHtmlSheet({
         }
 
         .sheet {
+          isolation: isolate;
           width: 1000px;
           min-height: 1414px;
           margin: 0;
@@ -435,8 +436,15 @@ export function VisitHandwrittenHtmlSheet({
           position: relative;
           vertical-align: middle;
           flex: 0 0 auto;
-          z-index: 30;
+          z-index: 100;
           pointer-events: auto;
+          touch-action: manipulation;
+        }
+
+        .item,
+        .test {
+          position: relative;
+          z-index: 40;
         }
 
         input[type="checkbox"]:checked {

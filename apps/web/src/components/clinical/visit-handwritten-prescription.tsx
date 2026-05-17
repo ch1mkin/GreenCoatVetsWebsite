@@ -4,12 +4,13 @@ import { toBlob as domToBlob } from "html-to-image";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import {
-  recognizeHandwrittenRegionAction,
-  saveHandwrittenVisitPdfAction,
-} from "@/app/(portal)/visits/visit-report-actions";
+import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
 import { VisitHandwrittenHtmlSheet } from "@/components/clinical/visit-handwritten-html-sheet";
-import { prepareHandwrittenRegionOcrPayload } from "@/lib/visits/handwritten-ocr";
+import {
+  compressHandwrittenOcrPayloadForTransport,
+  prepareHandwrittenRegionOcrPayload,
+  requestHandwrittenRegionOcr,
+} from "@/lib/visits/handwritten-ocr";
 import type {
   HandwrittenVisitCheckboxId,
   HandwrittenVisitFieldId,
@@ -786,7 +787,7 @@ export function VisitHandwrittenPrescription({
       drawCanvasesRef.current = {};
       ocrCanvasesRef.current = {};
     };
-  }, [applyWritableCanvasSettings, clearOcrIdleTimer, ensureFabricModule, open, pushUndoSnapshot, strokeWidth, syncWritableCanvases]);
+  }, [applyWritableCanvasSettings, clearOcrIdleTimer, enableOcr, ensureFabricModule, open, pushUndoSnapshot, strokeWidth, syncWritableCanvases]);
 
   useEffect(() => {
     void applyWritableCanvasSettings();
@@ -1041,15 +1042,20 @@ export function VisitHandwrittenPrescription({
       const singleLine = isSingleLineOcrField(fieldId);
       const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
       const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
-      const result = await recognizeHandwrittenRegionAction({
+      const transportPayload = await compressHandwrittenOcrPayloadForTransport(ocrPayload);
+      const result = await requestHandwrittenRegionOcr({
         visitId,
         fieldId,
         fieldLabel: WRITABLE_REGION_LABELS[fieldId],
         singleLine,
-        ...ocrPayload,
+        rawDataUrl: transportPayload.rawDataUrl,
+        contrastDataUrl: transportPayload.contrastDataUrl,
+        boostedDataUrl: transportPayload.boostedDataUrl,
+        thinStrokeDataUrl: transportPayload.thinStrokeDataUrl,
+        localCandidates: transportPayload.localCandidates,
       });
-      if (!result.ok || !result.text.trim()) {
-        setError(result.ok ? `OCR could not read ${WRITABLE_REGION_LABELS[fieldId]}.` : result.error);
+      if (!result?.ok || !result.text.trim()) {
+        setError(result?.ok === false ? result.error : `OCR could not read ${WRITABLE_REGION_LABELS[fieldId]}.`);
         return;
       }
 
@@ -1236,8 +1242,8 @@ export function VisitHandwrittenPrescription({
       fd.set("image_file", new File([imageBlob], `visit-${visitId}.jpg`, { type: EXPORT_MIME }));
 
       const result = await saveHandwrittenVisitPdfAction(fd);
-      if (!result.ok) {
-        setError(result.error);
+      if (!result?.ok) {
+        setError(result?.error ?? "Failed to save handwritten visit PDF.");
         return;
       }
 
@@ -1250,7 +1256,8 @@ export function VisitHandwrittenPrescription({
     }
   }
 
-  const overlayPointerClass = tool === "highlight" ? "pointer-events-auto touch-none" : "pointer-events-none";
+  const overlayPointerClass =
+    tool === "highlight" ? "pointer-events-auto touch-none z-[4]" : "pointer-events-none z-[4]";
   const renderedStrokes = useMemo(
     () => [
       ...editorState.highlights.map((stroke) => ({ ...stroke, color: "#facc15", opacity: 0.35 })),

@@ -1,11 +1,16 @@
 "use client";
 
+import { normalizeHandwrittenOcrText, pickBestHandwrittenOcrText } from "@/lib/visits/handwritten-ocr-utils";
+
 let workerPromise: Promise<import("tesseract.js").Worker> | null = null;
+
+export { pickBestHandwrittenOcrText } from "@/lib/visits/handwritten-ocr-utils";
 
 export type HandwrittenRegionOcrPayload = {
   rawDataUrl: string;
   contrastDataUrl: string;
   boostedDataUrl: string;
+  thinStrokeDataUrl: string;
   localCandidates: string[];
 };
 
@@ -13,17 +18,9 @@ type PrepareVariantOptions = {
   scale: number;
   threshold: number;
   boostStrokes?: boolean;
+  thickenStrokes?: boolean;
   paddingRatio?: number;
 };
-
-function normalizeRecognizedText(input: string) {
-  return input
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-}
 
 async function loadImage(src: string) {
   return await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -34,9 +31,26 @@ async function loadImage(src: string) {
   });
 }
 
+export async function compressDataUrlForOcrTransport(dataUrl: string, maxEdge = 960, quality = 0.86) {
+  const image = await loadImage(dataUrl);
+  const longest = Math.max(image.width, image.height, 1);
+  const scale = longest > maxEdge ? maxEdge / longest : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Failed to compress OCR image.");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
 async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions) {
   const image = await loadImage(dataUrl);
-  const padding = Math.max(8, Math.round(Math.max(image.width, image.height) * (options.paddingRatio ?? 0.18)));
+  const padding = Math.max(12, Math.round(Math.max(image.width, image.height) * (options.paddingRatio ?? 0.22)));
   const width = Math.max(1, Math.round((image.width + padding * 2) * options.scale));
   const height = Math.max(1, Math.round((image.height + padding * 2) * options.scale));
   const canvas = document.createElement("canvas");
@@ -58,7 +72,22 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
   );
 
   if (options.boostStrokes) {
-    ctx.globalAlpha = 0.24;
+    ctx.globalAlpha = 0.32;
+    for (const [dx, dy] of [
+      [-2, 0],
+      [2, 0],
+      [0, -2],
+      [0, 2],
+      [-1, -1],
+      [1, 1],
+    ]) {
+      ctx.drawImage(canvas, dx, dy);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (options.thickenStrokes) {
+    ctx.globalAlpha = 0.18;
     ctx.drawImage(canvas, -1, 0);
     ctx.drawImage(canvas, 1, 0);
     ctx.drawImage(canvas, 0, -1);
@@ -70,7 +99,8 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
   const { data } = imageData;
   for (let index = 0; index < data.length; index += 4) {
     const alpha = data[index + 3] ?? 255;
-    const luminance = (data[index] ?? 255) * 0.299 + (data[index + 1] ?? 255) * 0.587 + (data[index + 2] ?? 255) * 0.114;
+    const luminance =
+      (data[index] ?? 255) * 0.299 + (data[index + 1] ?? 255) * 0.587 + (data[index + 2] ?? 255) * 0.114;
     const shade = alpha < 20 ? 255 : luminance < options.threshold ? 0 : 255;
     data[index] = shade;
     data[index + 1] = shade;
@@ -84,20 +114,28 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
 
 async function createImageVariants(dataUrl: string) {
   const contrastDataUrl = await drawPreparedImage(dataUrl, {
-    scale: 4,
-    threshold: 198,
-    paddingRatio: 0.2,
+    scale: 5,
+    threshold: 190,
+    paddingRatio: 0.22,
   });
   const boostedDataUrl = await drawPreparedImage(dataUrl, {
-    scale: 5,
-    threshold: 222,
+    scale: 6,
+    threshold: 210,
     boostStrokes: true,
-    paddingRatio: 0.24,
+    paddingRatio: 0.26,
+  });
+  const thinStrokeDataUrl = await drawPreparedImage(dataUrl, {
+    scale: 6,
+    threshold: 175,
+    thickenStrokes: true,
+    boostStrokes: true,
+    paddingRatio: 0.28,
   });
   return {
     rawDataUrl: dataUrl,
     contrastDataUrl,
     boostedDataUrl,
+    thinStrokeDataUrl,
   };
 }
 
@@ -111,7 +149,7 @@ async function getWorker() {
       });
       await worker.setParameters({
         preserve_interword_spaces: "1",
-        user_defined_dpi: "300",
+        user_defined_dpi: "350",
       });
       return worker;
     })().catch((error) => {
@@ -122,23 +160,20 @@ async function getWorker() {
   return workerPromise;
 }
 
-async function runRecognitionPass(
-  worker: import("tesseract.js").Worker,
-  imageDataUrl: string,
-  options?: { singleLine?: boolean; singleChar?: boolean },
-) {
-  const tesseract = await import("tesseract.js");
+type RecognitionPlan = {
+  imageDataUrl: string;
+  psm: import("tesseract.js").PSM;
+  weight: number;
+};
+
+async function runRecognitionPass(worker: import("tesseract.js").Worker, imageDataUrl: string, psm: import("tesseract.js").PSM) {
   await worker.setParameters({
-    tessedit_pageseg_mode: options?.singleChar
-      ? tesseract.PSM.SINGLE_CHAR
-      : options?.singleLine
-        ? tesseract.PSM.SINGLE_LINE
-        : tesseract.PSM.SINGLE_BLOCK,
+    tessedit_pageseg_mode: psm,
     preserve_interword_spaces: "1",
-    user_defined_dpi: "300",
+    user_defined_dpi: "350",
   });
   const result = await worker.recognize(imageDataUrl);
-  return normalizeRecognizedText(result.data.text ?? "");
+  return normalizeHandwrittenOcrText(result.data.text ?? "");
 }
 
 async function collectLocalCandidates(
@@ -146,39 +181,41 @@ async function collectLocalCandidates(
   options?: { singleLine?: boolean },
 ) {
   const worker = await getWorker();
+  const tesseract = await import("tesseract.js");
   const candidateScores = new Map<string, number>();
-  const recognitionPlans: Array<{ imageDataUrl: string; singleLine?: boolean; singleChar?: boolean; weight: number }> =
-    options?.singleLine
-      ? [
-          { imageDataUrl: variants.contrastDataUrl, singleLine: true, weight: 4 },
-          { imageDataUrl: variants.boostedDataUrl, singleLine: true, weight: 4 },
-          { imageDataUrl: variants.rawDataUrl, singleLine: true, weight: 3 },
-          { imageDataUrl: variants.boostedDataUrl, singleChar: true, weight: 1 },
-        ]
-      : [
-          { imageDataUrl: variants.contrastDataUrl, singleLine: false, weight: 4 },
-          { imageDataUrl: variants.boostedDataUrl, singleLine: false, weight: 4 },
-          { imageDataUrl: variants.rawDataUrl, singleLine: false, weight: 3 },
-          { imageDataUrl: variants.contrastDataUrl, singleLine: true, weight: 2 },
-        ];
 
-  for (const plan of recognitionPlans) {
+  const plans: RecognitionPlan[] = options?.singleLine
+    ? [
+        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 6 },
+        { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 5 },
+        { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 5 },
+        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 4 },
+        { imageDataUrl: variants.rawDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 3 },
+        { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_WORD, weight: 2 },
+      ]
+    : [
+        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 6 },
+        { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_BLOCK, weight: 5 },
+        { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_BLOCK, weight: 5 },
+        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 4 },
+        { imageDataUrl: variants.rawDataUrl, psm: tesseract.PSM.AUTO, weight: 3 },
+        { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 3 },
+      ];
+
+  for (const plan of plans) {
     try {
-      const candidate = await runRecognitionPass(worker, plan.imageDataUrl, {
-        singleLine: plan.singleLine,
-        singleChar: plan.singleChar,
-      });
+      const candidate = await runRecognitionPass(worker, plan.imageDataUrl, plan.psm);
       if (!candidate) continue;
       candidateScores.set(candidate, (candidateScores.get(candidate) ?? 0) + plan.weight);
     } catch {
-      // OCR candidates are a best-effort hint for the server-side model.
+      // Best-effort local OCR pass.
     }
   }
 
   return Array.from(candidateScores.entries())
     .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
     .map(([candidate]) => candidate)
-    .slice(0, 5);
+    .slice(0, 8);
 }
 
 export async function prepareHandwrittenRegionOcrPayload(
@@ -193,7 +230,94 @@ export async function prepareHandwrittenRegionOcrPayload(
   };
 }
 
+export async function compressHandwrittenOcrPayloadForTransport(payload: HandwrittenRegionOcrPayload) {
+  const [rawDataUrl, contrastDataUrl, boostedDataUrl, thinStrokeDataUrl] = await Promise.all([
+    compressDataUrlForOcrTransport(payload.rawDataUrl),
+    compressDataUrlForOcrTransport(payload.contrastDataUrl),
+    compressDataUrlForOcrTransport(payload.boostedDataUrl),
+    compressDataUrlForOcrTransport(payload.thinStrokeDataUrl),
+  ]);
+  return {
+    rawDataUrl,
+    contrastDataUrl,
+    boostedDataUrl,
+    thinStrokeDataUrl,
+    localCandidates: payload.localCandidates,
+  };
+}
+
+export type HandwrittenOcrRequestResult =
+  | { ok: true; text: string; confidence: "high" | "medium" | "low"; source: "openrouter" | "local" }
+  | { ok: false; error: string };
+
+export async function requestHandwrittenRegionOcr(input: {
+  visitId: string;
+  fieldId: string;
+  fieldLabel: string;
+  singleLine?: boolean;
+  rawDataUrl: string;
+  contrastDataUrl: string;
+  boostedDataUrl: string;
+  thinStrokeDataUrl?: string;
+  localCandidates?: string[];
+}): Promise<HandwrittenOcrRequestResult> {
+  const body = {
+    visitId: input.visitId,
+    fieldId: input.fieldId,
+    fieldLabel: input.fieldLabel,
+    singleLine: input.singleLine,
+    rawDataUrl: input.rawDataUrl,
+    contrastDataUrl: input.contrastDataUrl,
+    boostedDataUrl: input.boostedDataUrl,
+    localCandidates: input.localCandidates ?? [],
+  };
+
+  const { recognizeHandwrittenRegionAction } = await import("@/app/(portal)/visits/visit-report-actions");
+
+  let result: HandwrittenOcrRequestResult | null | undefined;
+  try {
+    result = await recognizeHandwrittenRegionAction(body);
+  } catch {
+    result = undefined;
+  }
+
+  if (!result || typeof result !== "object" || !("ok" in result)) {
+    try {
+      const response = await fetch("/api/visits/handwritten-ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      result = (await response.json()) as HandwrittenOcrRequestResult;
+    } catch {
+      result = undefined;
+    }
+  }
+
+  const localBest = pickBestHandwrittenOcrText(input.localCandidates ?? []);
+  if (!result || typeof result !== "object" || !("ok" in result)) {
+    if (localBest) {
+      return { ok: true, text: localBest, confidence: "low", source: "local" };
+    }
+    return { ok: false, error: "OCR request failed. Try again or check your connection." };
+  }
+
+  if (!result.ok) {
+    if (localBest) {
+      return { ok: true, text: localBest, confidence: "low", source: "local" };
+    }
+    return result;
+  }
+
+  const merged = pickBestHandwrittenOcrText([result.text, ...(input.localCandidates ?? [])]);
+  if (!merged) {
+    return { ok: false, error: "OCR could not read any text from this region." };
+  }
+
+  return { ...result, text: merged };
+}
+
 export async function runHandwrittenRegionOcr(dataUrl: string, options?: { singleLine?: boolean }) {
   const payload = await prepareHandwrittenRegionOcrPayload(dataUrl, options);
-  return payload.localCandidates[0] ?? "";
+  return pickBestHandwrittenOcrText(payload.localCandidates);
 }
