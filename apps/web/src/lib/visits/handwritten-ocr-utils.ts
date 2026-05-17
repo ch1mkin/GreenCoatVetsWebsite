@@ -14,7 +14,11 @@ export function pickBestHandwrittenOcrText(candidates: string[]): string {
     if (!text || text.length < 1) continue;
     const key = text.toLowerCase();
     const weight = text.length >= 2 ? 2 : 1;
-    scores.set(key, (scores.get(key) ?? 0) + weight + Math.min(text.length, 40) * 0.05);
+    const agreementBoost = candidates.filter((other) => normalizeHandwrittenOcrText(other).toLowerCase() === key).length;
+    scores.set(
+      key,
+      (scores.get(key) ?? 0) + weight + Math.min(text.length, 40) * 0.05 + agreementBoost * 1.5,
+    );
   }
   const ranked = Array.from(scores.entries()).sort((a, b) => b[1] - a[1]);
   if (!ranked.length) return "";

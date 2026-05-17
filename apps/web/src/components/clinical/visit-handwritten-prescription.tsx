@@ -4,6 +4,7 @@ import { toBlob as domToBlob } from "html-to-image";
 import type { Canvas as FabricCanvas } from "fabric";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { flushSync } from "react-dom";
 import { saveHandwrittenVisitPdfAction } from "@/app/(portal)/visits/visit-report-actions";
 import { VisitHandwrittenHtmlSheet } from "@/components/clinical/visit-handwritten-html-sheet";
 import {
@@ -11,6 +12,7 @@ import {
   prepareHandwrittenRegionOcrPayload,
   requestHandwrittenRegionOcr,
 } from "@/lib/visits/handwritten-ocr";
+import { pickBestVeterinaryOcrCandidate } from "@/lib/visits/veterinary-ocr-vocabulary";
 import type {
   HandwrittenVisitCheckboxId,
   HandwrittenVisitFieldId,
@@ -127,13 +129,27 @@ async function waitForNextPaint(frameCount = 1) {
   });
 }
 
-function buildStaticCanvasImage(sourceCanvas: HTMLCanvasElement) {
+function buildStaticFabricInkImage(fabricCanvas: FabricCanvas) {
+  if (!canvasHasObjects(fabricCanvas)) return null;
   const image = document.createElement("img");
   image.alt = "";
-  image.src = sourceCanvas.toDataURL("image/png");
   image.className = "pointer-events-none absolute inset-0 h-full w-full";
   image.style.objectFit = "fill";
-  return image;
+  try {
+    const bounds = getCanvasInkBounds(fabricCanvas);
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      image.src = exportRegionCanvasImage(fabricCanvas, bounds);
+    } else {
+      image.src = (
+        fabricCanvas as unknown as {
+          toDataURL: (options: { format: string; multiplier?: number }) => string;
+        }
+      ).toDataURL({ format: "png", multiplier: 2 });
+    }
+    return image;
+  } catch {
+    return null;
+  }
 }
 
 function applyEditorStateToCaptureClone(clone: HTMLElement, state: HandwrittenVisitSheetState) {
@@ -146,7 +162,13 @@ function applyEditorStateToCaptureClone(clone: HTMLElement, state: HandwrittenVi
     const fieldRoot = clone.querySelector<HTMLElement>(`[data-writable-field="${fieldId}"]`);
     if (!fieldRoot) continue;
     const valueNode = fieldRoot.querySelector(".field-value");
-    const value = state.fields[fieldId]?.trim() ?? "";
+    const regionText = state.ocrRegions[fieldId]?.text?.trim() ?? "";
+    const tokenText = state.wordTokens
+      .filter((token) => token.fieldId === fieldId)
+      .map((token) => token.text.trim())
+      .filter(Boolean)
+      .join("\n");
+    const value = [state.fields[fieldId]?.trim(), regionText, tokenText].filter(Boolean).join("\n");
     if (valueNode) {
       valueNode.textContent = value;
     } else if (value) {
@@ -369,6 +391,10 @@ function serializeRegionCanvas(canvas: FabricCanvas) {
 }
 
 function exportRegionCanvasImage(canvas: FabricCanvas, bounds: StrokeBounds) {
+  const width = Math.max(1, Math.round(bounds.width));
+  const height = Math.max(1, Math.round(bounds.height));
+  const left = Math.max(0, Math.round(bounds.x));
+  const top = Math.max(0, Math.round(bounds.y));
   return (
     canvas as unknown as {
       toDataURL: (options: {
@@ -382,10 +408,10 @@ function exportRegionCanvasImage(canvas: FabricCanvas, bounds: StrokeBounds) {
     }
   ).toDataURL({
     format: "png",
-    left: bounds.x,
-    top: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
+    left,
+    top,
+    width,
+    height,
     multiplier: 4,
   });
 }
@@ -1059,6 +1085,10 @@ export function VisitHandwrittenPrescription({
         return;
       }
 
+      const recognizedText = pickBestVeterinaryOcrCandidate(fieldId, [
+        result.text.trim(),
+        ...(transportPayload.localCandidates ?? []),
+      ]);
       const textBox = getWritableTextBox(inkBounds, canvas.getWidth(), canvas.getHeight());
       const fontSize = Math.max(10, getWritableFontSize(textBox, canvas.getHeight()) * 0.92);
       const nextTokenId = crypto.randomUUID();
@@ -1071,7 +1101,7 @@ export function VisitHandwrittenPrescription({
           {
             id: nextTokenId,
             fieldId,
-            text: result.text.trim(),
+            text: recognizedText,
             x: textBox.x,
             y: textBox.y,
             width: textBox.width,
@@ -1082,7 +1112,8 @@ export function VisitHandwrittenPrescription({
         next.ocrRegions[fieldId] = {
           ...next.ocrRegions[fieldId],
           mode: "ocr",
-          ocrText: result.text.trim(),
+          text: recognizedText,
+          ocrText: recognizedText,
           ocrFabricJson: null,
         };
         editorStateRef.current = next;
@@ -1177,41 +1208,44 @@ export function VisitHandwrittenPrescription({
   async function savePdf() {
     if (!captureRef.current) return;
     setPending(true);
-    setCapturingPdf(true);
     setError(null);
     setMessage(null);
+    flushSync(() => {
+      setCapturingPdf(true);
+    });
 
     try {
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
 
-      if (enableOcr) {
-        for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
-          if (canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
-            await recognizePendingOcrRegion(fieldId);
-          }
-        }
-      }
-
       const flushed = cloneSheetState(editorStateRef.current);
       for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
+        const region = flushed.ocrRegions[fieldId];
+        if (!region) continue;
         const drawCanvas = drawCanvasesRef.current[fieldId];
         const ocrCanvas = ocrCanvasesRef.current[fieldId];
-        if (drawCanvas && canvasHasObjects(drawCanvas)) {
-          flushed.ocrRegions[fieldId] = {
-            ...flushed.ocrRegions[fieldId],
-            mode: "ink",
-            fabricJson: serializeRegionCanvas(drawCanvas),
-            inkBounds: getCanvasInkBounds(drawCanvas) ?? flushed.ocrRegions[fieldId].inkBounds,
-          };
-        }
-        if (enableOcr && ocrCanvas && canvasHasObjects(ocrCanvas)) {
-          flushed.ocrRegions[fieldId] = {
-            ...flushed.ocrRegions[fieldId],
-            mode: flushed.ocrRegions[fieldId].text.trim() ? flushed.ocrRegions[fieldId].mode : "ocr",
-            ocrFabricJson: serializeRegionCanvas(ocrCanvas),
-          };
+        try {
+          if (drawCanvas && canvasHasObjects(drawCanvas)) {
+            flushed.ocrRegions[fieldId] = {
+              ...region,
+              mode: "ink",
+              fabricJson: serializeRegionCanvas(drawCanvas),
+              inkBounds: getCanvasInkBounds(drawCanvas) ?? region.inkBounds,
+            };
+          }
+          if (enableOcr && ocrCanvas && canvasHasObjects(ocrCanvas)) {
+            const updated = flushed.ocrRegions[fieldId];
+            if (updated) {
+              flushed.ocrRegions[fieldId] = {
+                ...updated,
+                mode: (updated.text ?? "").trim() ? updated.mode : "ocr",
+                ocrFabricJson: serializeRegionCanvas(ocrCanvas),
+              };
+            }
+          }
+        } catch {
+          // Keep going — one bad region must not block the whole PDF.
         }
       }
       editorStateRef.current = flushed;
@@ -1230,9 +1264,19 @@ export function VisitHandwrittenPrescription({
           pixelRatio: 2,
           cacheBust: true,
           backgroundColor: "#ffffff",
+          skipFonts: true,
+          filter: (node) => {
+            const tag = node.tagName?.toUpperCase?.() ?? "";
+            return tag !== "SCRIPT" && tag !== "STYLE";
+          },
         });
-      } finally {
+      } catch (captureError) {
         captureNode.remove();
+        throw captureError;
+      } finally {
+        if (captureNode.isConnected) {
+          captureNode.remove();
+        }
       }
       if (!imageBlob) throw new Error("Failed to capture the handwritten visit sheet.");
 
@@ -1250,6 +1294,8 @@ export function VisitHandwrittenPrescription({
       setMessage("Handwritten visit PDF saved.");
       router.refresh();
       setOpen(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save the visit PDF.");
     } finally {
       setPending(false);
       setCapturingPdf(false);
@@ -1310,29 +1356,22 @@ export function VisitHandwrittenPrescription({
 
     applyEditorStateToCaptureClone(clone, editorStateRef.current);
 
+    clone.querySelectorAll(".canvas-container").forEach((node) => node.remove());
+    clone
+      .querySelectorAll<HTMLCanvasElement>('canvas[data-canvas-layer="draw"], canvas[data-canvas-layer="ocr"]')
+      .forEach((node) => node.remove());
+
     for (const fieldId of HANDWRITTEN_VISIT_FIELD_IDS) {
       const overlay = clone.querySelector<HTMLElement>(`[data-writable-overlay="${fieldId}"]`);
       if (!overlay) continue;
 
-      const insertionPoint = overlay.firstChild;
-      const drawCloneCanvas = clone.querySelector<HTMLCanvasElement>(
-        `[data-canvas-layer="draw"][data-field-id="${fieldId}"]`,
-      );
-      const ocrCloneCanvas = clone.querySelector<HTMLCanvasElement>(
-        `[data-canvas-layer="ocr"][data-field-id="${fieldId}"]`,
-      );
-      drawCloneCanvas?.closest(".canvas-container")?.remove();
-      ocrCloneCanvas?.closest(".canvas-container")?.remove();
+      const drawFabric = drawCanvasesRef.current[fieldId];
+      const drawInk = drawFabric ? buildStaticFabricInkImage(drawFabric) : null;
+      if (drawInk) overlay.appendChild(drawInk);
 
-      const drawSourceCanvas = drawCanvasElementsRef.current[fieldId];
-      if (drawSourceCanvas && canvasHasObjects(drawCanvasesRef.current[fieldId])) {
-        overlay.insertBefore(buildStaticCanvasImage(drawSourceCanvas), insertionPoint);
-      }
-
-      const ocrSourceCanvas = ocrCanvasElementsRef.current[fieldId];
-      if (enableOcr && ocrSourceCanvas && canvasHasObjects(ocrCanvasesRef.current[fieldId])) {
-        overlay.insertBefore(buildStaticCanvasImage(ocrSourceCanvas), insertionPoint);
-      }
+      const ocrFabric = enableOcr ? ocrCanvasesRef.current[fieldId] : null;
+      const ocrInk = ocrFabric ? buildStaticFabricInkImage(ocrFabric) : null;
+      if (ocrInk) overlay.appendChild(ocrInk);
     }
 
     document.body.appendChild(clone);

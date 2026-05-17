@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizeHandwrittenOcrText, pickBestHandwrittenOcrText } from "@/lib/visits/handwritten-ocr-utils";
+import { applyVeterinaryOcrCleanup, pickBestVeterinaryOcrCandidate } from "@/lib/visits/veterinary-ocr-vocabulary";
 
 let workerPromise: Promise<import("tesseract.js").Worker> | null = null;
 
@@ -269,6 +270,7 @@ export async function requestHandwrittenRegionOcr(input: {
     rawDataUrl: input.rawDataUrl,
     contrastDataUrl: input.contrastDataUrl,
     boostedDataUrl: input.boostedDataUrl,
+    thinStrokeDataUrl: input.thinStrokeDataUrl,
     localCandidates: input.localCandidates ?? [],
   };
 
@@ -294,7 +296,8 @@ export async function requestHandwrittenRegionOcr(input: {
     }
   }
 
-  const localBest = pickBestHandwrittenOcrText(input.localCandidates ?? []);
+  const fieldId = input.fieldId;
+  const localBest = pickBestVeterinaryOcrCandidate(fieldId, input.localCandidates ?? []);
   if (!result || typeof result !== "object" || !("ok" in result)) {
     if (localBest) {
       return { ok: true, text: localBest, confidence: "low", source: "local" };
@@ -309,12 +312,17 @@ export async function requestHandwrittenRegionOcr(input: {
     return result;
   }
 
-  const merged = pickBestHandwrittenOcrText([result.text, ...(input.localCandidates ?? [])]);
-  if (!merged) {
-    return { ok: false, error: "OCR could not read any text from this region." };
+  const cleanedCloud = applyVeterinaryOcrCleanup(fieldId, result.text.trim());
+  if (cleanedCloud) {
+    const merged = pickBestVeterinaryOcrCandidate(fieldId, [cleanedCloud, localBest, ...(input.localCandidates ?? [])]);
+    return { ...result, text: merged || cleanedCloud };
   }
 
-  return { ...result, text: merged };
+  if (localBest) {
+    return { ok: true, text: localBest, confidence: "low", source: "local" };
+  }
+
+  return { ok: false, error: "OCR could not read any text from this region." };
 }
 
 export async function runHandwrittenRegionOcr(dataUrl: string, options?: { singleLine?: boolean }) {
