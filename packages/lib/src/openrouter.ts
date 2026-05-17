@@ -17,30 +17,28 @@ export type OpenRouterChatMessage = {
 export function resolveOpenRouterModel(configured?: string | null): string {
   const model = configured?.trim();
   if (!model) return DEFAULT_OPENROUTER_MODEL;
-  if (/^deepseek\/deepseek-r1(:free)?$/i.test(model)) return DEFAULT_OPENROUTER_MODEL;
-  if (/^deepseek\/deepseek-r1-0528(:free)?$/i.test(model)) return DEFAULT_OPENROUTER_MODEL;
+  if (/^deepseek\/deepseek-r1(:free)?$/i.test(model)) return "deepseek/deepseek-r1-0528";
   if (/^deepseek\/deepseek-chat-v3-0324(:free)?$/i.test(model)) return DEFAULT_OPENROUTER_MODEL;
   return model;
 }
 
-export function extractOpenRouterMessageText(message: OpenRouterChatMessage | null | undefined): string {
-  if (!message) return "";
+function collectMessageTextParts(message: OpenRouterChatMessage | null | undefined): string[] {
+  if (!message) return [];
+  const parts: string[] = [];
 
   const content = message.content;
-  if (typeof content === "string" && content.trim()) return content.trim();
+  if (typeof content === "string" && content.trim()) parts.push(content.trim());
   if (Array.isArray(content)) {
-    const fromParts = content
+    const joined = content
       .map((part) => (part?.type === "text" && typeof part.text === "string" ? part.text : ""))
       .join("\n")
       .trim();
-    if (fromParts) return fromParts;
+    if (joined) parts.push(joined);
   }
 
-  if (typeof message.reasoning === "string" && message.reasoning.trim()) {
-    return message.reasoning.trim();
-  }
+  if (typeof message.reasoning === "string" && message.reasoning.trim()) parts.push(message.reasoning.trim());
   if (typeof message.reasoning_content === "string" && message.reasoning_content.trim()) {
-    return message.reasoning_content.trim();
+    parts.push(message.reasoning_content.trim());
   }
 
   const details = message.reasoning_details;
@@ -53,10 +51,25 @@ export function extractOpenRouterMessageText(message: OpenRouterChatMessage | nu
       })
       .join("\n")
       .trim();
-    if (fromDetails) return fromDetails;
+    if (fromDetails) parts.push(fromDetails);
   }
 
-  return "";
+  return parts;
+}
+
+export function extractOpenRouterMessageText(
+  message: OpenRouterChatMessage | null | undefined,
+  options?: { preferJson?: boolean },
+): string {
+  const parts = collectMessageTextParts(message);
+  if (!parts.length) return "";
+
+  if (options?.preferJson) {
+    const jsonPart = parts.find((part) => part.includes("{"));
+    if (jsonPart) return jsonPart;
+  }
+
+  return parts.join("\n\n").trim();
 }
 
 export type OpenRouterChatRequest = {
@@ -72,8 +85,10 @@ export type OpenRouterChatResult =
   | { ok: true; model: string; text: string }
   | { ok: false; model: string; error: string };
 
-export async function requestOpenRouterChatCompletion(input: OpenRouterChatRequest): Promise<OpenRouterChatResult> {
-  const model = resolveOpenRouterModel(input.model);
+export async function requestOpenRouterChatCompletion(
+  input: OpenRouterChatRequest & { modelOverride?: string },
+): Promise<OpenRouterChatResult> {
+  const model = input.modelOverride?.trim() || resolveOpenRouterModel(input.model);
   const body: Record<string, unknown> = {
     model,
     max_tokens: input.max_tokens ?? 2200,
@@ -110,7 +125,7 @@ export async function requestOpenRouterChatCompletion(input: OpenRouterChatReque
     return { ok: false, model, error: payload.error?.message ?? "AI generation failed." };
   }
 
-  const text = extractOpenRouterMessageText(payload.choices?.[0]?.message);
+  const text = extractOpenRouterMessageText(payload.choices?.[0]?.message, { preferJson: input.jsonMode });
   if (!text) {
     return { ok: false, model, error: "No content returned by the selected OpenRouter model." };
   }

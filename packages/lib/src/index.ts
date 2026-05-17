@@ -38,4 +38,8 @@ export {
   type OpenRouterChatResult,
 } from "./openrouter";
 
-export { parseJsonFromLlmOutput } from "./parse-llm-json";
+export {
+  parseInstagramPromptPackFromText,
+  parseJsonFromLlmOutput,
+  type InstagramPromptPackFields,
+} from "./parse-llm-json";

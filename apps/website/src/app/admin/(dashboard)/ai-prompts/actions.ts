@@ -1,6 +1,10 @@
 "use server";
 
-import { parseJsonFromLlmOutput, requestOpenRouterChatCompletion, resolveOpenRouterModel } from "@saasclinics/lib";
+import {
+  parseInstagramPromptPackFromText,
+  requestOpenRouterChatCompletion,
+  type InstagramPromptPackFields,
+} from "@saasclinics/lib";
 import { requireSuperAdmin } from "@/lib/admin/auth";
 
 export type InstagramPromptRequest = {
@@ -12,62 +16,30 @@ export type InstagramPromptRequest = {
   tone?: string;
 };
 
-export type InstagramPromptPack = {
-  conceptTitle: string;
-  trendAngle: string;
-  captionHook: string;
-  captionBody: string;
-  hashtags: string[];
-  postIdeas: string[];
-  geminiPrompt: string;
-  artDirection: string[];
-};
+export type InstagramPromptPack = InstagramPromptPackFields;
 
 export type GenerateInstagramPromptPackResult =
   | { ok: true; pack: InstagramPromptPack; model: string }
   | { ok: false; error: string; model: string };
 
-function normalizePromptPack(value: unknown): InstagramPromptPack {
-  const raw = (value ?? {}) as Record<string, unknown>;
-  const toStringArray = (input: unknown) => {
-    if (Array.isArray(input)) {
-      return input.map((item) => String(item ?? "").trim()).filter(Boolean);
-    }
-    if (typeof input === "string" && input.trim()) {
-      return input
-        .split(/[,;\n]+/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-    }
-    return [];
-  };
+const INSTAGRAM_PROMPT_MODELS = [
+  "deepseek/deepseek-r1-0528",
+  "deepseek/deepseek-v4-flash:free",
+  "deepseek/deepseek-chat-v3-0324:free",
+] as const;
 
-  const conceptTitle = String(raw.conceptTitle ?? raw.title ?? "").trim();
-  const trendAngle = String(raw.trendAngle ?? raw.trend ?? "").trim();
-  const captionHook = String(raw.captionHook ?? raw.hook ?? "").trim();
-  const captionBody = String(raw.captionBody ?? raw.caption ?? raw.body ?? "").trim();
-  const geminiPrompt = String(raw.geminiPrompt ?? raw.imagePrompt ?? raw.artPrompt ?? "").trim();
-  const hashtags = toStringArray(raw.hashtags);
-  const postIdeas = toStringArray(raw.postIdeas ?? raw.ideas);
-  const artDirection = toStringArray(raw.artDirection);
-
-  if (!conceptTitle || !trendAngle || !captionHook || !captionBody || !geminiPrompt || !hashtags.length || !postIdeas.length) {
+function finalizePromptPack(pack: InstagramPromptPackFields): InstagramPromptPack {
+  if (!pack.postIdeas.length) {
     throw new Error("AI response was incomplete. Please try again.");
   }
-
   return {
-    conceptTitle,
-    trendAngle,
-    captionHook,
-    captionBody,
-    hashtags,
-    postIdeas: postIdeas.slice(0, 5),
-    geminiPrompt,
-    artDirection,
+    ...pack,
+    postIdeas: pack.postIdeas.slice(0, 5),
+    hashtags: pack.hashtags.slice(0, 12),
   };
 }
 
-function buildPromptMessages(input: InstagramPromptRequest, strictJson: boolean) {
+function buildJsonMessages(input: InstagramPromptRequest) {
   const clinicName = input.clinicName?.trim() || "GreenCoatVets";
   const theme = input.theme.trim();
   const audience = input.audience?.trim() || "pet parents in India";
@@ -75,68 +47,117 @@ function buildPromptMessages(input: InstagramPromptRequest, strictJson: boolean)
   const season = input.season?.trim() || "current month";
   const tone = input.tone?.trim() || "warm, trustworthy, playful";
 
-  const exampleJson = JSON.stringify(
-    {
-      conceptTitle: "Monsoon paw-care checkup",
-      trendAngle: "Seasonal wellness posts get high saves before rains.",
-      captionHook: "Rainy walks? Protect those paws.",
-      captionBody:
-        "Book a quick monsoon wellness check at GreenCoatVets. We help keep coats healthy, paws clean, and parasites away all season.",
-      hashtags: ["#PetCare", "#MonsoonTips", "#VetClinic", "#DogHealth", "#CatCare"],
-      postIdeas: [
-        "5 monsoon safety tips carousel",
-        "Before/after paw cleaning illustration",
-        "Myth vs fact: ticks in wet weather",
-        "Vet explains ear infections in rains",
-        "Client story: happy dog after checkup",
-      ],
-      geminiPrompt:
-        "2D illustrated Instagram square, friendly veterinary clinic scene, dog with umbrella and vet, clean outlines, soft colors, non-photorealistic, hand-drawn style, no photo realism",
-      artDirection: ["Soft teal and cream palette", "Simple flat shapes", "Warm clinic signage", "Square 1:1 composition"],
-    },
-    null,
-    0,
-  );
-
   return [
     {
       role: "system" as const,
-      content: strictJson
-        ? "You output only one JSON object. Start with { and end with }. No markdown, no explanation."
-        : "You are a veterinary Instagram strategist. Reply with one JSON object only — no markdown fences, no text before or after the JSON.",
+      content:
+        'Reply with one JSON object only. Keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection. Start with { and end with }.',
     },
     {
       role: "user" as const,
       content: [
-        `Clinic brand: ${clinicName}`,
+        `Clinic: ${clinicName}`,
         `Theme: ${theme}`,
         `Audience: ${audience}`,
-        `Campaign goal: ${campaignGoal}`,
-        `Season or event context: ${season}`,
+        `Goal: ${campaignGoal}`,
+        `Season: ${season}`,
         `Tone: ${tone}`,
-        "",
-        "Required JSON keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection",
-        "- hashtags: array of 5-10 strings (include #)",
-        "- postIdeas: array of exactly 5 strings",
-        "- artDirection: array of 3-6 short strings",
-        "- geminiPrompt: detailed 2D illustrated, non-photorealistic art prompt",
-        "",
-        "Example shape (replace all values for this theme):",
-        exampleJson,
+        "hashtags must be a JSON array of 5-10 strings with #.",
+        "postIdeas must be a JSON array of exactly 5 strings.",
+        "geminiPrompt must describe a 2D illustrated non-photorealistic Instagram square image.",
       ].join("\n"),
     },
   ];
 }
 
-const GENERATION_ATTEMPTS: Array<{ jsonMode: boolean; temperature: number; strictJson: boolean }> = [
-  { jsonMode: true, temperature: 0.35, strictJson: true },
-  { jsonMode: false, temperature: 0.45, strictJson: false },
-];
+function buildLabeledMessages(input: InstagramPromptRequest) {
+  const clinicName = input.clinicName?.trim() || "GreenCoatVets";
+  const theme = input.theme.trim();
+  const audience = input.audience?.trim() || "pet parents in India";
+  const campaignGoal = input.campaignGoal?.trim() || "increase engagement and shares";
+  const season = input.season?.trim() || "current month";
+  const tone = input.tone?.trim() || "warm, trustworthy, playful";
+
+  return [
+    {
+      role: "system" as const,
+      content:
+        "You are a veterinary Instagram strategist. Use the exact labeled format below. Do not use JSON or markdown code blocks.",
+    },
+    {
+      role: "user" as const,
+      content: [
+        `Clinic: ${clinicName}`,
+        `Theme: ${theme}`,
+        `Audience: ${audience}`,
+        `Goal: ${campaignGoal}`,
+        `Season: ${season}`,
+        `Tone: ${tone}`,
+        "",
+        "Reply using exactly these labels (one value per line, lists as bullet lines):",
+        "CONCEPT_TITLE:",
+        "TREND_ANGLE:",
+        "CAPTION_HOOK:",
+        "CAPTION_BODY:",
+        "HASHTAGS:",
+        "- #example",
+        "POST_IDEAS:",
+        "- idea one",
+        "- idea two",
+        "- idea three",
+        "- idea four",
+        "- idea five",
+        "GEMINI_PROMPT:",
+        "ART_DIRECTION:",
+        "- bullet",
+      ].join("\n"),
+    },
+  ];
+}
+
+type GenerationStrategy = {
+  model: string;
+  messages: ReturnType<typeof buildJsonMessages>;
+  jsonMode: boolean;
+  temperature: number;
+};
+
+async function tryGeneratePack(
+  apiKey: string,
+  strategy: GenerationStrategy,
+): Promise<{ ok: true; pack: InstagramPromptPack; model: string } | { ok: false; error: string }> {
+  const completion = await requestOpenRouterChatCompletion({
+    apiKey,
+    modelOverride: strategy.model,
+    messages: strategy.messages,
+    max_tokens: 3600,
+    temperature: strategy.temperature,
+    jsonMode: strategy.jsonMode,
+  });
+
+  if (!completion.ok) {
+    return { ok: false, error: completion.error };
+  }
+
+  const parsed = parseInstagramPromptPackFromText(completion.text);
+  if (!parsed) {
+    return {
+      ok: false,
+      error: `Could not read a complete prompt pack from ${strategy.model}. Try again or switch OPENROUTER_MODEL.`,
+    };
+  }
+
+  try {
+    return { ok: true, pack: finalizePromptPack(parsed), model: completion.model };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "AI response was incomplete." };
+  }
+}
 
 export async function generateInstagramPromptPack(
   input: InstagramPromptRequest,
 ): Promise<GenerateInstagramPromptPackResult> {
-  const defaultModel = resolveOpenRouterModel(process.env.OPENROUTER_MODEL);
+  const defaultModel = INSTAGRAM_PROMPT_MODELS[0];
 
   try {
     await requireSuperAdmin();
@@ -149,49 +170,27 @@ export async function generateInstagramPromptPack(
       return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model: defaultModel };
     }
 
-    let lastError = "Failed to generate prompt.";
+    const configuredModel = process.env.OPENROUTER_MODEL?.trim();
+    const models = Array.from(
+      new Set([configuredModel, ...INSTAGRAM_PROMPT_MODELS].filter((value): value is string => Boolean(value?.trim()))),
+    );
 
-    for (const attempt of GENERATION_ATTEMPTS) {
-      const completion = await requestOpenRouterChatCompletion({
-        apiKey,
-        model: process.env.OPENROUTER_MODEL,
-        messages: buildPromptMessages(input, attempt.strictJson),
-        max_tokens: 3200,
-        temperature: attempt.temperature,
-        jsonMode: attempt.jsonMode,
-      });
-
-      if (!completion.ok) {
-        lastError = completion.error;
-        continue;
-      }
-
-      try {
-        const pack = normalizePromptPack(parseJsonFromLlmOutput(completion.text));
-        return { ok: true, pack, model: completion.model };
-      } catch (parseError) {
-        lastError = parseError instanceof Error ? parseError.message : "AI response did not include valid JSON.";
-      }
+    const strategies: GenerationStrategy[] = [];
+    for (const model of models) {
+      strategies.push(
+        { model, messages: buildLabeledMessages(input), jsonMode: false, temperature: 0.5 },
+        { model, messages: buildJsonMessages(input), jsonMode: true, temperature: 0.3 },
+        { model, messages: buildJsonMessages(input), jsonMode: false, temperature: 0.4 },
+      );
     }
 
-    const fallback = await requestOpenRouterChatCompletion({
-      apiKey,
-      model: "deepseek/deepseek-r1-0528",
-      messages: buildPromptMessages(input, false),
-      max_tokens: 3200,
-      temperature: 0.45,
-      jsonMode: false,
-    });
-
-    if (fallback.ok) {
-      try {
-        const pack = normalizePromptPack(parseJsonFromLlmOutput(fallback.text));
-        return { ok: true, pack, model: fallback.model };
-      } catch (parseError) {
-        lastError = parseError instanceof Error ? parseError.message : lastError;
+    let lastError = "Failed to generate prompt.";
+    for (const strategy of strategies) {
+      const result = await tryGeneratePack(apiKey, strategy);
+      if (result.ok) {
+        return { ok: true, pack: result.pack, model: result.model };
       }
-    } else if (fallback.error) {
-      lastError = fallback.error;
+      lastError = result.error;
     }
 
     return { ok: false, error: lastError, model: defaultModel };
