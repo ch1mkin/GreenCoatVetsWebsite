@@ -1,10 +1,11 @@
 "use server";
 
+import { parseInstagramPromptPackFromText, type InstagramPromptPackFields } from "@saasclinics/lib";
 import {
-  parseInstagramPromptPackFromText,
-  requestOpenRouterChatCompletion,
-  type InstagramPromptPackFields,
-} from "@saasclinics/lib";
+  DEEPSEEK_V4_FLASH_MODEL,
+  streamDeepSeekV4FlashChat,
+  type V4FlashChatMessage,
+} from "@/lib/openrouter/v4-flash-stream";
 import { requireSuperAdmin } from "@/lib/admin/auth";
 
 export type InstagramPromptRequest = {
@@ -22,11 +23,6 @@ export type GenerateInstagramPromptPackResult =
   | { ok: true; pack: InstagramPromptPack; model: string }
   | { ok: false; error: string; model: string };
 
-const INSTAGRAM_PROMPT_MODELS = [
-  "deepseek/deepseek-v4-flash:free",
-  "deepseek/deepseek-r1-0528",
-] as const;
-
 function finalizePromptPack(pack: InstagramPromptPackFields): InstagramPromptPack {
   if (!pack.postIdeas.length) {
     throw new Error("AI response was incomplete. Please try again.");
@@ -38,7 +34,7 @@ function finalizePromptPack(pack: InstagramPromptPackFields): InstagramPromptPac
   };
 }
 
-function buildJsonMessages(input: InstagramPromptRequest) {
+function buildLabeledMessages(input: InstagramPromptRequest): V4FlashChatMessage[] {
   const clinicName = input.clinicName?.trim() || "GreenCoatVets";
   const theme = input.theme.trim();
   const audience = input.audience?.trim() || "pet parents in India";
@@ -48,43 +44,12 @@ function buildJsonMessages(input: InstagramPromptRequest) {
 
   return [
     {
-      role: "system" as const,
-      content:
-        'Reply with one JSON object only. Keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection. Start with { and end with }.',
-    },
-    {
-      role: "user" as const,
-      content: [
-        `Clinic: ${clinicName}`,
-        `Theme: ${theme}`,
-        `Audience: ${audience}`,
-        `Goal: ${campaignGoal}`,
-        `Season: ${season}`,
-        `Tone: ${tone}`,
-        "hashtags must be a JSON array of 5-10 strings with #.",
-        "postIdeas must be a JSON array of exactly 5 strings.",
-        "geminiPrompt must describe a 2D illustrated non-photorealistic Instagram square image.",
-      ].join("\n"),
-    },
-  ];
-}
-
-function buildLabeledMessages(input: InstagramPromptRequest) {
-  const clinicName = input.clinicName?.trim() || "GreenCoatVets";
-  const theme = input.theme.trim();
-  const audience = input.audience?.trim() || "pet parents in India";
-  const campaignGoal = input.campaignGoal?.trim() || "increase engagement and shares";
-  const season = input.season?.trim() || "current month";
-  const tone = input.tone?.trim() || "warm, trustworthy, playful";
-
-  return [
-    {
-      role: "system" as const,
+      role: "system",
       content:
         "You are a veterinary Instagram strategist. Use the exact labeled format below. Do not use JSON or markdown code blocks.",
     },
     {
-      role: "user" as const,
+      role: "user",
       content: [
         `Clinic: ${clinicName}`,
         `Theme: ${theme}`,
@@ -114,25 +79,43 @@ function buildLabeledMessages(input: InstagramPromptRequest) {
   ];
 }
 
-type GenerationStrategy = {
-  model: string;
-  messages: ReturnType<typeof buildJsonMessages>;
-  jsonMode: boolean;
-  temperature: number;
-};
+function buildJsonMessages(input: InstagramPromptRequest): V4FlashChatMessage[] {
+  const clinicName = input.clinicName?.trim() || "GreenCoatVets";
+  const theme = input.theme.trim();
+  const audience = input.audience?.trim() || "pet parents in India";
+  const campaignGoal = input.campaignGoal?.trim() || "increase engagement and shares";
+  const season = input.season?.trim() || "current month";
+  const tone = input.tone?.trim() || "warm, trustworthy, playful";
+
+  return [
+    {
+      role: "system",
+      content:
+        'Reply with one JSON object only. Keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection. Start with { and end with }.',
+    },
+    {
+      role: "user",
+      content: [
+        `Clinic: ${clinicName}`,
+        `Theme: ${theme}`,
+        `Audience: ${audience}`,
+        `Goal: ${campaignGoal}`,
+        `Season: ${season}`,
+        `Tone: ${tone}`,
+        "hashtags must be a JSON array of 5-10 strings with #.",
+        "postIdeas must be a JSON array of exactly 5 strings.",
+        "geminiPrompt must describe a 2D illustrated non-photorealistic Instagram square image.",
+      ].join("\n"),
+    },
+  ];
+}
 
 async function tryGeneratePack(
   apiKey: string,
-  strategy: GenerationStrategy,
+  messages: V4FlashChatMessage[],
+  temperature: number,
 ): Promise<{ ok: true; pack: InstagramPromptPack; model: string } | { ok: false; error: string }> {
-  const completion = await requestOpenRouterChatCompletion({
-    apiKey,
-    modelOverride: strategy.model,
-    messages: strategy.messages,
-    max_tokens: 3600,
-    temperature: strategy.temperature,
-    jsonMode: strategy.jsonMode,
-  });
+  const completion = await streamDeepSeekV4FlashChat({ apiKey, messages, temperature });
 
   if (!completion.ok) {
     return { ok: false, error: completion.error };
@@ -142,7 +125,7 @@ async function tryGeneratePack(
   if (!parsed) {
     return {
       ok: false,
-      error: `Could not read a complete prompt pack from ${strategy.model}. Try again or switch OPENROUTER_MODEL.`,
+      error: "Could not read a complete prompt pack from the model. Please try again.",
     };
   }
 
@@ -156,45 +139,36 @@ async function tryGeneratePack(
 export async function generateInstagramPromptPack(
   input: InstagramPromptRequest,
 ): Promise<GenerateInstagramPromptPackResult> {
-  const defaultModel = INSTAGRAM_PROMPT_MODELS[0];
+  const model = DEEPSEEK_V4_FLASH_MODEL;
 
   try {
     await requireSuperAdmin();
 
     const theme = input.theme.trim();
-    if (!theme) return { ok: false, error: "Theme is required.", model: defaultModel };
+    if (!theme) return { ok: false, error: "Theme is required.", model };
 
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) {
-      return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model: defaultModel };
+      return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model };
     }
 
-    const configuredModel = process.env.OPENROUTER_MODEL?.trim();
-    const models = Array.from(
-      new Set([configuredModel, ...INSTAGRAM_PROMPT_MODELS].filter((value): value is string => Boolean(value?.trim()))),
-    );
-
-    const strategies: GenerationStrategy[] = [];
-    for (const model of models) {
-      strategies.push(
-        { model, messages: buildLabeledMessages(input), jsonMode: false, temperature: 0.5 },
-        { model, messages: buildJsonMessages(input), jsonMode: true, temperature: 0.3 },
-        { model, messages: buildJsonMessages(input), jsonMode: false, temperature: 0.4 },
-      );
-    }
+    const strategies: Array<{ messages: V4FlashChatMessage[]; temperature: number }> = [
+      { messages: buildLabeledMessages(input), temperature: 0.5 },
+      { messages: buildJsonMessages(input), temperature: 0.3 },
+    ];
 
     let lastError = "Failed to generate prompt.";
     for (const strategy of strategies) {
-      const result = await tryGeneratePack(apiKey, strategy);
+      const result = await tryGeneratePack(apiKey, strategy.messages, strategy.temperature);
       if (result.ok) {
         return { ok: true, pack: result.pack, model: result.model };
       }
       lastError = result.error;
     }
 
-    return { ok: false, error: lastError, model: defaultModel };
+    return { ok: false, error: lastError, model };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to generate prompt.";
-    return { ok: false, error: message, model: defaultModel };
+    return { ok: false, error: message, model };
   }
 }

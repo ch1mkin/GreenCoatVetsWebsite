@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@saasclinics/lib"],
+  transpilePackages: ["@saasclinics/lib", "@openrouter/sdk"],
   images: {
     remotePatterns: [
       {
