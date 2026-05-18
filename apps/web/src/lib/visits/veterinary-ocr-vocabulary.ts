@@ -1,4 +1,10 @@
 import type { HandwrittenVisitFieldId } from "@/lib/visits/handwritten-visit-sheet";
+import {
+  filterPlausibleHandwrittenCandidates,
+  isPlausibleHandwrittenOcr,
+  scoreHandwrittenOcrPlausibility,
+  stripOcrGarbage,
+} from "@/lib/visits/handwritten-ocr-utils";
 
 /** Terms commonly seen on GreenCoat-style veterinary visit sheets. */
 export const VETERINARY_OCR_REFERENCE_TERMS = [
@@ -194,9 +200,19 @@ export function veterinaryOcrPromptForField(fieldId: string, fieldLabel: string)
 }
 
 /** Regex + fuzzy dictionary cleanup for OCR output. */
+const NAME_FIELDS = new Set<HandwrittenVisitFieldId>(["patientName", "ownerName"]);
+
 export function applyVeterinaryOcrCleanup(fieldId: string, text: string): string {
-  let value = text.trim();
+  let value = stripOcrGarbage(text.trim());
   if (!value) return value;
+
+  if (NAME_FIELDS.has(fieldId as HandwrittenVisitFieldId)) {
+    value = value
+      .replace(/[^A-Za-z\s'.-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return value;
+  }
 
   const replacements: Array<[RegExp, string]> = [
     [/\bChem\s*1\s*7\b/gi, "Chem 17"],
@@ -237,6 +253,8 @@ export function applyVeterinaryOcrCleanup(fieldId: string, text: string): string
 export function scoreVeterinaryOcrText(fieldId: string, text: string): number {
   const normalized = text.trim();
   if (!normalized) return 0;
+  if (!isPlausibleHandwrittenOcr(fieldId, normalized)) return -1000;
+  const plausibility = scoreHandwrittenOcrPlausibility(fieldId, normalized);
   const dictionary = dictionaryForField(fieldId);
   const lowerDict = new Set(dictionary.map((entry) => entry.toLowerCase()));
   const tokens = normalized.split(/\s+/).filter(Boolean);
@@ -249,13 +267,15 @@ export function scoreVeterinaryOcrText(fieldId: string, text: string): number {
   }
   if (fieldId === "mobile" && /\d{8,}/.test(normalized)) score += 10;
   if (["rt", "rr", "hr", "bw", "crt"].includes(fieldId) && /\d/.test(normalized)) score += 6;
-  return score;
+  return score + plausibility;
 }
 
 export function pickBestVeterinaryOcrCandidate(fieldId: string, candidates: string[]): string {
-  const cleaned = candidates
+  const plausible = filterPlausibleHandwrittenCandidates(fieldId, candidates);
+  const source = plausible.length ? plausible : candidates;
+  const cleaned = source
     .map((candidate) => applyVeterinaryOcrCleanup(fieldId, candidate))
-    .filter((candidate) => candidate.length > 0);
+    .filter((candidate) => candidate.length > 0 && isPlausibleHandwrittenOcr(fieldId, candidate));
   if (!cleaned.length) return "";
   return cleaned.sort((a, b) => scoreVeterinaryOcrText(fieldId, b) - scoreVeterinaryOcrText(fieldId, a))[0] ?? "";
 }

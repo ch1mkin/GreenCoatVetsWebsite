@@ -1,6 +1,11 @@
 "use client";
 
-import { normalizeHandwrittenOcrText, pickBestHandwrittenOcrText } from "@/lib/visits/handwritten-ocr-utils";
+import {
+  filterPlausibleHandwrittenCandidates,
+  normalizeHandwrittenOcrText,
+  pickBestHandwrittenOcrText,
+  tesseractCharWhitelistForField,
+} from "@/lib/visits/handwritten-ocr-utils";
 import { applyVeterinaryOcrCleanup, pickBestVeterinaryOcrCandidate } from "@/lib/visits/veterinary-ocr-vocabulary";
 
 let workerPromise: Promise<import("tesseract.js").Worker> | null = null;
@@ -12,6 +17,7 @@ export type HandwrittenRegionOcrPayload = {
   contrastDataUrl: string;
   boostedDataUrl: string;
   thinStrokeDataUrl: string;
+  inkOnWhiteDataUrl: string;
   localCandidates: string[];
 };
 
@@ -113,6 +119,62 @@ async function drawPreparedImage(dataUrl: string, options: PrepareVariantOptions
   return canvas.toDataURL("image/png");
 }
 
+/** Remove tinted form backgrounds (e.g. blue boxes) so ink reads as black-on-white. */
+async function drawInkOnWhiteBackground(dataUrl: string, scale = 6) {
+  const image = await loadImage(dataUrl);
+  const padding = Math.max(16, Math.round(Math.max(image.width, image.height) * 0.24));
+  const width = Math.max(1, Math.round((image.width + padding * 2) * scale));
+  const height = Math.max(1, Math.round((image.height + padding * 2) * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Failed to prepare ink-on-white OCR image.");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(
+    image,
+    Math.round(padding * scale),
+    Math.round(padding * scale),
+    Math.round(image.width * scale),
+    Math.round(image.height * scale),
+  );
+
+  const sample = ctx.getImageData(0, 0, width, height);
+  const corners = [
+    sample.data.slice(0, 4),
+    sample.data.slice((width - 1) * 4, width * 4),
+    sample.data.slice((height - 1) * width * 4, (height - 1) * width * 4 + 4),
+    sample.data.slice(sample.data.length - 4),
+  ];
+  const bgR = corners.reduce((sum, px) => sum + (px[0] ?? 255), 0) / corners.length;
+  const bgG = corners.reduce((sum, px) => sum + (px[1] ?? 255), 0) / corners.length;
+  const bgB = corners.reduce((sum, px) => sum + (px[2] ?? 255), 0) / corners.length;
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  for (let index = 0; index < data.length; index += 4) {
+    const r = data[index] ?? 255;
+    const g = data[index + 1] ?? 255;
+    const b = data[index + 2] ?? 255;
+    const dr = r - bgR;
+    const dg = g - bgG;
+    const db = b - bgB;
+    const colorDistance = Math.sqrt(dr * dr + dg * dg + db * db);
+    const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+    const bgLuminance = bgR * 0.299 + bgG * 0.587 + bgB * 0.114;
+    const isInk = colorDistance > 34 || luminance < bgLuminance - 28;
+    const shade = isInk ? 0 : 255;
+    data[index] = shade;
+    data[index + 1] = shade;
+    data[index + 2] = shade;
+    data[index + 3] = 255;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
 async function createImageVariants(dataUrl: string) {
   const contrastDataUrl = await drawPreparedImage(dataUrl, {
     scale: 5,
@@ -132,11 +194,13 @@ async function createImageVariants(dataUrl: string) {
     boostStrokes: true,
     paddingRatio: 0.28,
   });
+  const inkOnWhiteDataUrl = await drawInkOnWhiteBackground(dataUrl, 6);
   return {
     rawDataUrl: dataUrl,
     contrastDataUrl,
     boostedDataUrl,
     thinStrokeDataUrl,
+    inkOnWhiteDataUrl,
   };
 }
 
@@ -167,11 +231,18 @@ type RecognitionPlan = {
   weight: number;
 };
 
-async function runRecognitionPass(worker: import("tesseract.js").Worker, imageDataUrl: string, psm: import("tesseract.js").PSM) {
+async function runRecognitionPass(
+  worker: import("tesseract.js").Worker,
+  imageDataUrl: string,
+  psm: import("tesseract.js").PSM,
+  fieldId?: string,
+) {
+  const whitelist = fieldId ? tesseractCharWhitelistForField(fieldId) : undefined;
   await worker.setParameters({
     tessedit_pageseg_mode: psm,
     preserve_interword_spaces: "1",
-    user_defined_dpi: "350",
+    user_defined_dpi: "400",
+    ...(whitelist ? { tessedit_char_whitelist: whitelist } : {}),
   });
   const result = await worker.recognize(imageDataUrl);
   return normalizeHandwrittenOcrText(result.data.text ?? "");
@@ -179,33 +250,34 @@ async function runRecognitionPass(worker: import("tesseract.js").Worker, imageDa
 
 async function collectLocalCandidates(
   variants: Omit<HandwrittenRegionOcrPayload, "localCandidates">,
-  options?: { singleLine?: boolean },
+  options?: { singleLine?: boolean; fieldId?: string },
 ) {
   const worker = await getWorker();
   const tesseract = await import("tesseract.js");
   const candidateScores = new Map<string, number>();
 
+  const fieldId = options?.fieldId;
   const plans: RecognitionPlan[] = options?.singleLine
     ? [
+        { imageDataUrl: variants.inkOnWhiteDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 8 },
+        { imageDataUrl: variants.inkOnWhiteDataUrl, psm: tesseract.PSM.SINGLE_WORD, weight: 7 },
         { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 6 },
         { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 5 },
-        { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 5 },
-        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 4 },
-        { imageDataUrl: variants.rawDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 3 },
-        { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_WORD, weight: 2 },
+        { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 4 },
+        { imageDataUrl: variants.inkOnWhiteDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 4 },
       ]
     : [
+        { imageDataUrl: variants.inkOnWhiteDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 8 },
         { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SPARSE_TEXT, weight: 6 },
         { imageDataUrl: variants.boostedDataUrl, psm: tesseract.PSM.SINGLE_BLOCK, weight: 5 },
         { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_BLOCK, weight: 5 },
-        { imageDataUrl: variants.thinStrokeDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 4 },
-        { imageDataUrl: variants.rawDataUrl, psm: tesseract.PSM.AUTO, weight: 3 },
+        { imageDataUrl: variants.inkOnWhiteDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 4 },
         { imageDataUrl: variants.contrastDataUrl, psm: tesseract.PSM.SINGLE_LINE, weight: 3 },
       ];
 
   for (const plan of plans) {
     try {
-      const candidate = await runRecognitionPass(worker, plan.imageDataUrl, plan.psm);
+      const candidate = await runRecognitionPass(worker, plan.imageDataUrl, plan.psm, fieldId);
       if (!candidate) continue;
       candidateScores.set(candidate, (candidateScores.get(candidate) ?? 0) + plan.weight);
     } catch {
@@ -213,15 +285,21 @@ async function collectLocalCandidates(
     }
   }
 
-  return Array.from(candidateScores.entries())
+  const ranked = Array.from(candidateScores.entries())
     .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
-    .map(([candidate]) => candidate)
-    .slice(0, 8);
+    .map(([candidate]) => candidate);
+
+  if (fieldId) {
+    const filtered = filterPlausibleHandwrittenCandidates(fieldId, ranked);
+    return (filtered.length ? filtered : ranked).slice(0, 8);
+  }
+
+  return ranked.slice(0, 8);
 }
 
 export async function prepareHandwrittenRegionOcrPayload(
   dataUrl: string,
-  options?: { singleLine?: boolean },
+  options?: { singleLine?: boolean; fieldId?: string },
 ): Promise<HandwrittenRegionOcrPayload> {
   const variants = await createImageVariants(dataUrl);
   const localCandidates = await collectLocalCandidates(variants, options);
@@ -232,17 +310,19 @@ export async function prepareHandwrittenRegionOcrPayload(
 }
 
 export async function compressHandwrittenOcrPayloadForTransport(payload: HandwrittenRegionOcrPayload) {
-  const [rawDataUrl, contrastDataUrl, boostedDataUrl, thinStrokeDataUrl] = await Promise.all([
+  const [rawDataUrl, contrastDataUrl, boostedDataUrl, thinStrokeDataUrl, inkOnWhiteDataUrl] = await Promise.all([
     compressDataUrlForOcrTransport(payload.rawDataUrl),
     compressDataUrlForOcrTransport(payload.contrastDataUrl),
     compressDataUrlForOcrTransport(payload.boostedDataUrl),
     compressDataUrlForOcrTransport(payload.thinStrokeDataUrl),
+    compressDataUrlForOcrTransport(payload.inkOnWhiteDataUrl),
   ]);
   return {
     rawDataUrl,
     contrastDataUrl,
     boostedDataUrl,
     thinStrokeDataUrl,
+    inkOnWhiteDataUrl,
     localCandidates: payload.localCandidates,
   };
 }
@@ -260,6 +340,7 @@ export async function requestHandwrittenRegionOcr(input: {
   contrastDataUrl: string;
   boostedDataUrl: string;
   thinStrokeDataUrl?: string;
+  inkOnWhiteDataUrl?: string;
   localCandidates?: string[];
 }): Promise<HandwrittenOcrRequestResult> {
   const body = {
@@ -271,6 +352,7 @@ export async function requestHandwrittenRegionOcr(input: {
     contrastDataUrl: input.contrastDataUrl,
     boostedDataUrl: input.boostedDataUrl,
     thinStrokeDataUrl: input.thinStrokeDataUrl,
+    inkOnWhiteDataUrl: input.inkOnWhiteDataUrl,
     localCandidates: input.localCandidates ?? [],
   };
 
@@ -313,6 +395,10 @@ export async function requestHandwrittenRegionOcr(input: {
   }
 
   const cleanedCloud = applyVeterinaryOcrCleanup(fieldId, result.text.trim());
+  if (cleanedCloud && result.source === "openrouter" && result.confidence !== "low") {
+    const cloudOnly = pickBestVeterinaryOcrCandidate(fieldId, [cleanedCloud]);
+    if (cloudOnly) return { ...result, text: cloudOnly };
+  }
   if (cleanedCloud) {
     const merged = pickBestVeterinaryOcrCandidate(fieldId, [cleanedCloud, localBest, ...(input.localCandidates ?? [])]);
     return { ...result, text: merged || cleanedCloud };
@@ -325,7 +411,11 @@ export async function requestHandwrittenRegionOcr(input: {
   return { ok: false, error: "OCR could not read any text from this region." };
 }
 
-export async function runHandwrittenRegionOcr(dataUrl: string, options?: { singleLine?: boolean }) {
+export async function runHandwrittenRegionOcr(
+  dataUrl: string,
+  options?: { singleLine?: boolean; fieldId?: string },
+) {
   const payload = await prepareHandwrittenRegionOcrPayload(dataUrl, options);
-  return pickBestHandwrittenOcrText(payload.localCandidates);
+  const fieldId = options?.fieldId ?? "ccHp";
+  return pickBestHandwrittenOcrText(fieldId, payload.localCandidates);
 }

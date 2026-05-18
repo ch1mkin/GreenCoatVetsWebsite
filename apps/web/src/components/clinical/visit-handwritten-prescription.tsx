@@ -1067,7 +1067,7 @@ export function VisitHandwrittenPrescription({
     try {
       const singleLine = isSingleLineOcrField(fieldId);
       const imageDataUrl = exportRegionCanvasImage(canvas, inkBounds);
-      const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine });
+      const ocrPayload = await prepareHandwrittenRegionOcrPayload(imageDataUrl, { singleLine, fieldId });
       const transportPayload = await compressHandwrittenOcrPayloadForTransport(ocrPayload);
       const result = await requestHandwrittenRegionOcr({
         visitId,
@@ -1078,6 +1078,7 @@ export function VisitHandwrittenPrescription({
         contrastDataUrl: transportPayload.contrastDataUrl,
         boostedDataUrl: transportPayload.boostedDataUrl,
         thinStrokeDataUrl: transportPayload.thinStrokeDataUrl,
+        inkOnWhiteDataUrl: transportPayload.inkOnWhiteDataUrl,
         localCandidates: transportPayload.localCandidates,
       });
       if (!result?.ok || !result.text.trim()) {
@@ -1085,10 +1086,13 @@ export function VisitHandwrittenPrescription({
         return;
       }
 
-      const recognizedText = pickBestVeterinaryOcrCandidate(fieldId, [
-        result.text.trim(),
-        ...(transportPayload.localCandidates ?? []),
-      ]);
+      const recognizedText =
+        result.source === "openrouter" && result.confidence !== "low"
+          ? pickBestVeterinaryOcrCandidate(fieldId, [result.text.trim()])
+          : pickBestVeterinaryOcrCandidate(fieldId, [
+              result.text.trim(),
+              ...(transportPayload.localCandidates ?? []),
+            ]);
       const textBox = getWritableTextBox(inkBounds, canvas.getWidth(), canvas.getHeight());
       const fontSize = Math.max(10, getWritableFontSize(textBox, canvas.getHeight()) * 0.92);
       const nextTokenId = crypto.randomUUID();

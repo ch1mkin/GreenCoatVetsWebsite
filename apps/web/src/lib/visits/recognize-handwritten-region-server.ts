@@ -1,7 +1,11 @@
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { createClient } from "@/lib/supabase/server";
 import { assertVisitReportAccess } from "@/lib/visits/visit-report-access";
-import { normalizeHandwrittenOcrText, pickBestHandwrittenOcrText } from "@/lib/visits/handwritten-ocr-utils";
+import {
+  isPlausibleHandwrittenOcr,
+  normalizeHandwrittenOcrText,
+  pickBestHandwrittenOcrText,
+} from "@/lib/visits/handwritten-ocr-utils";
 import {
   applyVeterinaryOcrCleanup,
   pickBestVeterinaryOcrCandidate,
@@ -13,8 +17,8 @@ export type RecognizeHandwrittenRegionResult =
   | { ok: false; error: string };
 
 const HANDWRITTEN_FIELD_TRANSCRIPTION_HINTS: Record<string, string> = {
-  patientName: "Pet name. Preserve unusual spellings letter by letter.",
-  ownerName: "Person name. Preserve exact spelling.",
+  patientName: "Pet name — letters only. Transcribe exactly as written, preserving unusual spellings.",
+  ownerName: "Person or family name — letters, spaces, apostrophe only. No symbols. Transcribe exactly as written.",
   mobile: "Phone number — digits, spaces, +, - only.",
   date: "Date with / or - separators.",
   age: "Short age like 2y, 8m, 4 years.",
@@ -67,7 +71,7 @@ function parseHandwrittenOcrJson(raw: string): { text: string; confidence: "high
 function mergeOcrCandidates(fieldId: string, candidates: string[]) {
   const normalized = candidates.map((candidate) => normalizeHandwrittenOcrText(candidate)).filter(Boolean);
   if (!normalized.length) return "";
-  const voted = pickBestHandwrittenOcrText(normalized);
+  const voted = pickBestHandwrittenOcrText(fieldId, normalized);
   const veterinary = pickBestVeterinaryOcrCandidate(fieldId, normalized);
   if (!voted) return veterinary;
   if (!veterinary) return applyVeterinaryOcrCleanup(fieldId, voted);
@@ -83,6 +87,7 @@ export async function recognizeHandwrittenRegionCore(input: {
   contrastDataUrl: string;
   boostedDataUrl: string;
   thinStrokeDataUrl?: string;
+  inkOnWhiteDataUrl?: string;
   localCandidates?: string[];
 }): Promise<RecognizeHandwrittenRegionResult> {
   const fieldId = String(input.fieldId ?? "").trim();
@@ -108,6 +113,7 @@ export async function recognizeHandwrittenRegionCore(input: {
     const contrastDataUrl = String(input.contrastDataUrl ?? "").trim();
     const boostedDataUrl = String(input.boostedDataUrl ?? "").trim();
     const thinStrokeDataUrl = String(input.thinStrokeDataUrl ?? "").trim();
+    const inkOnWhiteDataUrl = String(input.inkOnWhiteDataUrl ?? "").trim();
 
     if (!rawDataUrl || !contrastDataUrl || !boostedDataUrl) {
       return { ok: false, error: "Handwritten OCR images are missing." };
@@ -138,10 +144,10 @@ export async function recognizeHandwrittenRegionCore(input: {
         : "";
 
     const imageParts = [
+      ...(inkOnWhiteDataUrl ? [{ type: "image_url", image_url: { url: inkOnWhiteDataUrl } }] : []),
       { type: "image_url", image_url: { url: boostedDataUrl } },
       { type: "image_url", image_url: { url: thinStrokeDataUrl || contrastDataUrl } },
       { type: "image_url", image_url: { url: contrastDataUrl } },
-      { type: "image_url", image_url: { url: rawDataUrl } },
     ];
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -162,7 +168,8 @@ export async function recognizeHandwrittenRegionCore(input: {
               "The images are crops from a printed visit form filled in by a veterinarian.",
               "Expect pet names, owner names, drug names (Meloxicam, Amoxicillin, Enrofloxacin), doses (mg, ml, tab, BD, TID, q12h, PO, IM),",
               "vitals (RT, RR, HR, CRT, B/W), lab tests (CBC, Chem 17, SDMA, Snap 4Dx, USG, X-Ray), vaccines, and diagnosis shorthand.",
-              "Read cursive and messy script letter-by-letter. Never replace visible letters with unrelated common English words.",
+              "Read cursive and messy script letter-by-letter. Never replace visible letters with unrelated common English words or symbols.",
+              "For names, output only the name characters you see — never copyright signs, pipes, or accented letters unless clearly written.",
               "Preserve veterinary abbreviations exactly. Keep numbers, decimals, slashes, and line breaks.",
               'Return JSON only: {"text":"...","confidence":"high|medium|low"}.',
             ].join(" "),
@@ -205,15 +212,18 @@ export async function recognizeHandwrittenRegionCore(input: {
 
     const rawContent = extractAssistantTextContent(payload.choices?.[0]?.message?.content);
     const parsed = parseHandwrittenOcrJson(rawContent);
-    const cloudText = normalizeHandwrittenOcrText(parsed?.text || rawContent);
-    const merged = mergeOcrCandidates(fieldId, [cloudText, localBest, ...localCandidates]);
+    const cloudText = applyVeterinaryOcrCleanup(fieldId, normalizeHandwrittenOcrText(parsed?.text || rawContent));
+    const cloudPlausible = cloudText && isPlausibleHandwrittenOcr(fieldId, cloudText);
+    const merged = cloudPlausible
+      ? cloudText
+      : mergeOcrCandidates(fieldId, [cloudText, localBest, ...localCandidates].filter(Boolean));
 
-    if (merged) {
+    if (merged && isPlausibleHandwrittenOcr(fieldId, merged)) {
       return {
         ok: true,
         text: merged,
-        confidence: parsed?.confidence ?? (cloudText ? "high" : "low"),
-        source: cloudText ? "openrouter" : "local",
+        confidence: parsed?.confidence ?? (cloudPlausible ? "high" : "low"),
+        source: cloudPlausible ? "openrouter" : "local",
       };
     }
 
