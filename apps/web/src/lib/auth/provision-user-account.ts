@@ -37,6 +37,7 @@ export async function provisionUserAccountForAdmin(
     user_metadata: {
       full_name: input.fullName?.trim() || undefined,
       phone: input.phone?.trim() || undefined,
+      must_change_password: true,
     },
   });
 

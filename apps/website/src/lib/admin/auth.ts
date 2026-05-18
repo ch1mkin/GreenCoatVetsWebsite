@@ -1,33 +1,14 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdminSession } from "./session";
 
 export type AdminContext =
   | { role: "super_admin" }
   | { role: "marketing_editor"; clinicId: string; userId: string };
 
 export async function requireAdmin(): Promise<AdminContext> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/admin/login");
-
-  const { data: isSuper } = await supabase.rpc("is_super_admin");
-  if (isSuper) return { role: "super_admin" };
-
-  const { data: membership } = await supabase
-    .from("user_clinic_memberships")
-    .select("clinic_id")
-    .eq("user_id", user.id)
-    .eq("role", "marketing_editor")
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (membership?.clinic_id) {
-    return { role: "marketing_editor", clinicId: membership.clinic_id as string, userId: user.id };
-  }
-
-  redirect("/admin/login?error=forbidden");
+  const { ctx } = await requireAdminSession();
+  return ctx;
 }
 
 export async function requireSuperAdmin(): Promise<void> {

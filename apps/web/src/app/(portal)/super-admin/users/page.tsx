@@ -19,6 +19,7 @@ const ASSIGN_ROLES = [
   { value: "receptionist", label: "Receptionist" },
   { value: "lab_technician", label: "Lab technician" },
   { value: "pharmacist", label: "Pharmacist" },
+  { value: "marketing_editor", label: "Website editor (marketing admin)" },
   { value: "pet_owner", label: "Pet owner" },
 ] as const;
 
@@ -85,7 +86,9 @@ export default async function SuperAdminUsersPage({
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign role (any clinic)</h2>
         <p className="mt-1 text-[11px] text-slate-600">
-          Existing users can be assigned immediately. If the email is new, add a custom password below and the account will be created and assigned in one step.
+          Existing users can be assigned immediately. If the email is new, add a temporary password below — the account is created, assigned, and emailed login details.
+          Choose <strong>Website editor</strong> for users who should sign in at{" "}
+          <span className="font-mono text-[10px]">/admin/login</span> on the public website (blog, settings, reviews). They must set a new password on first login.
         </p>
         <form action={superAdminAssignUserToClinicAction} className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2 lg:col-span-3">

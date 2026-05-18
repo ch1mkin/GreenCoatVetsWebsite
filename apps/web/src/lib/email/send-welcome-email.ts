@@ -7,10 +7,10 @@ type AdminCreatedAccessKind = "website" | "web";
 function getAccessUrls(kind: AdminCreatedAccessKind) {
   if (kind === "website") {
     return {
-      loginUrl: "https://greencoatvets.com",
-      passwordUrl: "https://greencoatvets.com",
-      ctaLabel: "Open main website",
-      accessLabel: "website access",
+      loginUrl: "https://greencoatvets.com/admin/login",
+      passwordUrl: "https://greencoatvets.com/admin/change-password",
+      ctaLabel: "Open website admin",
+      accessLabel: "website marketing admin (blog, settings, reviews)",
     };
   }
 
@@ -86,8 +86,8 @@ export async function sendAdminCreatedPortalCredentialsEmail(params: {
       params.roleLabel
         ? `You can now sign in as ${params.roleLabel} in the clinic workspace.`
         : "You can now sign in to the clinic workspace.",
-      "Please change this temporary password immediately after your first login so you can set a password of your own choice.",
-      `Use this link after login to update your password: ${accessUrls.passwordUrl}`,
+      "You will be asked to set a new password immediately after your first sign-in.",
+      `Website admin sign-in: ${accessUrls.loginUrl}`,
     ],
     details: [
       { label: "Login email", value: to },
@@ -96,9 +96,9 @@ export async function sendAdminCreatedPortalCredentialsEmail(params: {
       ...(params.roleLabel ? [{ label: "Assigned role", value: params.roleLabel }] : []),
     ],
     bullets: [
-      "Sign in with the credentials above.",
-      `Open ${accessUrls.passwordUrl} after login.`,
-      "Set a new password that only you know.",
+      "Sign in at the website admin login with the credentials above.",
+      "Complete the required password change screen on first login.",
+      "Then manage blog posts, homepage content, and reviews from the admin panel.",
     ],
     ctaLabel: accessUrls.ctaLabel,
     ctaHref: accessUrls.loginUrl,

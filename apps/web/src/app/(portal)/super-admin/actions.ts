@@ -354,7 +354,7 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
         });
         if (!result.sent) {
           warningMessage =
-            "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually and ask them to change it from My profile after login.";
+            "The account was created, but the welcome email with login credentials could not be sent. Share the email/password manually. Website editors sign in at /admin/login and must set a new password on first login.";
         }
       } catch {
         warningMessage =

@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { PasswordField } from "@/components/PasswordField";
 import { createClient } from "@/lib/supabase/client";
+import { userMustChangePassword } from "@/lib/admin/must-change-password";
 import { mapLoginError } from "@/lib/auth/map-auth-error";
 
 export function AdminLoginForm() {
@@ -28,6 +29,13 @@ export function AdminLoginForm() {
       setMessage(mapLoginError(error.message));
       return;
     }
+
+    if (userMustChangePassword(data.user)) {
+      router.refresh();
+      router.push("/admin/change-password");
+      return;
+    }
+
     const { data: isSuper } = await supabase.rpc("is_super_admin");
     if (isSuper) {
       router.refresh();

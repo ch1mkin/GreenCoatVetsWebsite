@@ -72,7 +72,8 @@ export default async function TeamManagementPage({
       <section className="card-soft mb-3">
         <h2 className="text-xs font-bold uppercase tracking-wide text-slate-700">Assign or update access</h2>
         <p className="mt-1 text-[11px] text-slate-600">
-          Existing accounts keep their current password. For a brand-new user, enter the password you want to set for them now.
+          Existing accounts keep their current password. For a brand-new user, enter a temporary password — they must change it on first sign-in.
+          <strong> Website editor</strong> users sign in at <span className="font-mono text-[10px]">yoursite.com/admin/login</span> (not the clinic portal).
         </p>
         <form action={assignUserToClinicAction} className="mt-2 grid gap-2 md:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-0.5 text-[11px] md:col-span-2">
