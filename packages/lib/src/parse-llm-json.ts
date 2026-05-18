@@ -89,7 +89,14 @@ export type InstagramPromptPackFields = {
   captionBody: string;
   hashtags: string[];
   postIdeas: string[];
+  /** Detailed prompt tuned for Gemini image generation. */
   geminiPrompt: string;
+  /** Universal detailed prompt for any image generator (Midjourney, DALL·E, etc.). */
+  imagePrompt: string;
+  /** Short image prompt for tools with tight character limits. */
+  imagePromptShort: string;
+  /** Elements to exclude from generated artwork. */
+  negativePrompt: string;
   artDirection: string[];
 };
 
@@ -142,17 +149,22 @@ export function parseInstagramPromptPackFromText(text: string): InstagramPromptP
       }
       return [];
     };
+    const geminiPrompt = String(json.geminiPrompt ?? "").trim();
+    const imagePrompt = String(json.imagePrompt ?? json.imageGenPrompt ?? "").trim();
     const pack: InstagramPromptPackFields = {
       conceptTitle: String(json.conceptTitle ?? json.title ?? "").trim(),
       trendAngle: String(json.trendAngle ?? json.trend ?? "").trim(),
       captionHook: String(json.captionHook ?? json.hook ?? "").trim(),
       captionBody: String(json.captionBody ?? json.caption ?? json.body ?? "").trim(),
-      geminiPrompt: String(json.geminiPrompt ?? json.imagePrompt ?? "").trim(),
+      geminiPrompt: geminiPrompt || imagePrompt,
+      imagePrompt: imagePrompt || geminiPrompt,
+      imagePromptShort: String(json.imagePromptShort ?? json.shortImagePrompt ?? "").trim(),
+      negativePrompt: String(json.negativePrompt ?? json.negative_prompt ?? "").trim(),
       hashtags: toArray(json.hashtags),
       postIdeas: toArray(json.postIdeas ?? json.ideas),
       artDirection: toArray(json.artDirection),
     };
-    if (pack.conceptTitle && pack.captionHook && pack.geminiPrompt) return pack;
+    if (pack.conceptTitle && pack.captionHook && (pack.geminiPrompt || pack.imagePrompt)) return pack;
   } catch {
     // Fall through to labeled format.
   }
@@ -161,7 +173,10 @@ export function parseInstagramPromptPackFromText(text: string): InstagramPromptP
   const trendAngle = readScalar(trimmed, ["TREND_ANGLE", "trendAngle", "Trend Angle"]);
   const captionHook = readScalar(trimmed, ["CAPTION_HOOK", "captionHook", "Caption Hook"]);
   const captionBody = readScalar(trimmed, ["CAPTION_BODY", "captionBody", "Caption Body"]);
-  const geminiPrompt = readScalar(trimmed, ["GEMINI_PROMPT", "geminiPrompt", "Gemini Prompt", "IMAGE_PROMPT"]);
+  const geminiPrompt = readScalar(trimmed, ["GEMINI_PROMPT", "geminiPrompt", "Gemini Prompt"]);
+  const imagePrompt = readScalar(trimmed, ["IMAGE_PROMPT", "imagePrompt", "Image Prompt", "IMAGE_GEN_PROMPT"]);
+  const imagePromptShort = readScalar(trimmed, ["IMAGE_PROMPT_SHORT", "imagePromptShort", "Short Image Prompt"]);
+  const negativePrompt = readScalar(trimmed, ["NEGATIVE_PROMPT", "negativePrompt", "Negative Prompt"]);
   const hashtags =
     readListSection(trimmed, ["HASHTAGS", "Hashtags"]) ||
     trimmed.match(/#[\w]+/g)?.map((tag) => tag.trim()) ||
@@ -169,7 +184,9 @@ export function parseInstagramPromptPackFromText(text: string): InstagramPromptP
   const postIdeas = readListSection(trimmed, ["POST_IDEAS", "Post Ideas", "POST IDEAS"]);
   const artDirection = readListSection(trimmed, ["ART_DIRECTION", "Art Direction", "ART DIRECTION"]);
 
-  if (!conceptTitle || !captionHook || !geminiPrompt) return null;
+  const resolvedGemini = geminiPrompt || imagePrompt;
+  const resolvedImage = imagePrompt || geminiPrompt;
+  if (!conceptTitle || !captionHook || !resolvedGemini) return null;
 
   return {
     conceptTitle,
@@ -178,7 +195,14 @@ export function parseInstagramPromptPackFromText(text: string): InstagramPromptP
     captionBody: captionBody || captionHook,
     hashtags: hashtags.length ? hashtags : ["#PetCare", "#VetClinic", "#DogHealth"],
     postIdeas: postIdeas.length ? postIdeas.slice(0, 5) : [conceptTitle],
-    geminiPrompt,
+    geminiPrompt: resolvedGemini,
+    imagePrompt: resolvedImage,
+    imagePromptShort:
+      imagePromptShort ||
+      `${resolvedImage.slice(0, 280)}${resolvedImage.length > 280 ? "…" : ""}`.trim(),
+    negativePrompt:
+      negativePrompt ||
+      "photorealistic, stock photo, watermark, text overlay, blurry, distorted anatomy, extra limbs",
     artDirection: artDirection.length ? artDirection : ["2D illustration", "Non-photorealistic", "Square composition"],
   };
 }

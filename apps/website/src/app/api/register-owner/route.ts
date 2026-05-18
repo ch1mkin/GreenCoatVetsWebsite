@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
+import { sendNewUserRegistrationNotificationEmail } from "@/lib/email/send-new-user-registration-notification-email";
 import { sendWebsiteWelcomeEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
@@ -60,6 +61,18 @@ export async function POST(request: Request) {
         } catch (error) {
           console.error("[register-owner] welcome email failed", error);
         }
+        try {
+          await sendNewUserRegistrationNotificationEmail(supabase, {
+            clinicId: clinic.id,
+            clinicName: clinic.name,
+            fullName,
+            email: emailNorm,
+            phone,
+            registrationSource: "website_owner",
+          });
+        } catch (error) {
+          console.error("[register-owner] admin notification failed", error);
+        }
         return NextResponse.json({ ok: true, mergedGuest: true }, { status: 200 });
       }
     }
@@ -79,6 +92,19 @@ export async function POST(request: Request) {
       }
     } catch (mailError) {
       console.error("[register-owner] welcome email failed", mailError);
+    }
+
+    try {
+      await sendNewUserRegistrationNotificationEmail(supabase, {
+        clinicId: clinic.id,
+        clinicName: clinic.name,
+        fullName,
+        email: emailNorm,
+        phone,
+        registrationSource: "website_owner",
+      });
+    } catch (error) {
+      console.error("[register-owner] admin notification failed", error);
     }
 
     return NextResponse.json({ ok: true }, { status: 200 });

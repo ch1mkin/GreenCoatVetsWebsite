@@ -46,7 +46,7 @@ function buildLabeledMessages(input: InstagramPromptRequest): V4FlashChatMessage
     {
       role: "system",
       content:
-        "You are a veterinary Instagram strategist. Use the exact labeled format below. Do not use JSON or markdown code blocks.",
+        "You are a veterinary Instagram strategist. Produce both social post CONTENT (captions, hashtags, ideas) and IMAGE GENERATION prompts (detailed scene descriptions for AI art tools). Use the exact labeled format below. Do not use JSON or markdown code blocks.",
     },
     {
       role: "user",
@@ -72,6 +72,13 @@ function buildLabeledMessages(input: InstagramPromptRequest): V4FlashChatMessage
         "- idea four",
         "- idea five",
         "GEMINI_PROMPT:",
+        "(detailed 2D illustrated square image for Gemini — scene, style, colors, composition)",
+        "IMAGE_PROMPT:",
+        "(universal detailed image prompt for any generator — same scene, tool-agnostic)",
+        "IMAGE_PROMPT_SHORT:",
+        "(under 300 characters, key visual only)",
+        "NEGATIVE_PROMPT:",
+        "(comma-separated elements to avoid: photorealistic, watermark, etc.)",
         "ART_DIRECTION:",
         "- bullet",
       ].join("\n"),
@@ -91,7 +98,7 @@ function buildJsonMessages(input: InstagramPromptRequest): V4FlashChatMessage[] 
     {
       role: "system",
       content:
-        'Reply with one JSON object only. Keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, artDirection. Start with { and end with }.',
+        'Reply with one JSON object only. Keys: conceptTitle, trendAngle, captionHook, captionBody, hashtags, postIdeas, geminiPrompt, imagePrompt, imagePromptShort, negativePrompt, artDirection. Start with { and end with }.',
     },
     {
       role: "user",
@@ -104,7 +111,9 @@ function buildJsonMessages(input: InstagramPromptRequest): V4FlashChatMessage[] 
         `Tone: ${tone}`,
         "hashtags must be a JSON array of 5-10 strings with #.",
         "postIdeas must be a JSON array of exactly 5 strings.",
-        "geminiPrompt must describe a 2D illustrated non-photorealistic Instagram square image.",
+        "geminiPrompt and imagePrompt must each describe a 2D illustrated non-photorealistic Instagram square image (full scene, style, palette, composition).",
+        "imagePromptShort must be under 300 characters.",
+        "negativePrompt must list elements to exclude from the artwork.",
       ].join("\n"),
     },
   ];

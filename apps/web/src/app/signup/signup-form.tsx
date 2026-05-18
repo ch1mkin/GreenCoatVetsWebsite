@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
 import { beginPortalLoginOtpAction } from "@/app/login/otp-actions";
-import { sendPortalWelcomeEmailAction } from "./actions";
+import { notifyPortalNewUserRegistrationAction, sendPortalWelcomeEmailAction } from "./actions";
 
 export function SignupForm({
   productName,
@@ -147,6 +147,12 @@ export function SignupForm({
         fullName,
         roleLabel: inviteRole ? inviteRole.replace(/_/g, " ") : null,
       });
+      void notifyPortalNewUserRegistrationAction({
+        fullName,
+        email,
+        registrationSource: "portal_staff_invite",
+        role: inviteRole,
+      });
       const otpResult = await beginPortalLoginOtpAction(email);
       if (!otpResult.ok) {
         setIsSubmitting(false);
@@ -166,6 +172,12 @@ export function SignupForm({
       email,
       fullName,
       roleLabel: null,
+    });
+    void notifyPortalNewUserRegistrationAction({
+      fullName,
+      email,
+      registrationSource: "portal_customer",
+      role: null,
     });
     const otpResult = await beginPortalLoginOtpAction(email);
     if (!otpResult.ok) {

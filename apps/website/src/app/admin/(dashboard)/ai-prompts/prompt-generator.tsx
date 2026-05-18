@@ -14,6 +14,8 @@ type FormState = {
   tone: string;
 };
 
+type CopiedKind = false | "caption" | "gemini" | "image" | "imageShort" | "negative";
+
 const INITIAL_FORM: FormState = {
   clinicName: "GreenCoatVets",
   theme: "",
@@ -27,7 +29,7 @@ export function PromptGenerator() {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [result, setResult] = useState<InstagramPromptPack | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<false | "prompt" | "caption">(false);
+  const [copied, setCopied] = useState<CopiedKind>(false);
   const [isPending, startTransition] = useTransition();
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -57,7 +59,7 @@ export function PromptGenerator() {
     });
   }
 
-  async function copyText(value: string, kind: "prompt" | "caption") {
+  async function copyText(value: string, kind: CopiedKind) {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(kind);
@@ -69,7 +71,7 @@ export function PromptGenerator() {
 
   async function copyPromptAndOpenGemini() {
     if (!result) return;
-    await copyText(result.geminiPrompt, "prompt");
+    await copyText(result.geminiPrompt, "gemini");
     window.open(GEMINI_URL, "_blank", "noopener,noreferrer");
   }
 
@@ -79,13 +81,10 @@ export function PromptGenerator() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
       <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h2 className="font-headline text-xl font-bold text-slate-900">Generate a post concept</h2>
+          <h2 className="font-headline text-xl font-bold text-slate-900">Generate post + image prompts</h2>
           <p className="mt-2 text-sm text-slate-600">
-            DeepSeek V4 Flash creates the strategy and Gemini-ready art prompt. The output stays focused on illustrated, 2D,
-            non-realistic Instagram creatives.
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Recommended OpenRouter model: <code className="rounded bg-slate-100 px-1 py-0.5">deepseek/deepseek-v4-flash:free</code>
+            Creates a full pack: Instagram caption content and ready-to-paste image generation prompts (Gemini, universal,
+            and short variants). Tuned for 2D illustrated, non-photorealistic veterinary posts.
           </p>
         </div>
 
@@ -163,7 +162,7 @@ export function PromptGenerator() {
           disabled={isPending}
           className="gradient-primary mt-6 inline-flex min-w-[220px] items-center justify-center rounded-xl px-6 py-3 font-headline text-sm font-bold text-on-primary shadow-lg disabled:opacity-60"
         >
-          {isPending ? "Generating..." : "Generate trending ideas"}
+          {isPending ? "Generating..." : "Generate content + image prompts"}
         </button>
       </form>
 
@@ -172,7 +171,7 @@ export function PromptGenerator() {
           <div>
             <h2 className="font-headline text-xl font-bold text-slate-900">Output pack</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Use the idea list for planning, then copy the Gemini prompt to generate artwork.
+              Post content for Instagram, plus image prompts you can paste into Gemini or any image generator.
             </p>
           </div>
           {result ? (
@@ -189,7 +188,7 @@ export function PromptGenerator() {
                 onClick={copyPromptAndOpenGemini}
                 className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary hover:bg-primary/10"
               >
-                {copied === "prompt" ? "Prompt copied" : "Copy prompt + open Gemini"}
+                {copied === "gemini" ? "Gemini prompt copied" : "Copy Gemini + open"}
               </button>
             </div>
           ) : null}
@@ -203,49 +202,103 @@ export function PromptGenerator() {
               <p className="mt-2 text-sm text-slate-700">{result.trendAngle}</p>
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-2">
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Trending post ideas</h3>
-                <ul className="mt-3 space-y-2 text-sm text-slate-800">
-                  {result.postIdeas.map((idea) => (
-                    <li key={idea} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      {idea}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Art direction</h3>
-                <ul className="mt-3 space-y-2 text-sm text-slate-800">
-                  {result.artDirection.map((item) => (
-                    <li key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      {item}
-                    </li>
-                  ))}
-                </ul>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Post content</h3>
+              <div className="mt-3 grid gap-6 xl:grid-cols-2">
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Trending ideas</h4>
+                  <ul className="mt-2 space-y-2 text-sm text-slate-800">
+                    {result.postIdeas.map((idea) => (
+                      <li key={idea} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        {idea}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Caption draft</h4>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{result.captionHook}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{result.captionBody}</p>
+                  <p className="mt-3 text-sm text-primary">{result.hashtags.join(" ")}</p>
+                </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Caption draft</h3>
-              <p className="mt-3 text-sm font-semibold text-slate-900">{result.captionHook}</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{result.captionBody}</p>
-              <p className="mt-3 text-sm text-primary">{result.hashtags.join(" ")}</p>
-            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Image generation prompts</h3>
+              <div className="mt-3 space-y-4">
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Gemini (detailed)</h4>
+                    <button
+                      type="button"
+                      onClick={() => copyText(result.geminiPrompt, "gemini")}
+                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      {copied === "gemini" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{result.geminiPrompt}</p>
+                </div>
 
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Gemini image prompt</h3>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-800">{result.geminiPrompt}</p>
-              <p className="mt-3 text-xs text-slate-500">
-                Gemini opens in a new tab. The prompt is copied first so you can paste it immediately.
-              </p>
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Universal image prompt</h4>
+                    <button
+                      type="button"
+                      onClick={() => copyText(result.imagePrompt, "image")}
+                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      {copied === "image" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{result.imagePrompt}</p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Short image prompt</h4>
+                    <button
+                      type="button"
+                      onClick={() => copyText(result.imagePromptShort, "imageShort")}
+                      className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    >
+                      {copied === "imageShort" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-800">{result.imagePromptShort}</p>
+                </div>
+
+                <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-amber-800">Negative prompt</h4>
+                    <button
+                      type="button"
+                      onClick={() => copyText(result.negativePrompt, "negative")}
+                      className="rounded-lg border border-amber-200 px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100/50"
+                    >
+                      {copied === "negative" ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm text-amber-950">{result.negativePrompt}</p>
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Art direction</h4>
+                  <ul className="mt-2 space-y-2 text-sm text-slate-800">
+                    {result.artDirection.map((item) => (
+                      <li key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            Generate a prompt pack to see the best current post angles, a ready-to-edit caption, and a Gemini-ready 2D
-            illustration prompt.
+            Generate a pack to see caption content, hashtags, post ideas, and image prompts for your creative tools.
           </div>
         )}
       </section>

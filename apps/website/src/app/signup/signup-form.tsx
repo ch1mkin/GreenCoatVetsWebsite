@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapLoginError } from "@/lib/auth/map-auth-error";
+import { notifyNewUserRegistrationAction } from "@/lib/email/notify-new-registration";
 
 export function WebsiteSignupForm({
   productName,
@@ -131,6 +132,13 @@ export function WebsiteSignupForm({
           setIsSubmitting(false);
           return;
         }
+        void notifyNewUserRegistrationAction({
+          fullName,
+          email,
+          phone,
+          registrationSource: "website_staff_invite",
+          role: null,
+        });
       } else {
         const res = await fetch("/api/register-owner", {
           method: "POST",
@@ -143,6 +151,7 @@ export function WebsiteSignupForm({
           setIsSubmitting(false);
           return;
         }
+        // register-owner route sends admin notification; avoid duplicate email here.
       }
 
       setIsSubmitting(false);
