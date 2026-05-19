@@ -6,6 +6,7 @@ import {
   superAdminAssignUserToClinicAction,
   superAdminDeactivateUserEverywhereAction,
   superAdminDeleteUserFromDatabaseAction,
+  superAdminSendPasswordResetAction,
 } from "../actions";
 import { AppShell } from "@/components/web/app-shell";
 import { getUserAccess } from "@/lib/auth/get-user-access";
@@ -38,6 +39,7 @@ export default async function SuperAdminUsersPage({
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
   const deactivated = searchParams.deactivated === "1" || searchParams.deactivated === "true";
   const deleted = searchParams.deleted === "1" || searchParams.deleted === "true";
+  const resetSent = searchParams.reset_sent === "1" || searchParams.reset_sent === "true";
   const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
   const warningMessage = typeof searchParams.warning === "string" ? searchParams.warning : null;
 
@@ -81,6 +83,12 @@ export default async function SuperAdminUsersPage({
         <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">User deleted from database</p>
           <p className="mt-1 text-sm">The selected platform-table records were removed successfully.</p>
+        </section>
+      ) : null}
+      {resetSent ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Password reset email sent</p>
+          <p className="mt-1 text-sm">The user can follow the link in their email to set a new portal password.</p>
         </section>
       ) : null}
       <section className="card-soft mb-3">
@@ -186,6 +194,14 @@ export default async function SuperAdminUsersPage({
                 <td className="py-1.5 pr-2 text-slate-600">{new Date(u.created_at).toLocaleString()}</td>
                 <td className="py-1.5 pr-2 text-right">
                   <div className="inline-flex flex-col items-end gap-2">
+                    {u.email ? (
+                      <form action={superAdminSendPasswordResetAction} className="inline-flex">
+                        <input type="hidden" name="email" value={u.email} />
+                        <SubmitButton className="btn-secondary btn-compact text-[10px]" pendingLabel="Sending…">
+                          Send password reset
+                        </SubmitButton>
+                      </form>
+                    ) : null}
                     <form action={superAdminDeactivateUserEverywhereAction} className="inline-flex flex-col items-end gap-1">
                       <input type="hidden" name="target_user_id" value={u.id} />
                       <label className="flex flex-col items-end gap-1 text-[10px] text-slate-600">

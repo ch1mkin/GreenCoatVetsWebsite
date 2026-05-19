@@ -23,6 +23,7 @@ export function LoginForm({
   const searchParams = useSearchParams();
   const invite = (searchParams.get("invite") ?? "").trim();
   const oauthMode = searchParams.get("oauth") === "google";
+  const passwordReset = searchParams.get("reset") === "1";
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -203,6 +204,11 @@ export function LoginForm({
                   Invite detected. Your role assignment will be applied after sign in.
                 </p>
               ) : null}
+              {passwordReset ? (
+                <p className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
+                  Password updated. Sign in with your new password.
+                </p>
+              ) : null}
             </div>
 
             <div className="mb-6 space-y-3">
@@ -240,6 +246,11 @@ export function LoginForm({
                 required
                 autoComplete="current-password"
               />
+              <p className="text-right text-sm">
+                <Link className="font-semibold text-primary hover:underline" href="/forgot-password">
+                  Forgot password?
+                </Link>
+              </p>
               {error ? <p className="text-sm text-error">{error}</p> : null}
               <button className="btn-primary w-full py-4 disabled:opacity-60" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? "Signing in…" : "Sign in"}

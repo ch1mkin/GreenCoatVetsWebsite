@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
+import { sendPortalPasswordResetLink } from "@/lib/auth/send-portal-password-reset";
 import { sendAdminCreatedPortalCredentialsEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
@@ -163,4 +164,43 @@ export async function removeUserFromClinicAction(formData: FormData) {
 
   revalidatePath("/team");
   redirect("/team?removed=1");
+}
+
+export async function sendTeamMemberPasswordResetAction(formData: FormData) {
+  let errorMessage: string | null = null;
+  let warningMessage: string | null = null;
+
+  try {
+    const access = await getUserAccess();
+    if (access.membership?.role !== "clinic_admin") {
+      throw new Error("Not allowed.");
+    }
+
+    const email = String(formData.get("email") ?? "").trim();
+    if (!email) throw new Error("Email is required.");
+
+    const result = await sendPortalPasswordResetLink(email);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    if (!result.sent) {
+      if (result.reason === "no_user") {
+        throw new Error("No portal account found for that email.");
+      }
+      warningMessage = "Could not send the reset email. Check SMTP settings or try again.";
+    }
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not send password reset email.";
+  }
+
+  if (errorMessage) {
+    redirect(`/team?error=${encodeURIComponent(errorMessage)}`);
+  }
+
+  revalidatePath("/team");
+  const params = new URLSearchParams({ reset_sent: "1" });
+  if (warningMessage) {
+    params.set("warning", warningMessage);
+  }
+  redirect(`/team?${params.toString()}`);
 }

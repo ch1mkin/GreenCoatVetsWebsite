@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { assignUserToClinicAction, getClinicTeamMembers, removeUserFromClinicAction } from "./actions";
+import {
+  assignUserToClinicAction,
+  getClinicTeamMembers,
+  removeUserFromClinicAction,
+  sendTeamMemberPasswordResetAction,
+} from "./actions";
 import { AppShell } from "@/components/web/app-shell";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
@@ -35,6 +40,7 @@ export default async function TeamManagementPage({
   }
   const saved = searchParams.saved === "1" || searchParams.saved === "true";
   const removed = searchParams.removed === "1" || searchParams.removed === "true";
+  const resetSent = searchParams.reset_sent === "1" || searchParams.reset_sent === "true";
   const errorMessage = typeof searchParams.error === "string" ? searchParams.error : null;
   const warningMessage = typeof searchParams.warning === "string" ? searchParams.warning : null;
 
@@ -67,6 +73,12 @@ export default async function TeamManagementPage({
         <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
           <p className="font-semibold">Access removed</p>
           <p className="mt-1 text-sm">That clinic membership has been deactivated.</p>
+        </section>
+      ) : null}
+      {resetSent ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Password reset email sent</p>
+          <p className="mt-1 text-sm">They can use the link in their inbox to set a new portal password.</p>
         </section>
       ) : null}
       <section className="card-soft mb-3">
@@ -156,16 +168,26 @@ export default async function TeamManagementPage({
                 </td>
                 <td className="py-1.5 pr-2 text-right">
                   {row.is_active ? (
-                    <form action={removeUserFromClinicAction} className="inline-flex flex-col items-end gap-1">
-                      <input type="hidden" name="target_user_id" value={row.user_id} />
-                      <label className="flex items-center gap-1 text-[10px] text-slate-600">
-                        <input type="checkbox" name="confirm_remove" required className="rounded border-slate-300" />
-                        Confirm
-                      </label>
-                      <SubmitButton className="btn-secondary btn-compact text-[10px]" pendingLabel="…">
-                        Remove from clinic
-                      </SubmitButton>
-                    </form>
+                    <div className="inline-flex flex-col items-end gap-2">
+                      {row.email ? (
+                        <form action={sendTeamMemberPasswordResetAction} className="inline-flex">
+                          <input type="hidden" name="email" value={row.email} />
+                          <SubmitButton className="btn-secondary btn-compact text-[10px]" pendingLabel="Sending…">
+                            Send password reset
+                          </SubmitButton>
+                        </form>
+                      ) : null}
+                      <form action={removeUserFromClinicAction} className="inline-flex flex-col items-end gap-1">
+                        <input type="hidden" name="target_user_id" value={row.user_id} />
+                        <label className="flex items-center gap-1 text-[10px] text-slate-600">
+                          <input type="checkbox" name="confirm_remove" required className="rounded border-slate-300" />
+                          Confirm
+                        </label>
+                        <SubmitButton className="btn-secondary btn-compact text-[10px]" pendingLabel="…">
+                          Remove from clinic
+                        </SubmitButton>
+                      </form>
+                    </div>
                   ) : (
                     <span className="text-slate-400">—</span>
                   )}

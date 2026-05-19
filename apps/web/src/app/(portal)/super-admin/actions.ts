@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
+import { sendPortalPasswordResetLink } from "@/lib/auth/send-portal-password-reset";
 import { sendAdminCreatedPortalCredentialsEmail } from "@/lib/email/send-welcome-email";
 import { createClient } from "@/lib/supabase/server";
 
@@ -436,4 +437,39 @@ export async function superAdminDeleteUserFromDatabaseAction(formData: FormData)
   revalidatePath("/super-admin/users");
   revalidatePath("/super-admin");
   redirect("/super-admin/users?deleted=1");
+}
+
+export async function superAdminSendPasswordResetAction(formData: FormData) {
+  let errorMessage: string | null = null;
+  let warningMessage: string | null = null;
+
+  try {
+    await assertSuperAdmin();
+    const email = String(formData.get("email") ?? "").trim();
+    if (!email) throw new Error("Email is required.");
+
+    const result = await sendPortalPasswordResetLink(email);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    if (!result.sent) {
+      if (result.reason === "no_user") {
+        throw new Error("No portal account found for that email.");
+      }
+      warningMessage = "Could not send the reset email. Check SMTP settings or try again.";
+    }
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not send password reset email.";
+  }
+
+  if (errorMessage) {
+    redirect(`/super-admin/users?error=${encodeURIComponent(errorMessage)}`);
+  }
+
+  revalidatePath("/super-admin/users");
+  const params = new URLSearchParams({ reset_sent: "1" });
+  if (warningMessage) {
+    params.set("warning", warningMessage);
+  }
+  redirect(`/super-admin/users?${params.toString()}`);
 }
