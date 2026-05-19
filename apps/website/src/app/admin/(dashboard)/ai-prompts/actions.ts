@@ -6,7 +6,7 @@ import {
   streamDeepSeekV4FlashChat,
   type V4FlashChatMessage,
 } from "@/lib/openrouter/v4-flash-stream";
-import { requireSuperAdmin } from "@/lib/admin/auth";
+import { requireAdmin } from "@/lib/admin/auth";
 
 export type InstagramPromptRequest = {
   clinicName?: string;
@@ -151,7 +151,7 @@ export async function generateInstagramPromptPack(
   const model = DEEPSEEK_V4_FLASH_MODEL;
 
   try {
-    await requireSuperAdmin();
+    await requireAdmin();
 
     const theme = input.theme.trim();
     if (!theme) return { ok: false, error: "Theme is required.", model };

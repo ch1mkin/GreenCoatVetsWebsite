@@ -1,4 +1,5 @@
-import { deleteBlogPost, saveBlogPost } from "@/app/admin/(dashboard)/blog/actions";
+import { saveBlogPost } from "@/app/admin/(dashboard)/blog/actions";
+import { DeleteBlogPostForm } from "@/app/admin/(dashboard)/blog/delete-blog-post-form";
 import type { AdminContext } from "@/lib/admin/auth";
 
 type Category = { id: string; name: string; slug: string };
@@ -210,14 +211,7 @@ export function BlogPostForm({
         </div>
       </form>
 
-      {post ? (
-        <form action={deleteBlogPost} className="border-t border-slate-200 pt-8">
-          <input type="hidden" name="id" value={post.id} />
-          <button type="submit" className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800">
-            Delete post
-          </button>
-        </form>
-      ) : null}
+      {post ? <DeleteBlogPostForm postId={post.id} /> : null}
     </div>
   );
 }

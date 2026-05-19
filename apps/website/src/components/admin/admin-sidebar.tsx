@@ -58,6 +58,12 @@ export function AdminSidebar({ isSuper }: { isSuper: boolean }) {
             Blog
           </Link>
           <Link
+            href="/admin/ai-prompts"
+            className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/ai-prompts" || pathname.startsWith("/admin/ai-prompts/"))}`}
+          >
+            AI prompts
+          </Link>
+          <Link
             href="/admin/reviews"
             className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/reviews" || pathname.startsWith("/admin/reviews/"))}`}
           >
@@ -118,6 +124,12 @@ export function AdminMobileNav({ isSuper }: { isSuper: boolean }) {
           className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/blog"))}`}
         >
           Blog
+        </Link>
+        <Link
+          href="/admin/ai-prompts"
+          className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/ai-prompts"))}`}
+        >
+          AI prompts
         </Link>
         <Link
           href="/admin/reviews"

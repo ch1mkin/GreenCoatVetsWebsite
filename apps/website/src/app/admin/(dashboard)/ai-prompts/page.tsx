@@ -1,8 +1,8 @@
 import { PromptGenerator } from "./prompt-generator";
-import { requireSuperAdmin } from "@/lib/admin/auth";
+import { requireAdmin } from "@/lib/admin/auth";
 
 export default async function AdminAiPromptsPage() {
-  await requireSuperAdmin();
+  await requireAdmin();
 
   return (
     <div className="space-y-8">
