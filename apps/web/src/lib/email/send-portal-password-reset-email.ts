@@ -20,7 +20,7 @@ export async function sendPortalPasswordResetEmail(params: {
     heading: "Reset your clinic portal password",
     intro: "A request was received to reset your password for the clinic web portal.",
     body: [
-      "Use the button below to choose a new password. For security, this link expires in one hour.",
+      "Use the button below to choose a new password. For security, this link expires in 24 hours.",
       "If you did not request this, you can safely ignore this email.",
     ],
     ctaLabel: "Reset password",
