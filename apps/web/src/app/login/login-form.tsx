@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
+import { loginHintMessage } from "@/lib/auth/login-hints";
+import { resolveWebPortalLoginRoutingAction } from "./auth-routing-actions";
 import { beginPortalLoginOtpAction } from "./otp-actions";
 
 export function LoginForm({
@@ -24,6 +26,7 @@ export function LoginForm({
   const invite = (searchParams.get("invite") ?? "").trim();
   const oauthMode = searchParams.get("oauth") === "google";
   const passwordReset = searchParams.get("reset") === "1";
+  const hintMessage = loginHintMessage(searchParams.get("hint"));
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -59,22 +62,39 @@ export function LoginForm({
         }
       }
 
-      const otpResult = await beginPortalLoginOtpAction(session.user.email ?? "");
-      if (cancelled) return;
-      if (!otpResult.ok) {
-        setIsSubmitting(false);
-        setError(otpResult.error);
-        return;
-      }
-
-      router.replace("/login/verify-email?next=/dashboard");
-      router.refresh();
+      await finishWebPortalSignIn(session.user.email ?? "", () => cancelled);
     })();
 
     return () => {
       cancelled = true;
     };
   }, [invite, oauthMode, router]);
+
+  async function finishWebPortalSignIn(emailHint: string, isCancelled?: () => boolean) {
+    const routing = await resolveWebPortalLoginRoutingAction();
+    if (isCancelled?.()) return;
+    if (!routing.ok) {
+      setIsSubmitting(false);
+      setError(routing.error);
+      return;
+    }
+    if (routing.kind === "external") {
+      window.location.assign(routing.url);
+      return;
+    }
+
+    const otpResult = await beginPortalLoginOtpAction(emailHint);
+    if (isCancelled?.()) return;
+    if (!otpResult.ok) {
+      setIsSubmitting(false);
+      setError(otpResult.error);
+      return;
+    }
+
+    setIsSubmitting(false);
+    router.replace(`/login/verify-email?next=${encodeURIComponent(routing.next)}`);
+    router.refresh();
+  }
 
   async function onContinueWithGoogle() {
     setError(null);
@@ -128,16 +148,7 @@ export function LoginForm({
       }
     }
 
-    const otpResult = await beginPortalLoginOtpAction(email);
-    if (!otpResult.ok) {
-      setIsSubmitting(false);
-      setError(otpResult.error);
-      return;
-    }
-
-    setIsSubmitting(false);
-    router.push("/login/verify-email?next=/dashboard");
-    router.refresh();
+    await finishWebPortalSignIn(email);
   }
 
   return (
@@ -207,6 +218,11 @@ export function LoginForm({
               {passwordReset ? (
                 <p className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-900">
                   Password updated. Sign in with your new password.
+                </p>
+              ) : null}
+              {hintMessage ? (
+                <p className="mt-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary">
+                  {hintMessage}
                 </p>
               ) : null}
             </div>

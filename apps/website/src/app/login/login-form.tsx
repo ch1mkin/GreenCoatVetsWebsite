@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
+import { loginHintMessage } from "@/lib/auth/login-hints";
+import { resolveWebsitePublicLoginRoutingAction } from "@/lib/auth/login-routing-actions";
 import { mapLoginError } from "@/lib/auth/map-auth-error";
 
 export function LoginForm({
@@ -24,6 +26,7 @@ export function LoginForm({
   const redirectAfter = (searchParams.get("redirect") ?? "").trim();
   const oauthMode = searchParams.get("oauth") === "google";
   const resetDone = searchParams.get("reset") === "1";
+  const hintMessage = loginHintMessage(searchParams.get("hint"));
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -59,16 +62,33 @@ export function LoginForm({
         }
       }
 
-      const safeRedirect =
-        redirectAfter.startsWith("/") && !redirectAfter.startsWith("//") ? redirectAfter : "/account";
-      router.replace(safeRedirect);
-      router.refresh();
+      await finishWebsitePublicSignIn(() => cancelled);
     })();
 
     return () => {
       cancelled = true;
     };
   }, [invite, oauthMode, redirectAfter, router]);
+
+  async function finishWebsitePublicSignIn(isCancelled?: () => boolean) {
+    const routing = await resolveWebsitePublicLoginRoutingAction();
+    if (isCancelled?.()) return;
+    if (!routing.ok) {
+      setIsSubmitting(false);
+      setError(routing.error);
+      return;
+    }
+    if (routing.kind === "external") {
+      window.location.assign(routing.url);
+      return;
+    }
+
+    const safeRedirect =
+      redirectAfter.startsWith("/") && !redirectAfter.startsWith("//") ? redirectAfter : routing.next;
+    setIsSubmitting(false);
+    router.replace(safeRedirect);
+    router.refresh();
+  }
 
   async function onContinueWithGoogle() {
     setError(null);
@@ -124,11 +144,7 @@ export function LoginForm({
       }
     }
 
-    setIsSubmitting(false);
-    const safeRedirect =
-      redirectAfter.startsWith("/") && !redirectAfter.startsWith("//") ? redirectAfter : "/account";
-    router.push(safeRedirect);
-    router.refresh();
+    await finishWebsitePublicSignIn();
   }
 
   return (
@@ -151,6 +167,9 @@ export function LoginForm({
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
             Password updated. You can sign in with the new password now.
           </p>
+        ) : null}
+        {hintMessage ? (
+          <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">{hintMessage}</p>
         ) : null}
         {redirectAfter === "/book" ? (
           <p className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">

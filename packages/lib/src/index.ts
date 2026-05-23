@@ -46,3 +46,16 @@ export {
   parseJsonFromLlmOutput,
   type InstagramPromptPackFields,
 } from "./parse-llm-json";
+
+export {
+  deriveUserAuthCapabilities,
+  fetchUserAuthCapabilities,
+  type UserAuthCapabilities,
+} from "./user-auth-capabilities";
+
+export {
+  resolveAuthDestination,
+  type AuthAppUrls,
+  type AuthDestinationResult,
+  type AuthLoginSurface,
+} from "./resolve-auth-destination";
