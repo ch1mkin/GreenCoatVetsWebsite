@@ -11,8 +11,10 @@ export async function beginPortalLoginOtpAction(emailHint?: string | null): Prom
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    const lookup = user?.id || user?.email || emailHint || "";
-    const result = await beginPortalEmailOtpForUser(lookup);
+    if (!user?.id) {
+      return { ok: false, error: "Sign in first to request a verification code." };
+    }
+    const result = await beginPortalEmailOtpForUser(user.id, user.email ?? emailHint);
     return { ok: true, sentTo: result.sentTo };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Could not send the verification code." };

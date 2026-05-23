@@ -21,7 +21,7 @@ export async function reconcilePortalStaffAccessForUser(
   });
 
   if (error) {
-    // Fall back to authenticated RPC when service migration is not applied yet.
+    console.error("[reconcile_portal_user_for_oauth]", error.message);
     return { reconciled: false };
   }
 

@@ -20,6 +20,7 @@ export default async function VerifyPortalEmailPage({
     typeof searchParams?.next === "string" && searchParams.next.startsWith("/") && !searchParams.next.startsWith("//")
       ? searchParams.next
       : "/dashboard";
+  const sendCodeOnMount = searchParams?.send === "1";
   const branding = await getPlatformBranding();
 
   return (
@@ -29,7 +30,7 @@ export default async function VerifyPortalEmailPage({
           <div className="mb-6 text-center">
             <p className="font-headline text-sm font-extrabold uppercase tracking-[0.22em] text-primary">{branding.product_name}</p>
           </div>
-          <PortalOtpForm email={user.email} nextPath={nextPath} />
+          <PortalOtpForm email={user.email} nextPath={nextPath} sendCodeOnMount={sendCodeOnMount} />
         </div>
       </main>
     </div>

@@ -26,12 +26,16 @@ export async function resolveWebPortalLoginForUser(
   supabase: SupabaseClient,
   user: User,
 ): Promise<WebPortalLoginRoutingResult> {
+  const email = (user.email ?? "").trim().toLowerCase();
+  const lookupClient = createServiceRoleClient() ?? supabase;
+
+  if (email) {
+    await reconcilePortalStaffAccessForUser(user.id, email);
+  }
   await reconcilePortalStaffAccessWithSessionClient(supabase, user.id, user.email);
 
-  const lookupClient = createServiceRoleClient() ?? supabase;
   let caps = await fetchUserAuthCapabilities(lookupClient, user.id, user.email);
 
-  const email = (user.email ?? "").trim().toLowerCase();
   if (!caps.hasWebPortalAccess && email) {
     const staffEmailRegistered = await emailHasRegisteredStaffAccess(lookupClient, email);
     if (staffEmailRegistered) {

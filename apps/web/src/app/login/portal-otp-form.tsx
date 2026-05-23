@@ -1,21 +1,38 @@
 "use client";
 
-import { FormEvent, useState, useTransition } from "react";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { beginPortalLoginOtpAction, verifyPortalLoginOtpAction } from "./otp-actions";
 
 export function PortalOtpForm({
   email,
   nextPath,
+  sendCodeOnMount = false,
 }: {
   email: string;
   nextPath: string;
+  sendCodeOnMount?: boolean;
 }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const autoSendStarted = useRef(false);
+
+  useEffect(() => {
+    if (!sendCodeOnMount || autoSendStarted.current) return;
+    autoSendStarted.current = true;
+
+    startTransition(async () => {
+      const result = await beginPortalLoginOtpAction(email);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setMessage(`A 4-digit code was sent to ${result.sentTo || email}.`);
+    });
+  }, [sendCodeOnMount, email]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,7 +57,7 @@ export function PortalOtpForm({
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const result = await beginPortalLoginOtpAction();
+      const result = await beginPortalLoginOtpAction(email);
       if (!result.ok) {
         setError(result.error);
         return;

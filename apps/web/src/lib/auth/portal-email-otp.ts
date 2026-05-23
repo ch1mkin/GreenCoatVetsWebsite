@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { getPlatformBranding } from "@/lib/platform-branding";
+import { fetchPlatformBranding } from "@saasclinics/lib";
 import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
 import { renderBrandedEmail } from "@/lib/email/render-branded-email";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
@@ -58,9 +58,12 @@ export async function hasValidPortalOtpCookie(userId: string): Promise<boolean> 
   return crypto.timingSafeEqual(left, right);
 }
 
-export async function beginPortalEmailOtpForUser(emailOrUserId: string): Promise<{ sentTo: string }> {
-  const lookup = emailOrUserId.trim().toLowerCase();
-  if (!lookup) {
+export async function beginPortalEmailOtpForUser(
+  sessionUserId: string,
+  emailHint?: string | null,
+): Promise<{ sentTo: string }> {
+  const userId = sessionUserId.trim();
+  if (!userId) {
     throw new Error("Sign in first to request a verification code.");
   }
   const serviceRole = createServiceRoleClient();
@@ -68,23 +71,27 @@ export async function beginPortalEmailOtpForUser(emailOrUserId: string): Promise
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for web login OTP.");
   }
 
-  const query = serviceRole.from("app_users").select("id, email");
-  const { data: appUser, error: appUserError } = lookup.includes("@")
-    ? await query.eq("email", lookup).maybeSingle()
-    : await query.eq("id", lookup).maybeSingle();
-  if (appUserError || !appUser?.id || !appUser.email) {
-    throw new Error("We could not locate that portal account.");
+  let deliverTo = (emailHint ?? "").trim().toLowerCase();
+  if (!deliverTo) {
+    const { data: authData, error: authError } = await serviceRole.auth.admin.getUserById(userId);
+    if (authError) {
+      throw new Error(authError.message);
+    }
+    deliverTo = authData.user?.email?.trim().toLowerCase() ?? "";
+  }
+  if (!deliverTo) {
+    throw new Error("We could not locate an email address for this account.");
   }
 
   const code = String(Math.floor(1000 + Math.random() * 9000));
   const now = Date.now();
   const expiresAt = new Date(now + OTP_CHALLENGE_TTL_MS).toISOString();
-  const codeHash = hashOtp(appUser.id, code);
+  const codeHash = hashOtp(userId, code);
 
-  await serviceRole.from("web_login_email_otps").delete().eq("user_id", appUser.id).is("consumed_at", null);
+  await serviceRole.from("web_login_email_otps").delete().eq("user_id", userId).is("consumed_at", null);
   const { error: insertError } = await serviceRole.from("web_login_email_otps").insert({
-    user_id: appUser.id,
-    email: appUser.email.toLowerCase(),
+    user_id: userId,
+    email: deliverTo,
     code_hash: codeHash,
     expires_at: expiresAt,
   });
@@ -98,7 +105,7 @@ export async function beginPortalEmailOtpForUser(emailOrUserId: string): Promise
     throw new Error("Hostinger SMTP is not configured on the server.");
   }
 
-  const branding = await getPlatformBranding();
+  const branding = await fetchPlatformBranding(serviceRole);
   const brandName = branding.product_name || "GreenCoatVets";
   const mail = renderBrandedEmail({
     brandName,
@@ -111,14 +118,14 @@ export async function beginPortalEmailOtpForUser(emailOrUserId: string): Promise
 
   await transporter.sendMail({
     from,
-    to: appUser.email.toLowerCase(),
+    to: deliverTo,
     subject: `${brandName} login verification code`,
     text: mail.text,
     html: mail.html,
   });
 
   clearPortalOtpCookie();
-  return { sentTo: appUser.email.toLowerCase() };
+  return { sentTo: deliverTo };
 }
 
 export async function verifyPortalEmailOtpForCurrentUser(code: string): Promise<void> {
