@@ -24,7 +24,7 @@ async function resolveWebsiteLoginRouting(
 
   try {
     const lookupClient = createServiceRoleClient() ?? supabase;
-    const caps = await fetchUserAuthCapabilities(lookupClient, user.id);
+    const caps = await fetchUserAuthCapabilities(lookupClient, user.id, user.email);
     const destination = resolveAuthDestination(surface, caps, getAuthAppUrls());
 
     if (destination.outcome === "continue") {

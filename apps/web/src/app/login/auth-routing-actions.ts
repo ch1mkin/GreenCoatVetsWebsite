@@ -21,8 +21,14 @@ export async function resolveWebPortalLoginRoutingAction(): Promise<WebPortalLog
   }
 
   try {
+    try {
+      await supabase.rpc("reconcile_portal_auth_user_by_email");
+    } catch {
+      // RPC available after migration 20260519150000 is applied.
+    }
+
     const lookupClient = createServiceRoleClient() ?? supabase;
-    const caps = await fetchUserAuthCapabilities(lookupClient, user.id);
+    const caps = await fetchUserAuthCapabilities(lookupClient, user.id, user.email);
     const destination = resolveAuthDestination("web_portal", caps, getAuthAppUrls());
 
     if (destination.outcome === "continue") {

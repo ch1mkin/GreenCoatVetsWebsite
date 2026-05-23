@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
 import { loginHintMessage } from "@/lib/auth/login-hints";
+import { getWebAppOrigin } from "@/lib/auth/web-app-origin";
 import { resolveWebPortalLoginRoutingAction } from "./auth-routing-actions";
 import { beginPortalLoginOtpAction } from "./otp-actions";
 
@@ -102,7 +103,7 @@ export function LoginForm({
 
     const supabase = createClient();
     const nextPath = invite ? `/login?oauth=google&invite=${encodeURIComponent(invite)}` : "/login?oauth=google";
-    const redirectTo = new URL("/auth/callback", window.location.origin);
+    const redirectTo = new URL("/auth/callback", getWebAppOrigin());
     redirectTo.searchParams.set("next", nextPath);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",

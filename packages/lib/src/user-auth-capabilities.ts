@@ -41,6 +41,7 @@ export function deriveUserAuthCapabilities(isSuperAdmin: boolean, activeRoles: s
 export async function fetchUserAuthCapabilities(
   supabase: SupabaseClient,
   userId: string,
+  email?: string | null,
 ): Promise<UserAuthCapabilities> {
   const [{ data: superAdmin }, { data: memberships, error: membershipError }, { data: staffRows, error: staffError }] =
     await Promise.all([
@@ -59,5 +60,21 @@ export async function fetchUserAuthCapabilities(
   const membershipRoles = (memberships ?? []).map((row) => String(row.role));
   const staffRoles = (staffRows ?? []).map((row) => String(row.role));
   const roles = Array.from(new Set([...membershipRoles, ...staffRoles]));
-  return deriveUserAuthCapabilities(Boolean(superAdmin), roles);
+  let caps = deriveUserAuthCapabilities(Boolean(superAdmin), roles);
+
+  const normalizedEmail = (email ?? "").trim().toLowerCase();
+  if (!caps.hasWebPortalAccess && normalizedEmail) {
+    try {
+      const { data: byEmail, error: emailRpcError } = await supabase.rpc("email_has_web_portal_access", {
+        p_email: normalizedEmail,
+      });
+      if (!emailRpcError && byEmail === true) {
+        caps = { ...caps, hasWebPortalAccess: true };
+      }
+    } catch {
+      // RPC available after migration 20260519150000 is applied.
+    }
+  }
+
+  return caps;
 }
