@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@openrouter/sdk": "^0.12.35",
     "@saasclinics/lib": "file:../../packages/lib",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.3",

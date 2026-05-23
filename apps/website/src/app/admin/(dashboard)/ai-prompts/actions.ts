@@ -1,11 +1,11 @@
 "use server";
 
-import { parseInstagramPromptPackFromText, type InstagramPromptPackFields } from "@saasclinics/lib";
 import {
-  DEEPSEEK_V4_FLASH_MODEL,
-  streamDeepSeekV4FlashChat,
-  type V4FlashChatMessage,
-} from "@/lib/openrouter/v4-flash-stream";
+  DEFAULT_OPENROUTER_MODEL,
+  parseInstagramPromptPackFromText,
+  requestOpenRouterChatWithFallbacks,
+  type InstagramPromptPackFields,
+} from "@saasclinics/lib";
 import { requireAdmin } from "@/lib/admin/auth";
 
 export type InstagramPromptRequest = {
@@ -34,7 +34,9 @@ function finalizePromptPack(pack: InstagramPromptPackFields): InstagramPromptPac
   };
 }
 
-function buildLabeledMessages(input: InstagramPromptRequest): V4FlashChatMessage[] {
+type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+function buildLabeledMessages(input: InstagramPromptRequest): ChatMessage[] {
   const clinicName = input.clinicName?.trim() || "GreenCoatVets";
   const theme = input.theme.trim();
   const audience = input.audience?.trim() || "pet parents in India";
@@ -86,7 +88,7 @@ function buildLabeledMessages(input: InstagramPromptRequest): V4FlashChatMessage
   ];
 }
 
-function buildJsonMessages(input: InstagramPromptRequest): V4FlashChatMessage[] {
+function buildJsonMessages(input: InstagramPromptRequest): ChatMessage[] {
   const clinicName = input.clinicName?.trim() || "GreenCoatVets";
   const theme = input.theme.trim();
   const audience = input.audience?.trim() || "pet parents in India";
@@ -121,10 +123,18 @@ function buildJsonMessages(input: InstagramPromptRequest): V4FlashChatMessage[] 
 
 async function tryGeneratePack(
   apiKey: string,
-  messages: V4FlashChatMessage[],
+  messages: ChatMessage[],
   temperature: number,
+  jsonMode: boolean,
 ): Promise<{ ok: true; pack: InstagramPromptPack; model: string } | { ok: false; error: string }> {
-  const completion = await streamDeepSeekV4FlashChat({ apiKey, messages, temperature });
+  const completion = await requestOpenRouterChatWithFallbacks({
+    apiKey,
+    model: process.env.OPENROUTER_MODEL,
+    messages,
+    max_tokens: 3600,
+    temperature,
+    jsonMode,
+  });
 
   if (!completion.ok) {
     return { ok: false, error: completion.error };
@@ -148,7 +158,7 @@ async function tryGeneratePack(
 export async function generateInstagramPromptPack(
   input: InstagramPromptRequest,
 ): Promise<GenerateInstagramPromptPackResult> {
-  const model = DEEPSEEK_V4_FLASH_MODEL;
+  const model = process.env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL;
 
   try {
     await requireAdmin();
@@ -161,14 +171,14 @@ export async function generateInstagramPromptPack(
       return { ok: false, error: "Missing OPENROUTER_API_KEY in environment.", model };
     }
 
-    const strategies: Array<{ messages: V4FlashChatMessage[]; temperature: number }> = [
-      { messages: buildLabeledMessages(input), temperature: 0.5 },
-      { messages: buildJsonMessages(input), temperature: 0.3 },
+    const strategies: Array<{ messages: ChatMessage[]; temperature: number; jsonMode: boolean }> = [
+      { messages: buildLabeledMessages(input), temperature: 0.5, jsonMode: false },
+      { messages: buildJsonMessages(input), temperature: 0.3, jsonMode: true },
     ];
 
     let lastError = "Failed to generate prompt.";
     for (const strategy of strategies) {
-      const result = await tryGeneratePack(apiKey, strategy.messages, strategy.temperature);
+      const result = await tryGeneratePack(apiKey, strategy.messages, strategy.temperature, strategy.jsonMode);
       if (result.ok) {
         return { ok: true, pack: result.pack, model: result.model };
       }

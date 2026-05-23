@@ -3,7 +3,52 @@ export const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash:free";
 export const OPENROUTER_MODEL_FALLBACKS = [
   "deepseek/deepseek-v4-flash:free",
   "deepseek/deepseek-r1-0528",
+  "google/gemini-2.5-flash-preview",
+  "meta-llama/llama-3.3-70b-instruct:free",
 ] as const;
+
+function openRouterRequestHeaders(apiKey: string): Record<string, string> {
+  const referer =
+    process.env.NEXT_PUBLIC_WEBSITE_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_WEB_APP_URL?.trim() ||
+    "https://www.greencoatvets.com";
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": referer.replace(/\/$/, ""),
+    "X-Title": "GreenCoatVets",
+  };
+}
+
+function isRetryableOpenRouterError(message: string): boolean {
+  return /no content|empty|non-json|reasoning is mandatory|cannot be disabled|provider returned error|invalid_request_error|rate limit|overloaded|temporarily unavailable/i.test(
+    message,
+  );
+}
+
+function extractOpenRouterErrorMessage(payload: { error?: { message?: string } }, raw: string, status: number): string {
+  const direct = payload.error?.message?.trim();
+  if (direct) return direct;
+
+  const providerMatch = raw.match(/Provider returned error[^{]*(\{[\s\S]*\})/i);
+  if (providerMatch?.[1]) {
+    try {
+      const nested = JSON.parse(providerMatch[1]) as { error?: { message?: string }; message?: string };
+      const nestedMessage = nested.error?.message ?? nested.message;
+      if (nestedMessage?.trim()) return nestedMessage.trim();
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  if (status === 401) return "Invalid OpenRouter API key.";
+  if (status === 402) return "OpenRouter credits exhausted. Add credits or choose a free model.";
+  if (status === 429) return "OpenRouter rate limit reached. Wait a moment and try again.";
+
+  const trimmed = raw.trim();
+  if (trimmed) return trimmed.slice(0, 400);
+  return "AI generation failed.";
+}
 
 type MessageContentPart = { type?: string; text?: string };
 
@@ -123,10 +168,7 @@ async function postOpenRouterChatCompletion(
   const model = String(body.model ?? "");
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: openRouterRequestHeaders(apiKey),
     body: JSON.stringify(body),
   });
 
@@ -170,7 +212,11 @@ export async function requestOpenRouterChatCompletion(
   }
 
   if (!attempt.ok) {
-    return { ok: false, model, error: attempt.payload.error?.message ?? "AI generation failed." };
+    return {
+      ok: false,
+      model,
+      error: extractOpenRouterErrorMessage(attempt.payload, attempt.raw, attempt.status),
+    };
   }
 
   const text = extractOpenRouterMessageText(attempt.payload.choices?.[0]?.message, { preferJson: input.jsonMode });
@@ -193,7 +239,7 @@ export async function requestOpenRouterChatWithFallbacks(
     const result = await requestOpenRouterChatCompletion({ ...input, model });
     if (result.ok) return result;
     lastError = result.error;
-    if (!/no content|empty|non-json|reasoning is mandatory|cannot be disabled/i.test(result.error)) break;
+    if (!isRetryableOpenRouterError(result.error)) break;
   }
 
   return { ok: false, model: primary, error: lastError };
