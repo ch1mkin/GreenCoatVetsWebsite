@@ -28,6 +28,14 @@ export function LoginForm({
   const oauthMode = searchParams.get("oauth") === "google";
   const passwordReset = searchParams.get("reset") === "1";
   const hintMessage = loginHintMessage(searchParams.get("hint"));
+  const oauthErrorCode = searchParams.get("error");
+  const oauthErrorMessage = searchParams.get("message");
+
+  useEffect(() => {
+    if (oauthErrorCode) {
+      setError(oauthErrorMessage ?? mapAuthError(oauthErrorCode));
+    }
+  }, [oauthErrorCode, oauthErrorMessage]);
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -37,15 +45,26 @@ export function LoginForm({
       setError(null);
       setIsSubmitting(true);
       const supabase = createClient();
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
 
-      if (cancelled) return;
-      if (sessionError || !session?.user) {
+      let user = null;
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const { data, error: userError } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (userError) {
+          setIsSubmitting(false);
+          setError(mapAuthError(userError.message));
+          return;
+        }
+        if (data.user) {
+          user = data.user;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      if (!user) {
         setIsSubmitting(false);
-        setError(sessionError ? mapAuthError(sessionError.message) : "Google sign-in could not be completed.");
+        setError("Google sign-in could not be completed. Please try again.");
         return;
       }
 
@@ -63,7 +82,7 @@ export function LoginForm({
         }
       }
 
-      await finishWebPortalSignIn(session.user.email ?? "", () => cancelled);
+      await finishWebPortalSignIn(user.email ?? "", () => cancelled);
     })();
 
     return () => {

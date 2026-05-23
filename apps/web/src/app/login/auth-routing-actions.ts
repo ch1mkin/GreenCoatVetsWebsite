@@ -1,8 +1,6 @@
 "use server";
 
-import { fetchUserAuthCapabilities, resolveAuthDestination } from "@saasclinics/lib";
-import { getAuthAppUrls } from "@/lib/auth/app-urls";
-import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { resolveWebPortalLoginForUser } from "@/lib/auth/resolve-web-portal-login";
 import { createClient } from "@/lib/supabase/server";
 
 export type WebPortalLoginRoutingResult =
@@ -21,27 +19,11 @@ export async function resolveWebPortalLoginRoutingAction(): Promise<WebPortalLog
   }
 
   try {
-    try {
-      await supabase.rpc("reconcile_portal_auth_user_by_email");
-    } catch {
-      // RPC available after migration 20260519150000 is applied.
-    }
-
-    const lookupClient = createServiceRoleClient() ?? supabase;
-    const caps = await fetchUserAuthCapabilities(lookupClient, user.id, user.email);
-    const destination = resolveAuthDestination("web_portal", caps, getAuthAppUrls());
-
-    if (destination.outcome === "continue") {
-      return { ok: true, kind: "otp", next: destination.nextPath };
-    }
-
-    if (destination.outcome === "redirect_external") {
+    const result = await resolveWebPortalLoginForUser(supabase, user);
+    if (!result.ok || result.kind === "external") {
       await supabase.auth.signOut();
-      return { ok: true, kind: "external", url: destination.url };
     }
-
-    await supabase.auth.signOut();
-    return { ok: false, error: destination.message };
+    return result;
   } catch (error) {
     return {
       ok: false,
