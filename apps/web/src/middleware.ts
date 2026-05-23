@@ -10,7 +10,7 @@ function redirectOAuthCodeToCallback(request: NextRequest): NextResponse | null 
   const callback = request.nextUrl.clone();
   callback.pathname = "/auth/callback";
   if (!callback.searchParams.get("next")) {
-    callback.searchParams.set("next", "/login?oauth=google");
+    callback.searchParams.set("next", "/login");
   }
   return NextResponse.redirect(callback);
 }

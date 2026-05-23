@@ -12,7 +12,7 @@ function redirectOAuthCodeToWebPortal(request: NextRequest): NextResponse | null
   const next = request.nextUrl.searchParams.get("next");
   webCallback.searchParams.set(
     "next",
-    next && next.startsWith("/") && !next.startsWith("//") ? next : "/login?oauth=google",
+    next && next.startsWith("/") && !next.startsWith("//") ? next : "/login",
   );
   return NextResponse.redirect(webCallback);
 }

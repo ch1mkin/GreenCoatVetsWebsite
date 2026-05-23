@@ -25,7 +25,6 @@ export function LoginForm({
   const router = useRouter();
   const searchParams = useSearchParams();
   const invite = (searchParams.get("invite") ?? "").trim();
-  const oauthMode = searchParams.get("oauth") === "google";
   const passwordReset = searchParams.get("reset") === "1";
   const hintMessage = loginHintMessage(searchParams.get("hint"));
   const oauthErrorCode = searchParams.get("error");
@@ -66,67 +65,15 @@ export function LoginForm({
     [router],
   );
 
-  useEffect(() => {
-    if (!oauthMode) return;
-    let cancelled = false;
-
-    (async () => {
-      setError(null);
-      setIsSubmitting(true);
-      const supabase = createClient();
-
-      let user = null;
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const { data, error: userError } = await supabase.auth.getUser();
-        if (cancelled) return;
-        if (userError) {
-          setIsSubmitting(false);
-          setError(mapAuthError(userError.message));
-          return;
-        }
-        if (data.user) {
-          user = data.user;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-
-      if (!user) {
-        setIsSubmitting(false);
-        setError("Google sign-in could not be completed. Please try again.");
-        return;
-      }
-
-      if (invite) {
-        const { error: inviteError } = await supabase.rpc("consume_clinic_role_invite", {
-          p_token: invite,
-          p_full_name: null,
-          p_phone: null,
-        });
-        if (cancelled) return;
-        if (inviteError) {
-          setIsSubmitting(false);
-          setError(mapAuthError(inviteError.message));
-          return;
-        }
-      }
-
-      await finishWebPortalSignIn(user.email ?? "", () => cancelled);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [invite, oauthMode, finishWebPortalSignIn]);
-
   async function onContinueWithGoogle() {
     setError(null);
     setIsSubmitting(true);
 
     const supabase = createClient();
-    const nextPath = invite ? `/login?oauth=google&invite=${encodeURIComponent(invite)}` : "/login?oauth=google";
     const redirectTo = new URL("/auth/callback", getWebAppOrigin());
-    redirectTo.searchParams.set("next", nextPath);
+    if (invite) {
+      redirectTo.searchParams.set("invite", invite);
+    }
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {

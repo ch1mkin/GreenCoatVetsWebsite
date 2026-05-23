@@ -50,15 +50,8 @@ export async function fetchUserAuthCapabilities(
       supabase.from("staff_profiles").select("role").eq("user_id", userId).eq("is_active", true),
     ]);
 
-  if (membershipError) {
-    throw new Error(membershipError.message);
-  }
-  if (staffError) {
-    throw new Error(staffError.message);
-  }
-
-  const membershipRoles = (memberships ?? []).map((row) => String(row.role));
-  const staffRoles = (staffRows ?? []).map((row) => String(row.role));
+  const membershipRoles = membershipError ? [] : (memberships ?? []).map((row) => String(row.role));
+  const staffRoles = staffError ? [] : (staffRows ?? []).map((row) => String(row.role));
   const roles = Array.from(new Set([...membershipRoles, ...staffRoles]));
   let caps = deriveUserAuthCapabilities(Boolean(superAdmin), roles);
 

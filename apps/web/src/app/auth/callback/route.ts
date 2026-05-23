@@ -1,12 +1,36 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { beginPortalEmailOtpForUser } from "@/lib/auth/portal-email-otp";
 import { resolveWebPortalLoginForUser } from "@/lib/auth/resolve-web-portal-login";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 
+type PendingAuthCookie = { name: string; value: string; options?: CookieOptions };
+
 function safeNextPath(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/login?oauth=google";
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/login";
   return next;
+}
+
+function redirectWithAuthCookies(request: NextRequest, redirectTo: URL, cookies: PendingAuthCookie[]) {
+  const response = NextResponse.redirect(redirectTo);
+  cookies.forEach(({ name, value, options }) => {
+    response.cookies.set(name, value, options);
+  });
+  return response;
+}
+
+function loginErrorRedirect(
+  request: NextRequest,
+  cookies: PendingAuthCookie[],
+  error: string,
+  message?: string,
+) {
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("error", error);
+  if (message) {
+    loginUrl.searchParams.set("message", message.slice(0, 240));
+  }
+  return redirectWithAuthCookies(request, loginUrl, cookies);
 }
 
 export async function GET(request: NextRequest) {
@@ -17,7 +41,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, request.url));
   }
 
-  const sessionResponse = NextResponse.redirect(new URL("/login", request.url));
+  const pendingCookies: PendingAuthCookie[] = [];
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -25,64 +49,79 @@ export async function GET(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => sessionResponse.cookies.set(name, value, options));
+        cookiesToSet.forEach((cookie) => {
+          pendingCookies.push(cookie);
+        });
       },
     },
   });
 
-  function redirectWithSession(url: URL) {
-    const nextResponse = NextResponse.redirect(url);
-    sessionResponse.cookies.getAll().forEach((cookie) => {
-      nextResponse.cookies.set(cookie);
-    });
-    return nextResponse;
-  }
-
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-  if (exchangeError) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "oauth_exchange_failed");
-    return redirectWithSession(loginUrl);
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "oauth_no_user");
-    return redirectWithSession(loginUrl);
-  }
-
-  const routing = await resolveWebPortalLoginForUser(supabase, user);
-
-  if (routing.ok && routing.kind === "external") {
-    await supabase.auth.signOut();
-    return redirectWithSession(new URL(routing.url));
-  }
-
-  if (!routing.ok) {
-    await supabase.auth.signOut();
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("error", "portal_access_denied");
-    loginUrl.searchParams.set("message", routing.error.slice(0, 240));
-    return redirectWithSession(loginUrl);
-  }
-
   try {
-    await beginPortalEmailOtpForUser(user.id);
-  } catch (otpError) {
-    await supabase.auth.signOut();
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set(
-      "error",
-      otpError instanceof Error ? otpError.message : "Could not send verification code.",
-    );
-    return redirectWithSession(loginUrl);
-  }
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      return loginErrorRedirect(request, pendingCookies, "oauth_exchange_failed");
+    }
 
-  const verifyUrl = new URL("/login/verify-email", request.url);
-  verifyUrl.searchParams.set("next", routing.next);
-  return redirectWithSession(verifyUrl);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return loginErrorRedirect(request, pendingCookies, "oauth_no_user");
+    }
+
+    let routing;
+    try {
+      routing = await resolveWebPortalLoginForUser(supabase, user);
+    } catch (routingError) {
+      await supabase.auth.signOut();
+      const message =
+        routingError instanceof Error ? routingError.message : "Could not verify account access.";
+      return loginErrorRedirect(request, pendingCookies, "portal_access_denied", message);
+    }
+
+    if (routing.ok && routing.kind === "external") {
+      await supabase.auth.signOut();
+      return redirectWithAuthCookies(request, new URL(routing.url), pendingCookies);
+    }
+
+    if (!routing.ok) {
+      await supabase.auth.signOut();
+      return loginErrorRedirect(request, pendingCookies, "portal_access_denied", routing.error);
+    }
+
+    const invite = (request.nextUrl.searchParams.get("invite") ?? "").trim();
+    if (invite) {
+      const { error: inviteError } = await supabase.rpc("consume_clinic_role_invite", {
+        p_token: invite,
+        p_full_name: null,
+        p_phone: null,
+      });
+      if (inviteError) {
+        await supabase.auth.signOut();
+        return loginErrorRedirect(request, pendingCookies, "portal_access_denied", inviteError.message);
+      }
+    }
+
+    try {
+      await beginPortalEmailOtpForUser(user.id);
+    } catch (otpError) {
+      await supabase.auth.signOut();
+      const message =
+        otpError instanceof Error ? otpError.message : "Could not send verification code.";
+      return loginErrorRedirect(request, pendingCookies, "otp_send_failed", message);
+    }
+
+    const verifyUrl = new URL("/login/verify-email", request.url);
+    verifyUrl.searchParams.set("next", routing.next);
+    return redirectWithAuthCookies(request, verifyUrl, pendingCookies);
+  } catch (error) {
+    console.error("[auth/callback] Google sign-in failed:", error);
+    return loginErrorRedirect(
+      request,
+      pendingCookies,
+      "oauth_callback_failed",
+      "Google sign-in could not be completed. Please try again.",
+    );
+  }
 }

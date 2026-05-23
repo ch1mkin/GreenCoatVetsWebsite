@@ -29,13 +29,17 @@ function signCookieValue(userId: string, expiresAtMs: number): string {
 }
 
 function clearPortalOtpCookie() {
-  cookies().set(OTP_COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: new Date(0),
-  });
+  try {
+    cookies().set(OTP_COOKIE_NAME, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: new Date(0),
+    });
+  } catch {
+    // Route handlers set cookies on NextResponse; ignore if cookie store is read-only.
+  }
 }
 
 export async function hasValidPortalOtpCookie(userId: string): Promise<boolean> {

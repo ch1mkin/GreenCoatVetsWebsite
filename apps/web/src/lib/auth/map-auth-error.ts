@@ -7,5 +7,17 @@ export function mapAuthError(message: string): string {
     return "Doctor onboarding requires working hours. Please fill them and try again.";
   }
   if (m.includes("invalid or expired invite")) return "Invite is invalid or expired.";
+  if (m === "oauth_exchange_failed") {
+    return "Google sign-in expired or was already used. Please try again.";
+  }
+  if (m === "oauth_no_user") {
+    return "Google sign-in did not return an account. Please try again.";
+  }
+  if (m === "oauth_callback_failed") {
+    return "Google sign-in could not be completed. Please try again.";
+  }
+  if (m === "otp_send_failed") {
+    return "Signed in with Google, but we could not email your verification code. Check server email settings or try password sign-in.";
+  }
   return message;
 }
