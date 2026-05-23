@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL(next, request.url));
   }
 
-  let sessionResponse = NextResponse.redirect(new URL("/login", request.url));
+  const sessionResponse = NextResponse.redirect(new URL("/login", request.url));
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {

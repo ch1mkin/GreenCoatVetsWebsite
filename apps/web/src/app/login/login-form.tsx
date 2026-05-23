@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -36,6 +36,35 @@ export function LoginForm({
       setError(oauthErrorMessage ?? mapAuthError(oauthErrorCode));
     }
   }, [oauthErrorCode, oauthErrorMessage]);
+
+  const finishWebPortalSignIn = useCallback(
+    async (emailHint: string, isCancelled?: () => boolean) => {
+      const routing = await resolveWebPortalLoginRoutingAction();
+      if (isCancelled?.()) return;
+      if (!routing.ok) {
+        setIsSubmitting(false);
+        setError(routing.error);
+        return;
+      }
+      if (routing.kind === "external") {
+        window.location.assign(routing.url);
+        return;
+      }
+
+      const otpResult = await beginPortalLoginOtpAction(emailHint);
+      if (isCancelled?.()) return;
+      if (!otpResult.ok) {
+        setIsSubmitting(false);
+        setError(otpResult.error);
+        return;
+      }
+
+      setIsSubmitting(false);
+      router.replace(`/login/verify-email?next=${encodeURIComponent(routing.next)}`);
+      router.refresh();
+    },
+    [router],
+  );
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -88,33 +117,7 @@ export function LoginForm({
     return () => {
       cancelled = true;
     };
-  }, [invite, oauthMode, router]);
-
-  async function finishWebPortalSignIn(emailHint: string, isCancelled?: () => boolean) {
-    const routing = await resolveWebPortalLoginRoutingAction();
-    if (isCancelled?.()) return;
-    if (!routing.ok) {
-      setIsSubmitting(false);
-      setError(routing.error);
-      return;
-    }
-    if (routing.kind === "external") {
-      window.location.assign(routing.url);
-      return;
-    }
-
-    const otpResult = await beginPortalLoginOtpAction(emailHint);
-    if (isCancelled?.()) return;
-    if (!otpResult.ok) {
-      setIsSubmitting(false);
-      setError(otpResult.error);
-      return;
-    }
-
-    setIsSubmitting(false);
-    router.replace(`/login/verify-email?next=${encodeURIComponent(routing.next)}`);
-    router.refresh();
-  }
+  }, [invite, oauthMode, finishWebPortalSignIn]);
 
   async function onContinueWithGoogle() {
     setError(null);
