@@ -1,10 +1,10 @@
 import type { MetadataRoute } from "next";
 import { getMarketingSiteSettings } from "@/lib/marketing/get-marketing-site";
-import { getWebsitePublicBaseUrl } from "@/lib/seo/public-site-url";
+import { getWebsitePublicBaseUrlFromRequest } from "@/lib/seo/public-site-url";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const marketing = await getMarketingSiteSettings();
-  const base = getWebsitePublicBaseUrl(marketing.seo_settings);
+  const base = await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings);
 
   return {
     rules: [

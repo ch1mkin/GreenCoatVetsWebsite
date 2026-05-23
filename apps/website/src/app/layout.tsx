@@ -9,7 +9,7 @@ import { getActiveMarketingPopups } from "@/lib/marketing/popups";
 import { StoreProviders } from "@/components/store/store-providers";
 import { buildPlatformIcons } from "@saasclinics/lib";
 import { getPlatformBranding } from "@/lib/platform-branding";
-import { getWebsitePublicBaseUrl } from "@/lib/seo/public-site-url";
+import { getWebsitePublicBaseUrlFromRequest } from "@/lib/seo/public-site-url";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,7 +25,7 @@ const manrope = Manrope({
 
 export async function generateMetadata(): Promise<Metadata> {
   const [branding, marketing] = await Promise.all([getPlatformBranding(), getMarketingSiteSettings()]);
-  const metadataBase = new URL(getWebsitePublicBaseUrl(marketing.seo_settings));
+  const metadataBase = new URL(await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings));
   const verification = marketing.seo_settings.google_site_verification?.trim();
 
   return {

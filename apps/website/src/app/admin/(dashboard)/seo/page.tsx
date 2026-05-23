@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireSuperAdmin } from "@/lib/admin/auth";
 import { getMarketingSiteSettings } from "@/lib/marketing/get-marketing-site";
 import { buildMarketingSitemapEntries, sitemapEntriesToXml } from "@/lib/seo/build-sitemap-entries";
-import { getWebsitePublicBaseUrl } from "@/lib/seo/public-site-url";
+import { DEFAULT_PUBLIC_WEBSITE_ORIGIN, getWebsitePublicBaseUrlFromRequest } from "@/lib/seo/public-site-url";
 import { AdminSubmitButton } from "@/components/admin/admin-submit-button";
 import { recordSitemapPingAction, updateMarketingSeoSettings } from "../actions";
 
@@ -14,7 +14,7 @@ export default async function AdminSeoPage({
   await requireSuperAdmin();
   const sp = searchParams ?? {};
   const marketing = await getMarketingSiteSettings();
-  const base = getWebsitePublicBaseUrl(marketing.seo_settings);
+  const base = await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings);
   const sitemapUrl = `${base}/sitemap.xml`;
   const robotsUrl = `${base}/robots.txt`;
   const entries = await buildMarketingSitemapEntries();
@@ -114,8 +114,8 @@ export default async function AdminSeoPage({
               defaultValue={seo.public_site_url ?? ""}
             />
             <span className="mt-1 block text-xs text-slate-500">
-              Used for absolute sitemap URLs and canonical links. Leave empty to use{" "}
-              <code className="rounded bg-slate-100 px-1">NEXT_PUBLIC_WEBSITE_APP_URL</code>.
+              Used for absolute sitemap URLs and canonical links. Leave empty to use the live site host or{" "}
+              <code className="rounded bg-slate-100 px-1">{DEFAULT_PUBLIC_WEBSITE_ORIGIN}</code> in production.
             </span>
           </label>
           <label className="block text-sm">
