@@ -7,13 +7,20 @@ import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/web/submit-button";
 
-export default async function CompleteProfilePage() {
+export default async function CompleteProfilePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>;
+}) {
   const access = await getUserAccess();
   const supabase = createClient();
   const state = await getProfileCompletionState(supabase, access);
   if (state.complete) {
     redirect("/dashboard");
   }
+
+  const sp = await Promise.resolve(searchParams ?? {});
+  const errorMessage = typeof sp.error === "string" ? decodeURIComponent(sp.error) : null;
 
   const role = (access.membership?.role ?? "pet_owner") as Parameters<typeof getRoleNavGroups>[0];
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
@@ -26,6 +33,11 @@ export default async function CompleteProfilePage() {
       navGroups={navGroups}
     >
       <section className="card-soft mx-auto max-w-lg space-y-4">
+        {errorMessage ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
         {state.kind === "owner" ? (
           <form action={saveOwnerProfileCompletion} className="space-y-3">
             <div className="grid gap-2 sm:grid-cols-2">

@@ -41,6 +41,10 @@ export async function getProfileCompletionState(
     return { complete: true, kind: "skipped" };
   }
 
+  if (role === "marketing_editor") {
+    return { complete: true, kind: "skipped" };
+  }
+
   if (role === "pet_owner") {
     const { data: owner } = await supabase
       .from("owners")
@@ -59,14 +63,24 @@ export async function getProfileCompletionState(
     return { complete: nameOk && phoneOk, kind: "owner" };
   }
 
-  const { data: sp } = await supabase
+  const { data: spRows, error: spError } = await supabase
     .from("staff_profiles")
-    .select("full_name, phone")
+    .select("full_name, phone, role")
     .eq("user_id", access.userId)
     .eq("clinic_id", clinicId)
-    .eq("role", role)
     .eq("is_active", true)
-    .maybeSingle();
+    .is("branch_id", null)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+
+  if (spError) {
+    return { complete: false, kind: "staff" };
+  }
+
+  const sp =
+    spRows?.find((row) => row.role === role) ??
+    spRows?.[0] ??
+    null;
 
   if (!sp) {
     return { complete: false, kind: "staff" };
