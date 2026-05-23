@@ -102,6 +102,7 @@ export function VisitPhotoSheetReport({
       {showPhoneCapture ? (
         <VisitPhoneCapturePanel
           visitId={visitId}
+          sessionKey={visitId}
           variant="photo-sheet"
           onUploaded={() => void checkLatestAttachment()}
         />

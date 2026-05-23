@@ -49,10 +49,18 @@ export function VisitDocumentationTabs({
   const tabParam = searchParams.get("doc");
   const activeTab = isVisitDocTab(tabParam) ? tabParam : defaultTab;
   const [switchingTo, setSwitchingTo] = useState<VisitDocumentationTab | null>(null);
+  const [photoMountKey, setPhotoMountKey] = useState(1);
+
+  useEffect(() => {
+    setPhotoMountKey((key) => key + 1);
+  }, [visitId]);
 
   const setTab = useCallback(
     (tab: VisitDocumentationTab) => {
       if (tab === activeTab) return;
+      if (tab === "photo") {
+        setPhotoMountKey((key) => key + 1);
+      }
       setSwitchingTo(tab);
       const params = new URLSearchParams(searchParams.toString());
       params.set("doc", tab);
@@ -111,7 +119,7 @@ export function VisitDocumentationTabs({
       ) : (
         <>
           {activeTab === "form" ? formPanel : null}
-          {activeTab === "photo" ? photoPanel : null}
+          {activeTab === "photo" ? <div key={`photo-panel-${visitId}-${photoMountKey}`}>{photoPanel}</div> : null}
           {activeTab === "digital" ? digitalPanel : null}
         </>
       )}

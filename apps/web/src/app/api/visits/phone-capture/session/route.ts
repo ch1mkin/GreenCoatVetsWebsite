@@ -66,10 +66,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Visit not found." }, { status: 404 });
   }
 
-  if (visit.completed_at) {
-    return NextResponse.json({ error: "This visit is already completed." }, { status: 400 });
-  }
-
   const expiresAt = new Date(Date.now() + PHONE_CAPTURE_SESSION_TTL_MS).toISOString();
   const { token, tokenHash } = generatePhoneCaptureToken();
 
@@ -95,9 +91,12 @@ export async function POST(request: Request) {
 
   const captureUrl = `${webAppOrigin()}/visit-capture/${token}`;
 
+  const issuedAt = Date.now();
+
   return NextResponse.json({
     captureUrl,
     expiresAt,
-    qrImageUrl: `/api/visits/phone-capture/qr?url=${encodeURIComponent(captureUrl)}`,
+    issuedAt,
+    qrImageUrl: `/api/visits/phone-capture/qr?url=${encodeURIComponent(captureUrl)}&t=${issuedAt}`,
   });
 }
