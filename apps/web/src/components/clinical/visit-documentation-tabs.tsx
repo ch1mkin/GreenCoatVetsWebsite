@@ -16,7 +16,7 @@ const TABS: Array<{ id: VisitDocumentationTab; label: string; hint: string; load
   {
     id: "photo",
     label: "Photo sheet",
-    hint: "Write on paper, scan with phone or camera, save as PDF report",
+    hint: "Write on paper, photograph with phone or camera, save as PDF report",
     loadingMessage: "Opening photo sheet…",
   },
   {

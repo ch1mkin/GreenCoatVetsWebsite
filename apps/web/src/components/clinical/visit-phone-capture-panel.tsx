@@ -59,7 +59,7 @@ export function VisitPhoneCapturePanel({
   const title = variant === "photo-sheet" ? "Phone camera — photo sheet" : "Phone camera (doctor)";
   const description =
     variant === "photo-sheet"
-      ? "Scan this QR on your phone while this visit is open on your laptop. Each photo appears in the scan preview below — then save as the visit PDF."
+      ? "Scan this QR on your phone while this visit is open on your laptop. The original photo appears below — then save as the visit PDF."
       : "Scan this QR on your phone while this visit is open on your laptop. Photos upload straight into this visit's attachments.";
 
   return (
