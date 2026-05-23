@@ -57,9 +57,9 @@ export default async function AdminHomePage() {
             href="/admin/ai-prompts"
             className="block rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
           >
-            <h2 className="font-headline text-lg font-bold text-primary">Instagram AI prompts</h2>
+            <h2 className="font-headline text-lg font-bold text-primary">Instagram post prompts</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Generate trending post angles plus a Gemini-ready 2D illustration prompt for marketing creatives.
+              Build caption ideas and a Gemini-ready flat-vector illustration prompt from your scene and style inputs.
             </p>
           </Link>
         </li>

@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ILLUSTRATION_STYLE_OPTIONS } from "@/lib/marketing/build-instagram-prompt-pack";
 import { generateInstagramPromptPack, type InstagramPromptPack } from "./actions";
 
 const GEMINI_URL = "https://gemini.google.com/app";
 
 type FormState = {
   clinicName: string;
-  theme: string;
+  scene: string;
+  illustrationStyle: string;
+  colorPalette: string;
+  backgroundColor: string;
   audience: string;
   campaignGoal: string;
   season: string;
@@ -18,7 +22,10 @@ type CopiedKind = false | "caption" | "gemini" | "image" | "imageShort" | "negat
 
 const INITIAL_FORM: FormState = {
   clinicName: "GreenCoatVets",
-  theme: "",
+  scene: "",
+  illustrationStyle: ILLUSTRATION_STYLE_OPTIONS[0],
+  colorPalette: "pastel blues and warm cream",
+  backgroundColor: "white",
   audience: "Pet parents in India",
   campaignGoal: "Increase shares and saves",
   season: "",
@@ -53,7 +60,7 @@ export function PromptGenerator() {
           setResult(result.pack);
         } catch (err) {
           setResult(null);
-          setError(err instanceof Error ? err.message : "Failed to generate prompt.");
+          setError(err instanceof Error ? err.message : "Failed to build prompt pack.");
         }
       })();
     });
@@ -81,10 +88,10 @@ export function PromptGenerator() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
       <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>
-          <h2 className="font-headline text-xl font-bold text-slate-900">Generate post + image prompts</h2>
+          <h2 className="font-headline text-xl font-bold text-slate-900">Build post + image prompts</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Creates a full pack: Instagram caption content and ready-to-paste image generation prompts (Gemini, universal,
-            and short variants). Tuned for 2D illustrated, non-photorealistic veterinary posts.
+            Fills a fixed flat-vector illustration template from your inputs, plus caption ideas, hashtags, and a standard
+            negative prompt for image tools.
           </p>
         </div>
 
@@ -100,15 +107,53 @@ export function PromptGenerator() {
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Theme</span>
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+              Scene, animals, or objects
+            </span>
             <input
               className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
-              value={form.theme}
-              onChange={(event) => updateField("theme", event.target.value)}
-              placeholder="Summer skin allergies in dogs"
+              value={form.scene}
+              onChange={(event) => updateField("scene", event.target.value)}
+              placeholder="a golden retriever puppy getting a gentle check-up with a stethoscope"
               required
             />
           </label>
+
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Illustration style</span>
+            <select
+              className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+              value={form.illustrationStyle}
+              onChange={(event) => updateField("illustrationStyle", event.target.value)}
+            >
+              {ILLUSTRATION_STYLE_OPTIONS.map((style) => (
+                <option key={style} value={style}>
+                  {style}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Color palette</span>
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+                value={form.colorPalette}
+                onChange={(event) => updateField("colorPalette", event.target.value)}
+                placeholder="pastel blues and warm cream"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Background color</span>
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+                value={form.backgroundColor}
+                onChange={(event) => updateField("backgroundColor", event.target.value)}
+                placeholder="white"
+              />
+            </label>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
@@ -162,7 +207,7 @@ export function PromptGenerator() {
           disabled={isPending}
           className="gradient-primary mt-6 inline-flex min-w-[220px] items-center justify-center rounded-xl px-6 py-3 font-headline text-sm font-bold text-on-primary shadow-lg disabled:opacity-60"
         >
-          {isPending ? "Generating..." : "Generate content + image prompts"}
+          {isPending ? "Building..." : "Build content + image prompts"}
         </button>
       </form>
 
@@ -171,7 +216,7 @@ export function PromptGenerator() {
           <div>
             <h2 className="font-headline text-xl font-bold text-slate-900">Output pack</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Post content for Instagram, plus image prompts you can paste into Gemini or any image generator.
+              Post content for Instagram, plus image prompts from the flat-vector template for Gemini or any image generator.
             </p>
           </div>
           {result ? (
@@ -206,7 +251,7 @@ export function PromptGenerator() {
               <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Post content</h3>
               <div className="mt-3 grid gap-6 xl:grid-cols-2">
                 <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Trending ideas</h4>
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Post ideas</h4>
                   <ul className="mt-2 space-y-2 text-sm text-slate-800">
                     {result.postIdeas.map((idea) => (
                       <li key={idea} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
@@ -298,7 +343,7 @@ export function PromptGenerator() {
           </div>
         ) : (
           <div className="mt-6 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            Generate a pack to see caption content, hashtags, post ideas, and image prompts for your creative tools.
+            Build a pack to see caption content, hashtags, post ideas, and image prompts for your creative tools.
           </div>
         )}
       </section>

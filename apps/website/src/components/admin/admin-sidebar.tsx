@@ -22,7 +22,7 @@ const SUPER_GROUPS: { title: string; items: { href: string; label: string }[] }[
     title: "Content",
     items: [
       { href: "/admin/blog", label: "Blog" },
-      { href: "/admin/ai-prompts", label: "AI prompts" },
+      { href: "/admin/ai-prompts", label: "Post prompts" },
       { href: "/admin/faqs", label: "FAQs" },
       { href: "/admin/reviews", label: "Reviews" },
       { href: "/admin/popups", label: "Popups" },
@@ -62,7 +62,7 @@ export function AdminSidebar({ isSuper }: { isSuper: boolean }) {
             href="/admin/ai-prompts"
             className={`block rounded-lg px-3 py-2.5 text-sm ${linkClass(pathname === "/admin/ai-prompts" || pathname.startsWith("/admin/ai-prompts/"))}`}
           >
-            AI prompts
+            Post prompts
           </Link>
           <Link
             href="/admin/reviews"
@@ -130,7 +130,7 @@ export function AdminMobileNav({ isSuper }: { isSuper: boolean }) {
           href="/admin/ai-prompts"
           className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${linkClass(pathname.startsWith("/admin/ai-prompts"))}`}
         >
-          AI prompts
+          Post prompts
         </Link>
         <Link
           href="/admin/reviews"
