@@ -19,6 +19,7 @@ import { OpenClinicalWindowButton } from "@/components/clinical/open-clinical-wi
 import { VisitDocumentationTabs } from "@/components/clinical/visit-documentation-tabs";
 import { VisitHandwrittenPrescription } from "@/components/clinical/visit-handwritten-prescription";
 import { VisitPhotoSheetReport } from "@/components/clinical/visit-photo-sheet-report";
+import { roleCanUseVisitPhoneCapture } from "@/lib/visits/phone-capture-access";
 import type { VisitAppointmentContextProps } from "@/components/clinical/visit-appointment-context";
 import { VisitPrescriptionBlockClient } from "@/components/clinical/visit-prescription-block-client";
 import { VisitVoiceDictation } from "@/components/clinical/visit-voice-dictation";
@@ -325,7 +326,7 @@ export default async function VisitDetailsPage({
     : "workspace-form mx-auto mt-6 max-w-5xl space-y-6 text-sm";
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
-  const showPhoneCapture = showVoiceDictation;
+  const showPhoneCapture = roleCanUseVisitPhoneCapture(role, access.isSuperAdmin);
 
   const appointmentStartsAtLabel = appt?.starts_at
     ? new Date(String(appt.starts_at)).toLocaleString()
@@ -874,7 +875,25 @@ export default async function VisitDetailsPage({
               >
                 PDF report
               </a>
+              {showPhoneCapture ? (
+                <a
+                  className="btn-secondary btn-compact text-[11px]"
+                  href={`/visits/${visit.id}?doc=photo`}
+                >
+                  Photo sheet &amp; phone QR
+                </a>
+              ) : null}
             </div>
+            {showPhoneCapture ? (
+              <VisitPhotoSheetReport
+                visitId={visit.id}
+                clinicId={clinic_id}
+                showPhoneCapture
+                hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
+                appointmentContext={appointmentContext}
+                compact
+              />
+            ) : null}
             {showVoiceDictation ? <VisitVoiceDictation embed={embed} /> : null}
             <div className={visitMainClass}>{visitFormMain}</div>
           </>

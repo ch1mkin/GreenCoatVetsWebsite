@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
+import QRCode from "qrcode";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
+import { roleCanUseVisitPhoneCapture } from "@/lib/visits/phone-capture-access";
 import {
   generatePhoneCaptureToken,
   PHONE_CAPTURE_SESSION_TTL_MS,
 } from "@/lib/visits/phone-capture-token";
 
-function webAppOrigin(): string {
-  return (process.env.NEXT_PUBLIC_WEB_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-}
-
-function canStartPhoneCapture(role: string, isSuperAdmin: boolean): boolean {
-  return isSuperAdmin || role === "doctor" || role === "clinic_admin" || role === "branch_admin";
+function webAppOrigin(request: Request): string {
+  const fromEnv = (process.env.NEXT_PUBLIC_WEB_APP_URL ?? "").trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  try {
+    return new URL(request.url).origin;
+  } catch {
+    return "http://localhost:3000";
+  }
 }
 
 export async function POST(request: Request) {
@@ -37,8 +41,8 @@ export async function POST(request: Request) {
 
   const isSuperAdmin = Boolean(superAdmin);
   const role = (membership?.role as string | undefined) ?? (isSuperAdmin ? "super_admin" : "");
-  if (!canStartPhoneCapture(role, isSuperAdmin)) {
-    return NextResponse.json({ error: "Only clinical staff can start phone capture." }, { status: 403 });
+  if (!roleCanUseVisitPhoneCapture(role, isSuperAdmin)) {
+    return NextResponse.json({ error: "Your role cannot start phone capture for visits." }, { status: 403 });
   }
 
   let visitId = "";
@@ -86,17 +90,32 @@ export async function POST(request: Request) {
   });
 
   if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+    const hint = /visit_phone_capture_sessions/i.test(insertError.message)
+      ? " Database migration for visit phone capture may be missing — contact your administrator."
+      : "";
+    return NextResponse.json({ error: `${insertError.message}${hint}` }, { status: 500 });
   }
 
-  const captureUrl = `${webAppOrigin()}/visit-capture/${token}`;
-
+  const captureUrl = `${webAppOrigin(request)}/visit-capture/${token}`;
   const issuedAt = Date.now();
+
+  let qrDataUrl = "";
+  try {
+    qrDataUrl = await QRCode.toDataURL(captureUrl, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 280,
+      type: "image/png",
+    });
+  } catch {
+    qrDataUrl = "";
+  }
 
   return NextResponse.json({
     captureUrl,
     expiresAt,
     issuedAt,
+    qrDataUrl,
     qrImageUrl: `/api/visits/phone-capture/qr?url=${encodeURIComponent(captureUrl)}&t=${issuedAt}`,
   });
 }

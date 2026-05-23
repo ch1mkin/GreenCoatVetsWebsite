@@ -14,12 +14,15 @@ export function VisitPhotoSheetReport({
   hasSavedPdf,
   showPhoneCapture,
   appointmentContext,
+  compact = false,
 }: {
   visitId: string;
   clinicId: string;
   hasSavedPdf: boolean;
   showPhoneCapture: boolean;
   appointmentContext: VisitAppointmentContextProps;
+  /** Side-panel embed: compact QR + upload controls */
+  compact?: boolean;
 }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -104,11 +107,18 @@ export function VisitPhotoSheetReport({
           visitId={visitId}
           sessionKey={visitId}
           variant="photo-sheet"
+          compact={compact}
           onUploaded={() => void checkLatestAttachment()}
         />
       ) : null}
 
-      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
+      <div
+        className={
+          compact
+            ? "rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-3"
+            : "rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4"
+        }
+      >
         <p className="text-sm font-semibold text-on-background">Photo sheet visit report</p>
         <p className="mt-1 text-[12px] text-on-surface-variant">
           Write on any clinic sheet, then photograph it on this laptop or scan the QR with your phone. The original photo
@@ -169,7 +179,7 @@ export function VisitPhotoSheetReport({
         </div>
       </div>
 
-      <VisitAppointmentContext context={appointmentContext} />
+      {compact ? null : <VisitAppointmentContext context={appointmentContext} />}
 
       {message ? <p className="text-[11px] font-medium text-emerald-800">{message}</p> : null}
       {error ? (
