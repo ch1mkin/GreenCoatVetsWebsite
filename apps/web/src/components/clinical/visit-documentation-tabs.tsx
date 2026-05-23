@@ -1,25 +1,29 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { PawCircularLoader } from "@/components/web/paw-circular-loader";
 
 export type VisitDocumentationTab = "form" | "photo" | "digital";
 
-const TABS: Array<{ id: VisitDocumentationTab; label: string; hint: string }> = [
+const TABS: Array<{ id: VisitDocumentationTab; label: string; hint: string; loadingMessage: string }> = [
   {
     id: "form",
     label: "Structured record",
     hint: "Voice dictation, clinical form, and prescription",
+    loadingMessage: "Opening structured record…",
   },
   {
     id: "photo",
     label: "Photo sheet",
-    hint: "Write on paper, photograph, save as PDF report",
+    hint: "Write on paper, scan with phone or camera, save as PDF report",
+    loadingMessage: "Opening photo sheet…",
   },
   {
     id: "digital",
     label: "Digital sheet",
     hint: "Draw on the clinic template on screen",
+    loadingMessage: "Opening digital sheet…",
   },
 ];
 
@@ -44,16 +48,30 @@ export function VisitDocumentationTabs({
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("doc");
   const activeTab = isVisitDocTab(tabParam) ? tabParam : defaultTab;
+  const [switchingTo, setSwitchingTo] = useState<VisitDocumentationTab | null>(null);
 
   const setTab = useCallback(
     (tab: VisitDocumentationTab) => {
+      if (tab === activeTab) return;
+      setSwitchingTo(tab);
       const params = new URLSearchParams(searchParams.toString());
       params.set("doc", tab);
       router.replace(`/visits/${visitId}?${params.toString()}`, { scroll: false });
     },
-    [router, searchParams, visitId],
+    [activeTab, router, searchParams, visitId],
   );
 
+  useEffect(() => {
+    if (!switchingTo || switchingTo !== activeTab) return;
+    const timer = window.setTimeout(() => setSwitchingTo(null), 180);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, switchingTo]);
+
+  const isSwitching = switchingTo !== null;
+  const loadingMessage = useMemo(
+    () => TABS.find((tab) => tab.id === (switchingTo ?? activeTab))?.loadingMessage ?? "Loading…",
+    [activeTab, switchingTo],
+  );
   const activeHint = useMemo(() => TABS.find((tab) => tab.id === activeTab)?.hint ?? "", [activeTab]);
 
   return (
@@ -65,7 +83,8 @@ export function VisitDocumentationTabs({
               key={tab.id}
               type="button"
               onClick={() => setTab(tab.id)}
-              className={`flex-1 rounded-xl px-4 py-3 text-left transition-colors ${
+              disabled={isSwitching}
+              className={`flex-1 rounded-xl px-4 py-3 text-left transition-colors disabled:opacity-70 ${
                 activeTab === tab.id
                   ? "border border-primary bg-primary text-white shadow-sm shadow-primary/20"
                   : "border border-transparent bg-white text-slate-800 hover:border-slate-200 hover:bg-slate-50"
@@ -85,9 +104,17 @@ export function VisitDocumentationTabs({
         <p className="mt-2 px-2 text-[11px] text-on-surface-variant">{activeHint}</p>
       </div>
 
-      {activeTab === "form" ? formPanel : null}
-      {activeTab === "photo" ? photoPanel : null}
-      {activeTab === "digital" ? digitalPanel : null}
+      {isSwitching ? (
+        <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-lowest py-16">
+          <PawCircularLoader size="md" message={loadingMessage} />
+        </div>
+      ) : (
+        <>
+          {activeTab === "form" ? formPanel : null}
+          {activeTab === "photo" ? photoPanel : null}
+          {activeTab === "digital" ? digitalPanel : null}
+        </>
+      )}
     </div>
   );
 }

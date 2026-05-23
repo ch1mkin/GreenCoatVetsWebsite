@@ -4,17 +4,24 @@ import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { saveVisitPhotoSheetPdfAction } from "@/app/(portal)/visits/visit-report-actions";
 import { VisitAppointmentContext, type VisitAppointmentContextProps } from "@/components/clinical/visit-appointment-context";
+import { VisitPhoneCapturePanel } from "@/components/clinical/visit-phone-capture-panel";
+import { PawCircularLoader } from "@/components/web/paw-circular-loader";
 import { enhanceDocumentPhoto } from "@/lib/visits/enhance-document-photo";
+import { useVisitPhonePhotoSync } from "@/lib/visits/use-visit-phone-photo-sync";
 
 const EXPORT_MIME = "image/jpeg";
 
 export function VisitPhotoSheetReport({
   visitId,
+  clinicId,
   hasSavedPdf,
+  showPhoneCapture,
   appointmentContext,
 }: {
   visitId: string;
+  clinicId: string;
   hasSavedPdf: boolean;
+  showPhoneCapture: boolean;
   appointmentContext: VisitAppointmentContextProps;
 }) {
   const router = useRouter();
@@ -39,7 +46,7 @@ export function VisitPhotoSheetReport({
   }, []);
 
   const handleFileChange = useCallback(
-    async (file: File | null) => {
+    async (file: File | null, options?: { fromPhone?: boolean }) => {
       resetPreviews();
       setMessage(null);
       setError(null);
@@ -55,7 +62,11 @@ export function VisitPhotoSheetReport({
         const blob = await enhanceDocumentPhoto(file);
         setEnhancedBlob(blob);
         setEnhancedPreview(URL.createObjectURL(blob));
-        setMessage("Document preview ready. Save when the sheet looks clear.");
+        setMessage(
+          options?.fromPhone
+            ? "Photo received from your phone. Review the scan, then save as visit PDF."
+            : "Document preview ready. Save when the sheet looks clear.",
+        );
       } catch (scanError) {
         setError(scanError instanceof Error ? scanError.message : "Failed to process the photo.");
       } finally {
@@ -64,6 +75,13 @@ export function VisitPhotoSheetReport({
     },
     [resetPreviews],
   );
+
+  const { checkLatestAttachment } = useVisitPhonePhotoSync({
+    visitId,
+    clinicId,
+    enabled: showPhoneCapture,
+    onImageFile: (file) => handleFileChange(file, { fromPhone: true }),
+  });
 
   async function savePdf() {
     if (!enhancedBlob) {
@@ -91,11 +109,19 @@ export function VisitPhotoSheetReport({
 
   return (
     <div className="space-y-4">
+      {showPhoneCapture ? (
+        <VisitPhoneCapturePanel
+          visitId={visitId}
+          variant="photo-sheet"
+          onUploaded={() => void checkLatestAttachment()}
+        />
+      ) : null}
+
       <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
         <p className="text-sm font-semibold text-on-background">Photo sheet visit report</p>
         <p className="mt-1 text-[12px] text-on-surface-variant">
-          Write on any casual clinic sheet, take a photo, and we will turn it into a clean scanned document PDF — the
-          same workflow many clinics use for paper notes.
+          Write on any clinic sheet, then photograph it on this laptop or scan the QR with your phone. We turn it into a
+          clean scanned document PDF for this visit.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {hasSavedPdf ? (
@@ -114,7 +140,7 @@ export function VisitPhotoSheetReport({
             onClick={() => fileInputRef.current?.click()}
             disabled={pending}
           >
-            {pending ? "Processing…" : "Take or upload photo"}
+            {pending ? "Processing…" : "Take or upload on laptop"}
           </button>
           <input
             ref={fileInputRef}
@@ -148,6 +174,12 @@ export function VisitPhotoSheetReport({
         </p>
       ) : null}
 
+      {pending && !originalPreview ? (
+        <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-lowest py-12">
+          <PawCircularLoader size="md" message="Enhancing document scan…" />
+        </div>
+      ) : null}
+
       {originalPreview || enhancedPreview ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {originalPreview ? (
@@ -165,11 +197,18 @@ export function VisitPhotoSheetReport({
             </div>
           ) : null}
         </div>
-      ) : (
+      ) : !pending ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-[12px] text-slate-600">
-          Photograph the completed sheet in good light. The preview will show a cleaned, high-contrast scan before saving.
+          {showPhoneCapture ? (
+            <>
+              Scan the QR above with your phone, or use the laptop camera. The cleaned scan preview appears here before
+              you save the visit PDF.
+            </>
+          ) : (
+            <>Photograph the completed sheet in good light. The preview will show a cleaned, high-contrast scan before saving.</>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

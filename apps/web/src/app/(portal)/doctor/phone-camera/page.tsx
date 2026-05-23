@@ -33,9 +33,9 @@ export default async function DoctorPhoneCameraPage() {
         <h2 className="font-headline text-lg font-bold text-primary">How it works</h2>
         <ol className="list-decimal space-y-2 pl-5 text-sm text-on-surface-variant">
           <li>Open a visit on your laptop (from Appointments → Start consultation, or Medical records).</li>
-          <li>In the visit, open the <strong>Attachments</strong> section — a QR code appears for doctors.</li>
-          <li>Scan the QR with your phone camera. Take photos; they upload into that visit automatically.</li>
-          <li>New images appear on the laptop within a few seconds (no refresh needed).</li>
+          <li>Select the <strong>Photo sheet</strong> documentation method on the visit.</li>
+          <li>Scan the QR with your phone, take a photo of the handwritten sheet, and wait for the scan preview on the laptop.</li>
+          <li>Tap <strong>Save as visit PDF</strong> when the enhanced preview looks correct.</li>
         </ol>
         <p className="text-sm text-on-surface-variant">
           QR links expire after four hours. Start a new QR from the visit if you return later.

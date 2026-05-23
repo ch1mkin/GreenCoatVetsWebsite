@@ -12,9 +12,11 @@ type SessionResponse = {
 export function VisitPhoneCapturePanel({
   visitId,
   onUploaded,
+  variant = "attachments",
 }: {
   visitId: string;
   onUploaded?: () => void;
+  variant?: "attachments" | "photo-sheet";
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,13 +56,16 @@ export function VisitPhoneCapturePanel({
     return () => window.clearInterval(interval);
   }, [session, onUploaded]);
 
+  const title = variant === "photo-sheet" ? "Phone camera — photo sheet" : "Phone camera (doctor)";
+  const description =
+    variant === "photo-sheet"
+      ? "Scan this QR on your phone while this visit is open on your laptop. Each photo appears in the scan preview below — then save as the visit PDF."
+      : "Scan this QR on your phone while this visit is open on your laptop. Photos upload straight into this visit's attachments.";
+
   return (
     <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-      <p className="text-[11px] font-semibold text-primary">Phone camera (doctor)</p>
-      <p className="mt-1 text-[11px] text-on-surface-variant">
-        Scan this QR on your phone while this visit is open on your laptop. Photos upload straight into this visit&apos;s
-        attachments.
-      </p>
+      <p className="text-[11px] font-semibold text-primary">{title}</p>
+      <p className="mt-1 text-[11px] text-on-surface-variant">{description}</p>
 
       {error ? <p className="mt-2 text-[11px] text-red-700">{error}</p> : null}
 

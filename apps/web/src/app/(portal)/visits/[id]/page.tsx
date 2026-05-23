@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
 import { ensurePrescriptionForVisit, saveVisitRecord } from "../actions";
 import { VisitAttachmentsSection } from "@/components/clinical/visit-attachments-section";
+import { PawCircularLoader } from "@/components/web/paw-circular-loader";
 import { createVaccinationAlertFromVisit } from "../../vaccinations/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { canManageInvoices } from "@/lib/auth/invoice-access";
@@ -732,7 +733,6 @@ export default async function VisitDetailsPage({
             clinicId={clinic_id}
             petId={petId}
             branchId={branchId}
-            showPhoneCapture={showPhoneCapture}
             initialAttachments={(attachments ?? []).map((attachment) => ({
               id: attachment.id as string,
               file_name: (attachment.file_name as string | null) ?? null,
@@ -823,7 +823,13 @@ export default async function VisitDetailsPage({
                 </ul>
               </div>
             ) : null}
-            <Suspense fallback={<p className="text-sm text-on-surface-variant">Loading documentation options…</p>}>
+            <Suspense
+              fallback={
+                <div className="flex min-h-[280px] items-center justify-center py-16">
+                  <PawCircularLoader size="md" message="Loading documentation methods…" />
+                </div>
+              }
+            >
               <VisitDocumentationTabs
                 visitId={visit.id}
                 formPanel={
@@ -835,6 +841,8 @@ export default async function VisitDetailsPage({
                 photoPanel={
                   <VisitPhotoSheetReport
                     visitId={visit.id}
+                    clinicId={clinic_id}
+                    showPhoneCapture={showPhoneCapture}
                     hasSavedPdf={Boolean(visit.visit_report_pdf_path)}
                     appointmentContext={appointmentContext}
                   />
