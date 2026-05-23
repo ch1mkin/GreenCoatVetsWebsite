@@ -26,9 +26,12 @@ export function VisitPhotoSheetReport({
 }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sourceFileRef = useRef<File | null>(null);
   const [originalPreview, setOriginalPreview] = useState<string | null>(null);
   const [enhancedPreview, setEnhancedPreview] = useState<string | null>(null);
   const [enhancedBlob, setEnhancedBlob] = useState<Blob | null>(null);
+  const [extraClarity, setExtraClarity] = useState(true);
+  const [hasSourcePhoto, setHasSourcePhoto] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +46,41 @@ export function VisitPhotoSheetReport({
       return null;
     });
     setEnhancedBlob(null);
+    sourceFileRef.current = null;
+    setHasSourcePhoto(false);
   }, []);
+
+  const runEnhancement = useCallback(
+    async (file: File, options?: { fromPhone?: boolean; clarity?: boolean }) => {
+      const useClarity = options?.clarity ?? extraClarity;
+      setMessage(null);
+      setError(null);
+      setPending(true);
+      try {
+        if (!originalPreview) {
+          setOriginalPreview(URL.createObjectURL(file));
+        }
+        const blob = await enhanceDocumentPhoto(file, { extraClarity: useClarity });
+        setEnhancedPreview((current) => {
+          if (current) URL.revokeObjectURL(current);
+          return URL.createObjectURL(blob);
+        });
+        setEnhancedBlob(blob);
+        setMessage(
+          options?.fromPhone
+            ? `Photo received from your phone. ${useClarity ? "Extra clarity applied." : "Standard scan applied."} Save when ready.`
+            : useClarity
+              ? "Extra clarity applied for PDF — review the scan, then save."
+              : "Document preview ready. Save when the sheet looks clear.",
+        );
+      } catch (scanError) {
+        setError(scanError instanceof Error ? scanError.message : "Failed to process the photo.");
+      } finally {
+        setPending(false);
+      }
+    },
+    [extraClarity, originalPreview],
+  );
 
   const handleFileChange = useCallback(
     async (file: File | null, options?: { fromPhone?: boolean }) => {
@@ -56,25 +93,22 @@ export function VisitPhotoSheetReport({
         return;
       }
 
-      setPending(true);
-      try {
-        setOriginalPreview(URL.createObjectURL(file));
-        const blob = await enhanceDocumentPhoto(file);
-        setEnhancedBlob(blob);
-        setEnhancedPreview(URL.createObjectURL(blob));
-        setMessage(
-          options?.fromPhone
-            ? "Photo received from your phone. Review the scan, then save as visit PDF."
-            : "Document preview ready. Save when the sheet looks clear.",
-        );
-      } catch (scanError) {
-        setError(scanError instanceof Error ? scanError.message : "Failed to process the photo.");
-      } finally {
-        setPending(false);
-      }
+      sourceFileRef.current = file;
+      setHasSourcePhoto(true);
+      setOriginalPreview(URL.createObjectURL(file));
+      await runEnhancement(file, { fromPhone: options?.fromPhone, clarity: extraClarity });
     },
-    [resetPreviews],
+    [extraClarity, resetPreviews, runEnhancement],
   );
+
+  const reapplyClarity = useCallback(async () => {
+    const file = sourceFileRef.current;
+    if (!file) {
+      setError("Take or upload a photo first.");
+      return;
+    }
+    await runEnhancement(file, { clarity: extraClarity });
+  }, [extraClarity, runEnhancement]);
 
   const { checkLatestAttachment } = useVisitPhonePhotoSync({
     visitId,
@@ -163,6 +197,33 @@ export function VisitPhotoSheetReport({
             {pending ? "Saving…" : "Save as visit PDF"}
           </button>
         </div>
+
+        <div className="mt-4 flex flex-col gap-3 rounded-xl border border-outline-variant/15 bg-white/80 p-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex cursor-pointer items-start gap-2 text-[12px] text-on-surface">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary"
+              checked={extraClarity}
+              onChange={(event) => setExtraClarity(event.target.checked)}
+            />
+            <span>
+              <span className="font-semibold text-on-background">Extra clarity for PDF</span>
+              <span className="mt-0.5 block text-[11px] text-on-surface-variant">
+                Sharper text, higher contrast, and a cleaner white background — recommended before saving the visit PDF.
+              </span>
+            </span>
+          </label>
+          {hasSourcePhoto ? (
+            <button
+              type="button"
+              className="btn-secondary btn-compact shrink-0 text-xs"
+              disabled={pending}
+              onClick={() => void reapplyClarity()}
+            >
+              {pending ? "Processing…" : extraClarity ? "Apply extra clarity" : "Apply standard scan"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <VisitAppointmentContext context={appointmentContext} />
@@ -174,14 +235,25 @@ export function VisitPhotoSheetReport({
         </p>
       ) : null}
 
-      {pending && !originalPreview ? (
+      {pending && !originalPreview && !enhancedPreview ? (
         <div className="flex min-h-[240px] items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-lowest py-12">
-          <PawCircularLoader size="md" message="Enhancing document scan…" />
+          <PawCircularLoader
+            size="md"
+            message={extraClarity ? "Applying extra clarity for PDF…" : "Enhancing document scan…"}
+          />
         </div>
       ) : null}
 
       {originalPreview || enhancedPreview ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="relative grid gap-4 lg:grid-cols-2">
+          {pending ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white/80 backdrop-blur-[1px]">
+              <PawCircularLoader
+                size="md"
+                message={extraClarity ? "Applying extra clarity for PDF…" : "Enhancing document scan…"}
+              />
+            </div>
+          ) : null}
           {originalPreview ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-3">
               <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-500">Original photo</p>
@@ -191,13 +263,15 @@ export function VisitPhotoSheetReport({
           ) : null}
           {enhancedPreview ? (
             <div className="rounded-2xl border border-primary/25 bg-white p-3 shadow-sm">
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-primary">Scanned document preview</p>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-primary">
+                Scanned document preview{extraClarity ? " · extra clarity" : ""}
+              </p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={enhancedPreview} alt="Enhanced document" className="max-h-[520px] w-full rounded-lg object-contain" />
             </div>
           ) : null}
         </div>
-      ) : !pending ? (
+      ) : !originalPreview && !enhancedPreview ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-[12px] text-slate-600">
           {showPhoneCapture ? (
             <>
