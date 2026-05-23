@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
-import { ensurePrescriptionForVisit, saveVisitRecord, uploadVisitAttachment } from "../actions";
+import { ensurePrescriptionForVisit, saveVisitRecord } from "../actions";
+import { VisitAttachmentsSection } from "@/components/clinical/visit-attachments-section";
 import { createVaccinationAlertFromVisit } from "../../vaccinations/actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { canManageInvoices } from "@/lib/auth/invoice-access";
@@ -323,6 +324,7 @@ export default async function VisitDetailsPage({
     : "workspace-form mx-auto mt-6 max-w-5xl space-y-6 text-sm";
 
   const showVoiceDictation = access.isSuperAdmin || role === "doctor";
+  const showPhoneCapture = showVoiceDictation;
 
   const appointmentStartsAtLabel = appt?.starts_at
     ? new Date(String(appt.starts_at)).toLocaleString()
@@ -725,26 +727,20 @@ export default async function VisitDetailsPage({
         </div>
 
         <VisitSection embed={embed} id="section-files" title="Attachments" defaultOpen={!embed}>
-          <form action={uploadVisitAttachment} className="space-y-2" encType="multipart/form-data">
-          <input type="hidden" name="visit_id" value={visit.id} />
-            <input type="hidden" name="pet_id" value={petId} />
-            <input type="hidden" name="branch_id" value={branchId} />
-            <input className="input-file-soft input-file-compact max-w-md" name="file" type="file" required />
-            <SubmitButton className="btn-secondary btn-compact text-xs" pendingLabel="Uploading…">
-              Upload file
-            </SubmitButton>
-        </form>
-          <ul className="space-y-1.5 text-[11px]">
-            {attachments?.map((attachment) => (
-              <li key={attachment.id} className="rounded-lg border border-outline-variant/15 px-2 py-1.5">
-                <p className="font-medium">{attachment.file_name ?? "File"}</p>
-                <p className="text-on-surface-variant">
-                  {attachment.mime_type ?? "-"} · {new Date(attachment.created_at).toLocaleString()}
-                </p>
-              </li>
-            ))}
-            {!attachments?.length ? <li className="text-on-surface-variant">No attachments yet.</li> : null}
-          </ul>
+          <VisitAttachmentsSection
+            visitId={visit.id}
+            clinicId={clinic_id}
+            petId={petId}
+            branchId={branchId}
+            showPhoneCapture={showPhoneCapture}
+            initialAttachments={(attachments ?? []).map((attachment) => ({
+              id: attachment.id as string,
+              file_name: (attachment.file_name as string | null) ?? null,
+              mime_type: (attachment.mime_type as string | null) ?? null,
+              created_at: attachment.created_at as string,
+              storage_path: attachment.storage_path as string,
+            }))}
+          />
         </VisitSection>
 
         <VisitSaveFooter

@@ -5,6 +5,8 @@ export {
   type PlatformBranding,
 } from "./platform-branding";
 
+export { buildPlatformIcons, resolvePublicSiteUrl } from "./site-metadata";
+
 export { DATA_SHARING_CONSENT_KEY, DATA_SHARING_CONSENT_VERSION } from "./consent";
 
 export {

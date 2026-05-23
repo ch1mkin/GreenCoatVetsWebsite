@@ -7,6 +7,8 @@ import {
   type HomepageImageKey,
   type SocialLinks,
 } from "./defaults";
+import type { MarketingSeoSettings } from "./seo-types";
+import { EMPTY_SEO_SETTINGS } from "./seo-types";
 import type { MarketingLocationPublic } from "./types";
 
 export type MarketingSiteSettingsRow = {
@@ -21,6 +23,7 @@ export type MarketingSiteSettingsRow = {
   homepage_copy: HomepageCopy;
   /** Canonical Instagram post/reel permalinks for homepage embeds. */
   instagram_embed_urls: string[];
+  seo_settings: MarketingSeoSettings;
 };
 
 const EMPTY: MarketingSiteSettingsRow = {
@@ -31,6 +34,7 @@ const EMPTY: MarketingSiteSettingsRow = {
   social_links: {},
   homepage_copy: {},
   instagram_embed_urls: [],
+  seo_settings: { ...EMPTY_SEO_SETTINGS },
 };
 
 export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsRow> {
@@ -38,7 +42,7 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
   const { data, error } = await supabase
     .from("marketing_site_settings")
     .select(
-      "default_clinic_id, website_branded_for_clinic_id, contact_form_recipient_email, homepage_images, social_links, homepage_copy, instagram_embed_urls",
+      "default_clinic_id, website_branded_for_clinic_id, contact_form_recipient_email, homepage_images, social_links, homepage_copy, instagram_embed_urls, seo_settings",
     )
     .eq("id", "default")
     .maybeSingle();
@@ -52,6 +56,10 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
     ? rawEmbeds.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
     : [];
 
+  const rawSeo = (data as { seo_settings?: MarketingSeoSettings | null }).seo_settings;
+  const seo_settings: MarketingSeoSettings =
+    rawSeo && typeof rawSeo === "object" ? { ...EMPTY_SEO_SETTINGS, ...rawSeo } : { ...EMPTY_SEO_SETTINGS };
+
   return {
     default_clinic_id: data.default_clinic_id as string | null,
     website_branded_for_clinic_id: (data as { website_branded_for_clinic_id?: string | null })
@@ -63,6 +71,7 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
     social_links: (data.social_links as SocialLinks) ?? {},
     homepage_copy: ((data as { homepage_copy?: HomepageCopy | null }).homepage_copy as HomepageCopy) ?? {},
     instagram_embed_urls,
+    seo_settings,
   };
 }
 

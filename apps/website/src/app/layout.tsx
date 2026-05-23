@@ -7,7 +7,9 @@ import { getMarketingFooterNav } from "@/lib/marketing/footer-nav";
 import { getMarketingSiteSettings, mergeHomepageCopy } from "@/lib/marketing/get-marketing-site";
 import { getActiveMarketingPopups } from "@/lib/marketing/popups";
 import { StoreProviders } from "@/components/store/store-providers";
-import { getFaviconHref, getPlatformBranding } from "@/lib/platform-branding";
+import { buildPlatformIcons } from "@saasclinics/lib";
+import { getPlatformBranding } from "@/lib/platform-branding";
+import { getWebsitePublicBaseUrl } from "@/lib/seo/public-site-url";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,18 +24,20 @@ const manrope = Manrope({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const branding = await getPlatformBranding();
-  const icon = getFaviconHref(branding);
+  const [branding, marketing] = await Promise.all([getPlatformBranding(), getMarketingSiteSettings()]);
+  const metadataBase = new URL(getWebsitePublicBaseUrl(marketing.seo_settings));
+  const verification = marketing.seo_settings.google_site_verification?.trim();
+
   return {
+    metadataBase,
     title: { default: `${branding.product_name} — Clinical Sanctuary`, template: `%s · ${branding.product_name}` },
     description: "Veterinary care, appointments, store, and wellness — GreenCoatVets experience.",
-    icons: {
-      icon: [
-        ...(icon ? [{ url: icon, type: "image/png" as const }] : []),
-        { url: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
-      ],
-      apple: icon ? [{ url: icon }] : [{ url: "/favicon.svg", type: "image/svg+xml" }],
-    },
+    icons: buildPlatformIcons(branding),
+    ...(verification
+      ? { verification: { google: verification } }
+      : {}),
+    alternates: { canonical: "/" },
+    robots: { index: true, follow: true },
   };
 }
 

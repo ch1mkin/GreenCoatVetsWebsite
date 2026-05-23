@@ -15,6 +15,7 @@ const SUPER_GROUPS: { title: string; items: { href: string; label: string }[] }[
       { href: "/admin/locations", label: "Locations" },
       { href: "/admin/footer", label: "Footer" },
       { href: "/admin/traffic", label: "Traffic" },
+      { href: "/admin/seo", label: "SEO & sitemap" },
     ],
   },
   {

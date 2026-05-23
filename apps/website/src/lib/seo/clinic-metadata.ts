@@ -10,6 +10,7 @@ export function clinicMetadata(input: {
   return {
     title,
     description,
+    alternates: { canonical: path },
     openGraph: {
       title,
       description,
@@ -22,5 +23,6 @@ export function clinicMetadata(input: {
       title,
       description,
     },
+    robots: { index: true, follow: true },
   };
 }

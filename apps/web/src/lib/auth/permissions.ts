@@ -217,6 +217,10 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           ],
         },
         {
+          title: "Doctor tools",
+          items: [{ href: "/doctor/phone-camera", label: "Phone camera" }],
+        },
+        {
           title: "Onboarding",
           items: [{ href: "/invite-qrs", label: "Clinic onboarding QR" }],
         },

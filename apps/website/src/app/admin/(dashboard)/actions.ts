@@ -461,3 +461,73 @@ export async function deleteMarketingPopup(formData: FormData) {
   revalidatePath("/admin/popups");
   redirect("/admin/popups?deleted=1");
 }
+
+export async function updateMarketingSeoSettings(formData: FormData) {
+  const supabase = await requireSuperAdmin();
+
+  const { data: existingRow } = await supabase
+    .from("marketing_site_settings")
+    .select("seo_settings")
+    .eq("id", "default")
+    .maybeSingle();
+
+  const prev = (existingRow?.seo_settings as Record<string, string> | null) ?? {};
+  const google_site_verification = String(formData.get("google_site_verification") ?? "").trim();
+  const public_site_url = String(formData.get("public_site_url") ?? "").trim();
+
+  const seo_settings = { ...prev };
+  if (google_site_verification) seo_settings.google_site_verification = google_site_verification;
+  else delete seo_settings.google_site_verification;
+  if (public_site_url) seo_settings.public_site_url = public_site_url.replace(/\/$/, "");
+  else delete seo_settings.public_site_url;
+
+  const { error } = await supabase.from("marketing_site_settings").upsert(
+    {
+      id: "default",
+      seo_settings,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    redirect(`/admin/seo?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/sitemap.xml");
+  revalidatePath("/robots.txt");
+  revalidatePath("/admin/seo");
+  redirect("/admin/seo?saved=1");
+}
+
+export async function recordSitemapPingAction() {
+  const supabase = await requireSuperAdmin();
+  const { data: existingRow } = await supabase
+    .from("marketing_site_settings")
+    .select("seo_settings")
+    .eq("id", "default")
+    .maybeSingle();
+
+  const prev = (existingRow?.seo_settings as Record<string, string> | null) ?? {};
+  const seo_settings = {
+    ...prev,
+    last_sitemap_ping_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("marketing_site_settings").upsert(
+    {
+      id: "default",
+      seo_settings,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    redirect(`/admin/seo?error=${encodeURIComponent(error.message)}`);
+  }
+
+  revalidatePath("/admin/seo");
+  redirect("/admin/seo?pinged=1");
+}
