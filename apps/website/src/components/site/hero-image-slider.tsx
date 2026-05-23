@@ -1,7 +1,8 @@
 "use client";
 
-import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_HOMEPAGE_IMAGES } from "@/lib/marketing/defaults";
+import { resolveMarketingImageUrl } from "@/lib/marketing/resolve-marketing-image-url";
 
 export function HeroImageSlider({
   urls,
@@ -10,8 +11,25 @@ export function HeroImageSlider({
   urls: string[];
   alt: string;
 }) {
-  const list = urls.filter(Boolean);
+  const resolvedUrls = useMemo(
+    () =>
+      urls
+        .map((url) => resolveMarketingImageUrl(url))
+        .filter(Boolean),
+    [urls],
+  );
+  const fallback = resolveMarketingImageUrl(DEFAULT_HOMEPAGE_IMAGES.hero);
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const list = useMemo(() => {
+    const usable = resolvedUrls.filter((src) => !failed.has(src));
+    return usable.length ? usable : [fallback];
+  }, [resolvedUrls, failed, fallback]);
+
   const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [list.join("|")]);
 
   useEffect(() => {
     if (list.length <= 1) return;
@@ -31,13 +49,22 @@ export function HeroImageSlider({
             key={`${src}-${i}`}
             className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${i === index ? "z-10 opacity-100" : "z-0 opacity-0"}`}
           >
-            <Image
+            {/* Native img so Supabase storage and any admin URL work without Next image allowlists */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={src}
               alt={i === 0 ? alt : ""}
-              fill
-              className="object-cover"
-              sizes="(max-width: 1024px) 100vw, 50vw"
-              priority={i === 0}
+              className="h-full w-full object-cover"
+              decoding="async"
+              loading={i === 0 ? "eager" : "lazy"}
+              onError={() => {
+                setFailed((prev) => {
+                  if (prev.has(src)) return prev;
+                  const next = new Set(prev);
+                  next.add(src);
+                  return next;
+                });
+              }}
             />
           </div>
         ))}

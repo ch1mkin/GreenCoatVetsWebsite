@@ -2,6 +2,7 @@
 
 import { fetchUserAuthCapabilities, resolveAuthDestination } from "@saasclinics/lib";
 import { getAuthAppUrls } from "@/lib/auth/app-urls";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type WebPortalLoginRoutingResult =
@@ -20,7 +21,8 @@ export async function resolveWebPortalLoginRoutingAction(): Promise<WebPortalLog
   }
 
   try {
-    const caps = await fetchUserAuthCapabilities(supabase, user.id);
+    const lookupClient = createServiceRoleClient() ?? supabase;
+    const caps = await fetchUserAuthCapabilities(lookupClient, user.id);
     const destination = resolveAuthDestination("web_portal", caps, getAuthAppUrls());
 
     if (destination.outcome === "continue") {

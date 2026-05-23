@@ -1,5 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Roles that may use the clinic staff web portal (not marketing site / pet owner). */
+export const WEB_PORTAL_STAFF_ROLES = new Set([
+  "super_admin",
+  "clinic_admin",
+  "branch_admin",
+  "doctor",
+  "receptionist",
+  "lab_technician",
+  "pharmacist",
+]);
+
 export type UserAuthCapabilities = {
   isSuperAdmin: boolean;
   roles: string[];
@@ -8,12 +19,15 @@ export type UserAuthCapabilities = {
   hasPetOwnerAccess: boolean;
 };
 
+function isWebPortalStaffRole(role: string): boolean {
+  return WEB_PORTAL_STAFF_ROLES.has(role);
+}
+
 export function deriveUserAuthCapabilities(isSuperAdmin: boolean, activeRoles: string[]): UserAuthCapabilities {
   const roles = Array.from(new Set(activeRoles.filter(Boolean)));
   const hasWebsiteAdminAccess = isSuperAdmin || roles.includes("marketing_editor");
   const hasPetOwnerAccess = roles.includes("pet_owner");
-  const hasWebPortalAccess =
-    isSuperAdmin || roles.some((role) => role !== "marketing_editor" && role !== "pet_owner");
+  const hasWebPortalAccess = isSuperAdmin || roles.some((role) => isWebPortalStaffRole(role));
 
   return {
     isSuperAdmin,
@@ -28,15 +42,22 @@ export async function fetchUserAuthCapabilities(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<UserAuthCapabilities> {
-  const [{ data: superAdmin }, { data: memberships, error }] = await Promise.all([
-    supabase.from("platform_super_admins").select("user_id").eq("user_id", userId).maybeSingle(),
-    supabase.from("user_clinic_memberships").select("role").eq("user_id", userId).eq("is_active", true),
-  ]);
+  const [{ data: superAdmin }, { data: memberships, error: membershipError }, { data: staffRows, error: staffError }] =
+    await Promise.all([
+      supabase.from("platform_super_admins").select("user_id").eq("user_id", userId).maybeSingle(),
+      supabase.from("user_clinic_memberships").select("role").eq("user_id", userId).eq("is_active", true),
+      supabase.from("staff_profiles").select("role").eq("user_id", userId).eq("is_active", true),
+    ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (membershipError) {
+    throw new Error(membershipError.message);
+  }
+  if (staffError) {
+    throw new Error(staffError.message);
   }
 
-  const roles = (memberships ?? []).map((row) => String(row.role));
+  const membershipRoles = (memberships ?? []).map((row) => String(row.role));
+  const staffRoles = (staffRows ?? []).map((row) => String(row.role));
+  const roles = Array.from(new Set([...membershipRoles, ...staffRoles]));
   return deriveUserAuthCapabilities(Boolean(superAdmin), roles);
 }

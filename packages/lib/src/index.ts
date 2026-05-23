@@ -50,6 +50,7 @@ export {
 export {
   deriveUserAuthCapabilities,
   fetchUserAuthCapabilities,
+  WEB_PORTAL_STAFF_ROLES,
   type UserAuthCapabilities,
 } from "./user-auth-capabilities";
 

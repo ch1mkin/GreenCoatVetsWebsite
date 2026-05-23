@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import {
@@ -309,7 +308,8 @@ export default async function Home() {
                   <div className="flex items-center gap-4">
                     <div className="h-12 w-12 overflow-hidden rounded-full bg-slate-200">
                       {t.img ? (
-                        <Image src={t.img} alt="" width={48} height={48} className="h-full w-full object-cover" />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={t.img} alt="" width={48} height={48} className="h-full w-full object-cover" />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-xs font-bold text-slate-500">N/A</div>
                       )}

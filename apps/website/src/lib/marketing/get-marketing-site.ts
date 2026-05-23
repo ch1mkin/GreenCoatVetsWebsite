@@ -10,6 +10,7 @@ import {
 import type { MarketingSeoSettings } from "./seo-types";
 import { EMPTY_SEO_SETTINGS } from "./seo-types";
 import type { MarketingLocationPublic } from "./types";
+import { resolveMarketingImageUrl } from "./resolve-marketing-image-url";
 
 export type MarketingSiteSettingsRow = {
   /** When no host match, used after `website_branded_for_clinic_id` is tried. */
@@ -78,7 +79,7 @@ export async function getMarketingSiteSettings(): Promise<MarketingSiteSettingsR
 export function mergeHomepageImages(db: Record<string, string>): Record<HomepageImageKey, string> {
   const out = { ...DEFAULT_HOMEPAGE_IMAGES };
   for (const key of Object.keys(DEFAULT_HOMEPAGE_IMAGES) as HomepageImageKey[]) {
-    const v = db[key]?.trim();
+    const v = resolveMarketingImageUrl(db[key]);
     if (v) (out as Record<string, string>)[key] = v;
   }
   return out;
@@ -97,7 +98,9 @@ export function mergeHomepageCopy(db: HomepageCopy) {
 /** Unique hero image URLs for the homepage slider (primary hero + optional extra slides). */
 export function buildHeroSlideUrls(merged: Record<HomepageImageKey, string>, db: Record<string, string>): string[] {
   const primary = merged.hero;
-  const extra = [db.hero_slide_2?.trim(), db.hero_slide_3?.trim()].filter(Boolean) as string[];
+  const extra = [resolveMarketingImageUrl(db.hero_slide_2), resolveMarketingImageUrl(db.hero_slide_3)].filter(
+    Boolean,
+  ) as string[];
   const urls = [primary, ...extra];
   const seen = new Set<string>();
   return urls.filter((u) => {

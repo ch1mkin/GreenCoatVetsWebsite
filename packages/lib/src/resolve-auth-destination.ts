@@ -29,22 +29,21 @@ export function resolveAuthDestination(
       if (caps.hasWebPortalAccess) {
         return { outcome: "continue", nextPath: "/dashboard", requiresOtp: true };
       }
-      if (caps.hasWebsiteAdminAccess) {
-        return {
-          outcome: "redirect_external",
-          url: `${websiteApp}/admin/login?hint=use_website_admin`,
-        };
-      }
       if (caps.hasPetOwnerAccess) {
         return {
           outcome: "redirect_external",
           url: `${websiteApp}/login?hint=pet_owner`,
         };
       }
+      if (caps.hasWebsiteAdminAccess) {
+        return {
+          outcome: "redirect_external",
+          url: `${websiteApp}/admin/login?hint=use_website_admin`,
+        };
+      }
       return {
-        outcome: "forbidden",
-        message: "This account does not have clinic portal access.",
-        suggestedUrl: `${websiteApp}/login`,
+        outcome: "redirect_external",
+        url: `${websiteApp}/login?hint=no_portal_access`,
       };
 
     case "website_admin":
