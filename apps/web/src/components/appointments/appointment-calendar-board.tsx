@@ -6,10 +6,14 @@ import {
   addDays,
   addMonths,
   CalendarView,
+  formatCalendarTime,
+  formatHourLabel,
+  minutesFromMidnightInTimeZone,
   monthGridDays,
   parseLocalDateKey,
   startOfMonth,
   startOfWeekSunday,
+  toDateKeyInTimeZone,
   toLocalDateKey,
 } from "@/lib/appointments/calendar-utils";
 import {
@@ -51,24 +55,25 @@ function buildHref(opts: {
   return `/appointments/calendar?${sp.toString()}`;
 }
 
-function minutesSinceDayStart(d: Date): number {
-  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
-}
-
-function layoutBlock(startsAt: string, endsAt: string | null): { top: number; height: number } | null {
-  const start = new Date(startsAt);
-  const end = endsAt ? new Date(endsAt) : new Date(start.getTime() + 30 * 60 * 1000);
+function layoutBlock(
+  startsAt: string,
+  endsAt: string | null,
+  timeZone: string,
+): { top: number; height: number } | null {
   const windowStart = START_HOUR * 60;
   const windowEnd = END_HOUR * 60 + 59;
-  let startMin = minutesSinceDayStart(start);
-  let endMin = Math.max(startMin + 15, minutesSinceDayStart(end));
+  let startMin = minutesFromMidnightInTimeZone(startsAt, timeZone);
+  const endMinRaw = endsAt
+    ? minutesFromMidnightInTimeZone(endsAt, timeZone)
+    : startMin + 30;
+  let endMin = Math.max(startMin + 15, endMinRaw);
 
   if (endMin <= windowStart || startMin >= windowEnd) return null;
 
   startMin = Math.max(startMin, windowStart);
   endMin = Math.min(endMin, windowEnd);
   const top = ((startMin - windowStart) / 60) * SLOT_PX;
-  const height = Math.max(((endMin - startMin) / 60) * SLOT_PX, 36);
+  const height = Math.max(((endMin - startMin) / 60) * SLOT_PX, 44);
   return { top, height };
 }
 
@@ -77,12 +82,14 @@ export function AppointmentCalendarBoard({
   view,
   doctorId,
   searchQ,
+  timeZone,
   appointments,
 }: {
   anchorDateKey: string;
   view: CalendarView;
   doctorId: string;
   searchQ: string;
+  timeZone: string;
   doctors: { id: string; full_name: string }[];
   appointments: CalendarAppointmentRow[];
 }) {
@@ -114,11 +121,11 @@ export function AppointmentCalendarBoard({
       .slice(0, 5);
   }, [filtered]);
 
-  const isToday = (dk: string) => dk === toLocalDateKey(new Date());
+  const todayKey = toDateKeyInTimeZone(new Date(), timeZone);
+  const isToday = (dk: string) => dk === todayKey;
 
   return (
     <div className="flex min-h-[calc(100vh-7rem)] flex-col gap-0 overflow-hidden lg:flex-row">
-      {/* Sidebar: mini month + legend + next up */}
       <aside className="hidden w-full shrink-0 flex-col gap-8 overflow-y-auto border-b border-outline-variant/20 bg-surface-container-low p-6 xl:flex xl:w-72 xl:border-b-0 xl:border-r">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -202,14 +209,13 @@ export function AppointmentCalendarBoard({
                   key={a.id}
                   className="flex items-center gap-3 rounded-xl bg-surface-container-lowest p-3 shadow-sm"
                 >
-                  <div className={`h-8 w-2 rounded-full ${legendDotClass(a.appointment_type)}`} />
+                  <div className={`h-8 w-2 shrink-0 rounded-full ${legendDotClass(a.appointment_type)}`} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-on-background">
                       {a.pet_name ?? "Pet"} ({a.owner_name ?? "Owner"})
                     </p>
-                    <p className="text-[10px] text-on-surface-variant">
-                      {new Date(a.starts_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} •{" "}
-                      {appointmentTypeLabel(a.appointment_type)}
+                    <p className="truncate text-[10px] text-on-surface-variant">
+                      {formatCalendarTime(a.starts_at, timeZone)} • {appointmentTypeLabel(a.appointment_type)}
                     </p>
                   </div>
                 </div>
@@ -221,7 +227,6 @@ export function AppointmentCalendarBoard({
         </div>
       </aside>
 
-      {/* Main board */}
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 md:p-6">
           <div className="flex flex-wrap items-center gap-4">
@@ -284,7 +289,14 @@ export function AppointmentCalendarBoard({
         </div>
 
         {view === "month" ? (
-          <MonthGrid anchor={anchor} appointments={filtered} buildHref={buildHref} doctorId={doctorId} q={searchQ} />
+          <MonthGrid
+            anchor={anchor}
+            appointments={filtered}
+            buildHref={buildHref}
+            doctorId={doctorId}
+            q={searchQ}
+            timeZone={timeZone}
+          />
         ) : (
           <TimeGrid
             view={view}
@@ -292,11 +304,11 @@ export function AppointmentCalendarBoard({
             weekDays={weekDays}
             appointments={filtered}
             isToday={isToday}
+            timeZone={timeZone}
           />
         )}
       </section>
 
-      {/* Mobile bottom */}
       <nav className="fixed bottom-6 left-1/2 z-40 flex min-w-[300px] -translate-x-1/2 items-center justify-center gap-2 rounded-full border border-outline-variant/15 bg-white/90 px-5 py-3 shadow-lg backdrop-blur-xl md:hidden">
         <Link
           href={buildHref({ date: anchorDateKey, view: "week", doctorId, q: searchQ })}
@@ -338,12 +350,14 @@ function MonthGrid({
   buildHref,
   doctorId,
   q,
+  timeZone,
 }: {
   anchor: Date;
   appointments: CalendarAppointmentRow[];
   buildHref: (o: { date: string; view: CalendarView; doctorId: string; q: string }) => string;
   doctorId: string;
   q: string;
+  timeZone: string;
 }) {
   const miniMonthStart = startOfMonth(anchor);
   const days = useMemo(() => monthGridDays(miniMonthStart), [miniMonthStart]);
@@ -351,11 +365,11 @@ function MonthGrid({
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of appointments) {
-      const k = toLocalDateKey(new Date(a.starts_at));
+      const k = toDateKeyInTimeZone(a.starts_at, timeZone);
       m.set(k, (m.get(k) ?? 0) + 1);
     }
     return m;
-  }, [appointments]);
+  }, [appointments, timeZone]);
 
   return (
     <div className="flex-1 overflow-auto px-4 pb-24 md:px-6">
@@ -366,7 +380,10 @@ function MonthGrid({
           </div>
         ))}
         {days.map((d) => {
-          const dk = toLocalDateKey(d);
+          const dk = toDateKeyInTimeZone(
+            new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0),
+            timeZone,
+          );
           const inMonth = d.getMonth() === miniMonthStart.getMonth();
           const n = counts.get(dk) ?? 0;
           return (
@@ -389,29 +406,81 @@ function MonthGrid({
   );
 }
 
+function AppointmentBlock({
+  appointment: a,
+  timeZone,
+  layout,
+}: {
+  appointment: CalendarAppointmentRow;
+  timeZone: string;
+  layout: { top: number; height: number };
+}) {
+  const cancelled = a.status === "cancelled";
+  const timeLabel = a.ends_at
+    ? `${formatCalendarTime(a.starts_at, timeZone)} – ${formatCalendarTime(a.ends_at, timeZone)}`
+    : formatCalendarTime(a.starts_at, timeZone);
+  const petLine = [a.pet_name ?? "Pet", a.owner_name ? `(${a.owner_name})` : ""].filter(Boolean).join(" ");
+
+  return (
+    <Link
+      href={`/appointments#appt-${a.id}`}
+      className={`absolute inset-x-1 z-[1] flex min-h-0 flex-col gap-0.5 overflow-hidden rounded-lg px-2 py-1.5 shadow-sm transition-all hover:brightness-95 ${appointmentBlockClasses(
+        a.appointment_type,
+      )} ${cancelled ? "opacity-50 line-through" : ""}`}
+      style={{ top: layout.top, height: layout.height }}
+      title={`${timeLabel} — ${petLine}`}
+    >
+      <p className="shrink-0 text-[10px] font-semibold leading-tight opacity-95">{timeLabel}</p>
+      <p className="truncate text-[11px] font-bold leading-tight">{petLine}</p>
+      <p className="truncate text-[10px] leading-tight opacity-90">{appointmentTypeLabel(a.appointment_type)}</p>
+      {layout.height >= 56 ? (
+        <p className="mt-auto truncate text-[10px] font-medium leading-tight opacity-90">
+          {a.doctor_name ?? "Unassigned"}
+        </p>
+      ) : null}
+    </Link>
+  );
+}
+
 function TimeGrid({
   view,
   anchorDateKey,
   weekDays,
   appointments,
   isToday,
+  timeZone,
 }: {
   view: "day" | "week";
   anchorDateKey: string;
   weekDays: Date[];
   appointments: CalendarAppointmentRow[];
   isToday: (dk: string) => boolean;
+  timeZone: string;
 }) {
   const anchorDay = parseLocalDateKey(anchorDateKey) ?? weekDays[0];
   const displayDays = view === "day" ? [anchorDay] : weekDays;
-  const displayKeys = displayDays.map((d) => toLocalDateKey(d));
+  const displayKeys = displayDays.map((d) =>
+    toDateKeyInTimeZone(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0), timeZone),
+  );
 
   const totalHeight = (END_HOUR - START_HOUR + 1) * SLOT_PX;
+
+  const appointmentsByDay = useMemo(() => {
+    const map = new Map<string, CalendarAppointmentRow[]>();
+    for (const dk of displayKeys) {
+      map.set(dk, []);
+    }
+    for (const a of appointments) {
+      const dayKey = toDateKeyInTimeZone(a.starts_at, timeZone);
+      const list = map.get(dayKey);
+      if (list) list.push(a);
+    }
+    return map;
+  }, [appointments, displayKeys, timeZone]);
 
   return (
     <div className={`flex-1 overflow-auto px-4 pb-28 md:px-6 md:pb-10 ${view === "day" ? "" : "min-w-[800px]"}`}>
       <div className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low/30">
-        {/* Day headers */}
         <div
           className={`sticky top-0 z-10 grid bg-surface-container-low/50 backdrop-blur-sm ${
             view === "day" ? "grid-cols-1" : "grid-cols-7"
@@ -438,75 +507,45 @@ function TimeGrid({
         </div>
 
         <div className="relative" style={{ minHeight: totalHeight }}>
-          {/* Time labels */}
           <div
-            className="absolute left-0 top-0 flex w-16 flex-col border-r border-outline-variant/30"
+            className="absolute left-0 top-0 flex w-14 shrink-0 flex-col border-r border-outline-variant/30 sm:w-16"
             style={{ height: totalHeight }}
           >
             {HOURS.map((h) => (
-              <div key={h} className="flex h-20 shrink-0 items-start justify-center border-b border-outline-variant/10 pt-2">
-                <span className="text-[10px] font-bold text-on-surface-variant/70">
-                  {h === 12 ? "12 PM" : h > 12 ? `${h - 12} PM` : `${h} AM`}
+              <div
+                key={h}
+                className="flex h-20 shrink-0 items-start justify-end border-b border-outline-variant/10 pr-2 pt-1"
+              >
+                <span className="text-[10px] font-bold leading-tight text-on-surface-variant/80">
+                  {formatHourLabel(h)}
                 </span>
               </div>
             ))}
           </div>
 
-          <div className="ml-16" style={{ minHeight: totalHeight }}>
+          <div className="ml-14 sm:ml-16" style={{ minHeight: totalHeight }}>
             <div
-              className="calendar-grid relative h-full"
+              className="grid h-full"
               style={{
-                gridTemplateColumns: view === "day" ? "minmax(0,1fr)" : "repeat(7, minmax(0, 1fr))",
+                gridTemplateColumns: view === "day" ? "minmax(0, 1fr)" : "repeat(7, minmax(0, 1fr))",
                 minHeight: totalHeight,
               }}
             >
-              {displayKeys.map((dk) => (
-                <div key={dk} className="relative border-r border-outline-variant/20 last:border-r-0">
-                  {HOURS.map((h) => (
-                    <div key={h} className="h-20 border-b border-outline-variant/10" />
-                  ))}
-                </div>
-              ))}
-
-              {appointments.map((a) => {
-                const start = new Date(a.starts_at);
-                const dayKey = toLocalDateKey(start);
-                const colIndex = displayKeys.indexOf(dayKey);
-                if (colIndex < 0) return null;
-                const layout = layoutBlock(a.starts_at, a.ends_at);
-                if (!layout) return null;
-                const cancelled = a.status === "cancelled";
-
+              {displayKeys.map((dk) => {
+                const dayAppointments = appointmentsByDay.get(dk) ?? [];
                 return (
-                  <Link
-                    key={a.id}
-                    href={`/appointments#appt-${a.id}`}
-                    className={`absolute z-[1] flex flex-col justify-between rounded-xl p-2 shadow-sm transition-all hover:brightness-95 ${appointmentBlockClasses(
-                      a.appointment_type
-                    )} ${cancelled ? "opacity-50 line-through" : ""}`}
-                    style={{
-                      top: layout.top,
-                      height: layout.height,
-                      left:
-                        view === "day"
-                          ? "4px"
-                          : `calc((100% / 7) * ${colIndex} + 5px)`,
-                      width: view === "day" ? "calc(100% - 8px)" : "calc(100% / 7 - 10px)",
-                    }}
-                  >
-                    <div>
-                      <p className="text-xs font-bold leading-tight">
-                        {a.pet_name ?? "Pet"} {a.owner_name ? `(${a.owner_name})` : ""}
-                      </p>
-                      <p className="text-[10px] opacity-90">{appointmentTypeLabel(a.appointment_type)}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[10px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                        person
-                      </span>
-                      <span className="text-[10px] font-medium">{a.doctor_name ?? "Unassigned"}</span>
-                    </div>
-                  </Link>
+                  <div key={dk} className="relative min-w-0 border-r border-outline-variant/20 last:border-r-0">
+                    {HOURS.map((h) => (
+                      <div key={h} className="h-20 border-b border-outline-variant/10" />
+                    ))}
+                    {dayAppointments.map((a) => {
+                      const layout = layoutBlock(a.starts_at, a.ends_at, timeZone);
+                      if (!layout) return null;
+                      return (
+                        <AppointmentBlock key={a.id} appointment={a} timeZone={timeZone} layout={layout} />
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>

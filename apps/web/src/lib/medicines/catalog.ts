@@ -6,6 +6,7 @@ export type MedicineCatalogEntry = {
   strength: string | null;
   manufacturer: string | null;
   default_dosage: string | null;
+  dosage_per_kg: string | null;
   default_frequency: string | null;
   default_duration: string | null;
   notes: string | null;

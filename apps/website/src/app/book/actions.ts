@@ -123,6 +123,7 @@ export async function submitGuestBooking(formData: FormData) {
       chiefComplaint: chiefComplaint || null,
       notes: notes || null,
       bookingSource: "guest_website",
+      bookingCode: row.merge_token,
     });
   } catch (mailErr) {
     console.error("[book/guest] admin notification email failed", mailErr);

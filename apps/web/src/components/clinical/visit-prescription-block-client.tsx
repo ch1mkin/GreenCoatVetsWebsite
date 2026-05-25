@@ -12,6 +12,7 @@ import {
   shouldAutoCorrectMedicine,
   type MedicineCatalogEntry,
 } from "@/lib/medicines/catalog";
+import { formatDosageForPetWeight } from "@/lib/medicines/dosage-by-weight";
 import { VisitRxVoicePanel } from "@/components/clinical/visit-rx-voice-panel";
 
 type DraftState = {
@@ -37,6 +38,7 @@ export function VisitPrescriptionBlockClient({
   embed,
   showVoiceDictation,
   medicineCatalog,
+  petWeightKg,
 }: {
   initialItems: RxLineItem[];
   prescriptionId: string;
@@ -44,6 +46,7 @@ export function VisitPrescriptionBlockClient({
   embed: boolean;
   showVoiceDictation: boolean;
   medicineCatalog: MedicineCatalogEntry[];
+  petWeightKg?: number | null;
 }) {
   /** Do not sync from server props after mount — revalidation can briefly return stale rows and wipe optimistic UI. */
   const [items, setItems] = useState<RxLineItem[]>(initialItems);
@@ -77,16 +80,27 @@ export function VisitPrescriptionBlockClient({
       .slice(0, 8);
   }, [draft.medicine_name, medicineCatalog]);
 
-  const applyCatalogEntry = useCallback((entry: MedicineCatalogEntry) => {
-    setDraft((prev) => ({
-      medicine_name: entry.name,
-      dosage: prev.dosage || entry.default_dosage || "",
-      frequency: prev.frequency || entry.default_frequency || "",
-      duration: prev.duration || entry.default_duration || "",
-      instructions: prev.instructions,
-    }));
-    setCorrectionNote(`Using catalog entry: ${medicineCatalogLabel(entry)}`);
-  }, []);
+  const applyCatalogEntry = useCallback(
+    (entry: MedicineCatalogEntry) => {
+      const weightDosage =
+        petWeightKg != null && Number.isFinite(petWeightKg)
+          ? formatDosageForPetWeight(entry.dosage_per_kg, petWeightKg, entry.default_dosage)
+          : null;
+      setDraft((prev) => ({
+        medicine_name: entry.name,
+        dosage: prev.dosage || weightDosage || entry.default_dosage || "",
+        frequency: prev.frequency || entry.default_frequency || "",
+        duration: prev.duration || entry.default_duration || "",
+        instructions: prev.instructions,
+      }));
+      setCorrectionNote(
+        weightDosage
+          ? `Dosage calculated for ${petWeightKg} kg from ${entry.dosage_per_kg ?? "catalog"}.`
+          : `Using catalog entry: ${medicineCatalogLabel(entry)}`,
+      );
+    },
+    [petWeightKg],
+  );
 
   const applyVoiceMedicineName = useCallback(
     (transcript: string) => {
@@ -116,6 +130,9 @@ export function VisitPrescriptionBlockClient({
     fd.set("frequency", draft.frequency);
     fd.set("duration", draft.duration);
     fd.set("instructions", draft.instructions);
+    if (petWeightKg != null && Number.isFinite(petWeightKg)) {
+      fd.set("pet_weight_kg", String(petWeightKg));
+    }
 
     setPending(true);
     try {
@@ -159,6 +176,11 @@ export function VisitPrescriptionBlockClient({
         />
       ) : null}
 
+      {petWeightKg != null && Number.isFinite(petWeightKg) && petWeightKg > 0 ? (
+        <p className="text-[11px] text-on-surface-variant">
+          Pet weight: <strong>{petWeightKg} kg</strong> — medicines with <em>dosage per kg</em> in the catalog auto-calculate dose.
+        </p>
+      ) : null}
       <form id="form-rx-add" className="grid gap-2 md:grid-cols-2" onSubmit={onAddMedicine}>
         <div className="space-y-2 md:col-span-2">
           <div className="relative">

@@ -15,6 +15,7 @@ export function useSpeechRecognition(lang: string) {
   const [error, setError] = useState<string | null>(null);
   const finalRef = useRef("");
   const recRef = useRef<SpeechRecognition | null>(null);
+  const listeningRef = useRef(false);
 
   useEffect(() => {
     const Ctor = getSpeechRecognitionCtor();
@@ -46,16 +47,34 @@ export function useSpeechRecognition(lang: string) {
 
     rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
       if (ev.error === "aborted" || ev.error === "no-speech") return;
-      setError(ev.error === "not-allowed" ? "Microphone permission denied." : ev.message || ev.error);
+      const message =
+        ev.error === "not-allowed"
+          ? "Microphone permission denied."
+          : ev.error === "network"
+            ? "Speech recognition needs network access. Check your connection or try Chrome/Edge."
+            : ev.error === "service-not-allowed"
+              ? "Speech recognition is not available in this browser. Try Chrome or Edge on desktop."
+              : ev.message || ev.error;
+      setError(message);
+      listeningRef.current = false;
       setStatus("idle");
     };
 
     rec.onend = () => {
+      if (listeningRef.current) {
+        try {
+          rec.start();
+          return;
+        } catch {
+          listeningRef.current = false;
+        }
+      }
       setStatus("idle");
     };
 
     recRef.current = rec;
     return () => {
+      listeningRef.current = false;
       try {
         rec.abort();
       } catch {
@@ -76,6 +95,7 @@ export function useSpeechRecognition(lang: string) {
     const Ctor = getSpeechRecognitionCtor();
     if (!Ctor) {
       setStatus("unsupported");
+      setError("Voice input needs Chrome, Edge, or Safari with microphone access.");
       return;
     }
     setError(null);
@@ -85,15 +105,18 @@ export function useSpeechRecognition(lang: string) {
     if (!rec) return;
     try {
       rec.lang = lang;
+      listeningRef.current = true;
       rec.start();
       setStatus("listening");
     } catch {
-      setError("Could not start microphone. Try again.");
+      setError("Could not start microphone. Close other apps using the mic and try again.");
+      listeningRef.current = false;
       setStatus("idle");
     }
   }, [lang]);
 
   const stop = useCallback(() => {
+    listeningRef.current = false;
     const rec = recRef.current;
     if (!rec) return;
     try {

@@ -228,11 +228,16 @@ export async function saveVisitPhotoSheetPdfAction(formData: FormData): Promise<
     }
 
     const uploadedImageBytes = await readHandwrittenImageUpload(formData);
+    const capturedAtRaw = String(formData.get("captured_at") ?? "").trim();
+    const capturedAt = capturedAtRaw ? new Date(capturedAtRaw) : new Date();
+    const scannedLabel = Number.isNaN(capturedAt.getTime())
+      ? new Date().toLocaleString()
+      : capturedAt.toLocaleString();
     const { data: brandingRow } = await supabase.from("platform_branding").select("logo_url").eq("id", "default").maybeSingle();
     const logoBytes = await fetchClinicLogoBytesForPdf(supabase, (brandingRow?.logo_url as string | null | undefined) ?? null);
     const pdfBytes = await buildHandwrittenCanvasPdfBytes({
       imageBytes: uploadedImageBytes,
-      footerText: `Photo visit sheet scanned ${new Date().toLocaleString()}.`,
+      footerText: `Photo visit sheet captured ${scannedLabel}.`,
       logoBytes,
     });
     const path = `${visit.clinic_id}/pets/${visit.pet_id}/visits/${visitId}/visit-report-photo.pdf`;

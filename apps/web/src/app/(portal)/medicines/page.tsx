@@ -16,6 +16,7 @@ type MedicineRow = {
   strength: string | null;
   manufacturer: string | null;
   default_dosage: string | null;
+  dosage_per_kg: string | null;
   default_frequency: string | null;
   default_duration: string | null;
   notes: string | null;
@@ -44,7 +45,7 @@ export default async function MedicinesPage() {
     supabase
       .from("medicine_catalog_entries")
       .select(
-        "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active, updated_at",
+        "id, name, aliases, form, strength, manufacturer, default_dosage, dosage_per_kg, default_frequency, default_duration, notes, is_active, updated_at",
       )
       .eq("clinic_id", clinic_id)
       .order("is_active", { ascending: false })
@@ -98,8 +99,11 @@ export default async function MedicinesPage() {
               name="aliases"
               placeholder="Aliases, spellings, or speech variants. Separate with commas or new lines."
             />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <input className="input-soft" name="default_dosage" placeholder="Default dosage" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <input className="input-soft" name="default_dosage" placeholder="Default dosage (fixed amount)" />
+              <input className="input-soft" name="dosage_per_kg" placeholder="Dosage per kg (e.g. 10 mg/kg)" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <input className="input-soft" name="default_frequency" placeholder="Default frequency" />
               <input className="input-soft" name="default_duration" placeholder="Default duration" />
             </div>

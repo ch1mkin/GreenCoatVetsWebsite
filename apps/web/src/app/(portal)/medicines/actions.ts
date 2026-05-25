@@ -37,6 +37,7 @@ export async function saveMedicineCatalogEntry(formData: FormData) {
   const strength = String(formData.get("strength") ?? "").trim();
   const manufacturer = String(formData.get("manufacturer") ?? "").trim();
   const defaultDosage = String(formData.get("default_dosage") ?? "").trim();
+  const dosagePerKg = String(formData.get("dosage_per_kg") ?? "").trim();
   const defaultFrequency = String(formData.get("default_frequency") ?? "").trim();
   const defaultDuration = String(formData.get("default_duration") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
@@ -54,6 +55,7 @@ export async function saveMedicineCatalogEntry(formData: FormData) {
     strength: strength || null,
     manufacturer: manufacturer || null,
     default_dosage: defaultDosage || null,
+    dosage_per_kg: dosagePerKg || null,
     default_frequency: defaultFrequency || null,
     default_duration: defaultDuration || null,
     notes: notes || null,

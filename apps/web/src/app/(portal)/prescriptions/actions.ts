@@ -6,6 +6,7 @@ import {
   shouldAutoCorrectMedicine,
   type MedicineCatalogEntry,
 } from "@/lib/medicines/catalog";
+import { formatDosageForPetWeight } from "@/lib/medicines/dosage-by-weight";
 import { createClient } from "@/lib/supabase/server";
 
 export type RxLineItem = {
@@ -30,6 +31,7 @@ type MedicineCatalogRow = Pick<
   | "strength"
   | "manufacturer"
   | "default_dosage"
+  | "dosage_per_kg"
   | "default_frequency"
   | "default_duration"
   | "notes"
@@ -43,7 +45,7 @@ async function loadClinicMedicineCatalog(
   const { data, error } = await supabase
     .from("medicine_catalog_entries")
     .select(
-      "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active",
+      "id, name, aliases, form, strength, manufacturer, default_dosage, dosage_per_kg, default_frequency, default_duration, notes, is_active",
     )
     .eq("clinic_id", clinicId)
     .eq("is_active", true)
@@ -64,6 +66,7 @@ async function loadClinicMedicineCatalog(
     strength: row.strength ?? null,
     manufacturer: row.manufacturer ?? null,
     default_dosage: row.default_dosage ?? null,
+    dosage_per_kg: row.dosage_per_kg ?? null,
     default_frequency: row.default_frequency ?? null,
     default_duration: row.default_duration ?? null,
     notes: row.notes ?? null,
@@ -76,6 +79,8 @@ export async function addPrescriptionItemAction(formData: FormData): Promise<Add
   const prescriptionId = String(formData.get("prescription_id") ?? "").trim();
   const rawMedicineName = String(formData.get("medicine_name") ?? "").trim();
   const dosage = String(formData.get("dosage") ?? "").trim();
+  const petWeightKgRaw = String(formData.get("pet_weight_kg") ?? "").trim();
+  const petWeightKg = petWeightKgRaw ? Number(petWeightKgRaw) : null;
   const frequency = String(formData.get("frequency") ?? "").trim();
   const duration = String(formData.get("duration") ?? "").trim();
   const instructions = String(formData.get("instructions") ?? "").trim();
@@ -104,7 +109,11 @@ export async function addPrescriptionItemAction(formData: FormData): Promise<Add
     const match = findBestMedicineCatalogMatch(rawMedicineName, catalog);
     const autoMatch = shouldAutoCorrectMedicine(match) ? match : null;
     const correctedName = autoMatch ? autoMatch.entry.name : rawMedicineName;
-    const finalDosage = dosage || (autoMatch ? autoMatch.entry.default_dosage ?? "" : "");
+    const weightBased =
+      autoMatch && petWeightKg != null && Number.isFinite(petWeightKg)
+        ? formatDosageForPetWeight(autoMatch.entry.dosage_per_kg, petWeightKg, autoMatch.entry.default_dosage)
+        : null;
+    const finalDosage = dosage || weightBased || (autoMatch ? autoMatch.entry.default_dosage ?? "" : "");
     const finalFrequency = frequency || (autoMatch ? autoMatch.entry.default_frequency ?? "" : "");
     const finalDuration = duration || (autoMatch ? autoMatch.entry.default_duration ?? "" : "");
 

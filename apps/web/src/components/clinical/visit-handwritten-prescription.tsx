@@ -1254,7 +1254,7 @@ export function VisitHandwrittenPrescription({
       }
       editorStateRef.current = flushed;
 
-      await waitForNextPaint(2);
+      await waitForNextPaint(4);
 
       const captureNode = buildStaticPdfCapture();
       if (!captureNode) {
@@ -1268,7 +1268,8 @@ export function VisitHandwrittenPrescription({
           pixelRatio: 2,
           cacheBust: true,
           backgroundColor: "#ffffff",
-          skipFonts: true,
+          width: HANDWRITTEN_VISIT_SHEET_WIDTH,
+          height: HANDWRITTEN_VISIT_SHEET_HEIGHT,
           filter: (node) => {
             const tag = node.tagName?.toUpperCase?.() ?? "";
             return tag !== "SCRIPT" && tag !== "STYLE";
@@ -1352,11 +1353,13 @@ export function VisitHandwrittenPrescription({
 
     const clone = root.cloneNode(true) as HTMLElement;
     clone.style.position = "fixed";
-    clone.style.left = "-10000px";
+    clone.style.left = "0";
     clone.style.top = "0";
     clone.style.zIndex = "-1";
     clone.style.pointerEvents = "none";
     clone.style.margin = "0";
+    clone.style.opacity = "0";
+    clone.style.visibility = "hidden";
 
     applyEditorStateToCaptureClone(clone, editorStateRef.current);
 

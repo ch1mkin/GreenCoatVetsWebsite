@@ -82,7 +82,7 @@ async function loadMedicineCatalogOrFallback(
   const { data, error } = await supabase
     .from("medicine_catalog_entries")
     .select(
-      "id, name, aliases, form, strength, manufacturer, default_dosage, default_frequency, default_duration, notes, is_active",
+      "id, name, aliases, form, strength, manufacturer, default_dosage, dosage_per_kg, default_frequency, default_duration, notes, is_active",
     )
     .eq("clinic_id", clinicId)
     .eq("is_active", true)
@@ -116,6 +116,7 @@ async function loadMedicineCatalogOrFallback(
     strength: null,
     manufacturer: null,
     default_dosage: null,
+    dosage_per_kg: null,
     default_frequency: null,
     default_duration: null,
     notes: null,
@@ -711,6 +712,13 @@ export default async function VisitDetailsPage({
           </p>
           <VisitPrescriptionBlockClient
             key={visit.id}
+            petWeightKg={
+              typeof pet?.weight_kg === "number"
+                ? pet.weight_kg
+                : pet?.weight_kg != null
+                  ? Number(pet.weight_kg)
+                  : null
+            }
             initialItems={(rxItems ?? []).map((r) => ({
               id: r.id,
               medicine_name: String(r.medicine_name ?? ""),

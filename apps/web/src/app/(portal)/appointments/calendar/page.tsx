@@ -8,6 +8,7 @@ import {
   CalendarView,
   parseLocalDateKey,
   rangeForView,
+  resolveCalendarTimeZone,
   toLocalDateKey,
 } from "@/lib/appointments/calendar-utils";
 import { createClient } from "@/lib/supabase/server";
@@ -49,6 +50,8 @@ export default async function AppointmentCalendarPage({
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
   const supabase = createClient();
+
+  const { data: clinicRow } = await supabase.from("clinics").select("timezone").eq("id", clinic_id).maybeSingle();
 
   const view = normalizeView(searchParams.view);
   const anchorDateKey =
@@ -172,6 +175,7 @@ export default async function AppointmentCalendarPage({
         view={view}
         doctorId={selectedDoctorId}
         searchQ={q}
+        timeZone={resolveCalendarTimeZone(clinicRow?.timezone)}
         doctors={(doctors ?? []).map((d) => ({ id: d.id, full_name: d.full_name }))}
         appointments={appointments}
       />

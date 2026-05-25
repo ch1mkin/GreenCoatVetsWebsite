@@ -16,6 +16,8 @@ export async function sendAppointmentBookingNotificationEmail(params: {
   chiefComplaint?: string | null;
   notes?: string | null;
   bookingSource: "owner_portal" | "guest_website";
+  /** Guest booking confirmation / claim code (merge_token). */
+  bookingCode?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   const supabase = createClient();
   const transporter = createHostingerTransport();
@@ -32,6 +34,7 @@ export async function sendAppointmentBookingNotificationEmail(params: {
   const when = new Date(params.startsAtIso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   const sourceLabel = params.bookingSource === "guest_website" ? "Guest (website)" : "Signed-in owner";
   const brandName = branding.product_name || params.clinicName;
+  const bookingCode = params.bookingCode?.trim() || null;
 
   if (recipients.length) {
     const staffMail = renderBrandedEmail({
@@ -50,6 +53,7 @@ export async function sendAppointmentBookingNotificationEmail(params: {
         { label: "Owner phone", value: params.ownerPhone?.trim() || "—" },
         { label: "Chief complaint", value: params.chiefComplaint?.trim() || "—" },
         { label: "Notes", value: params.notes?.trim() || "—" },
+        ...(bookingCode ? [{ label: "Booking code", value: bookingCode }] : []),
       ],
       footer: `${brandName} booking notifications`,
     });
@@ -72,7 +76,12 @@ export async function sendAppointmentBookingNotificationEmail(params: {
       brandName,
       heading: "Your appointment is booked",
       intro: `Hi ${params.ownerDisplay}, your ${params.appointmentType} booking for ${params.petName} has been received.`,
-      body: ["The clinic team can now see this appointment in their schedule and will prepare for your visit."],
+      body: [
+        "The clinic team can now see this appointment in their schedule and will prepare for your visit.",
+        bookingCode
+          ? `Your booking code is ${bookingCode}. Keep it to manage this appointment in your account or when contacting the clinic.`
+          : null,
+      ].filter(Boolean) as string[],
       details: [
         { label: "Clinic", value: params.clinicName },
         { label: "Branch", value: branchName },
@@ -80,6 +89,7 @@ export async function sendAppointmentBookingNotificationEmail(params: {
         { label: "Appointment type", value: params.appointmentType },
         { label: "Pet", value: params.petName },
         { label: "Booked from", value: sourceLabel },
+        ...(bookingCode ? [{ label: "Booking code", value: bookingCode }] : []),
       ],
       footer: `${brandName} appointment confirmation`,
     });

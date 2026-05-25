@@ -1,15 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { createMedicalRecord } from "./actions";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
+import { upsertMedicalRecordForVisit } from "@/lib/medical-records/upsert-by-visit";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/web/app-shell";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { SubmitButton } from "@/components/web/submit-button";
+import { MedicalRecordsPetFilter } from "@/components/medical-records/medical-records-pet-filter";
+import { MedicalRecordsTabs } from "@/components/medical-records/medical-records-tabs";
 
 type SearchParams = {
   pet?: string;
+  tab?: string;
 };
 
 function pick(row: unknown, rel: string, field: string): string {
@@ -21,6 +26,11 @@ function pick(row: unknown, rel: string, field: string): string {
     return o?.[field] ?? "-";
   }
   return (v as Record<string, string>)[field] ?? "-";
+}
+
+function normalizeTab(v: string | undefined): "records" | "diagnostics" | "history" {
+  if (v === "diagnostics" || v === "history") return v;
+  return "records";
 }
 
 export default async function MedicalRecordsPage({
@@ -38,6 +48,7 @@ export default async function MedicalRecordsPage({
   }
 
   const petFilter = (searchParams.pet ?? "").trim();
+  const tab = normalizeTab(searchParams.tab);
   const { clinic_id } = await getActiveMembership();
   const navGroups = getRoleNavGroups(role, access.isSuperAdmin);
   const supabase = createClient();
@@ -45,7 +56,7 @@ export default async function MedicalRecordsPage({
   const [{ data: visits, error: visitsError }, { data: pets, error: petsError }] = await Promise.all([
     supabase
       .from("visits")
-      .select("id, created_at, pets(name), owners(full_name)")
+      .select("id, pet_id, created_at, pets(name), owners(full_name)")
       .eq("clinic_id", clinic_id)
       .order("created_at", { ascending: false })
       .limit(12),
@@ -54,8 +65,11 @@ export default async function MedicalRecordsPage({
   if (visitsError) throw new Error(visitsError.message);
   if (petsError) throw new Error(petsError.message);
 
-  // Backfill records for existing visits so older consultations appear in medical records.
-  const { data: existingRecords } = await supabase.from("medical_records").select("visit_id").eq("clinic_id", clinic_id).limit(5000);
+  const { data: existingRecords } = await supabase
+    .from("medical_records")
+    .select("visit_id")
+    .eq("clinic_id", clinic_id)
+    .limit(5000);
   const existingVisitIds = new Set((existingRecords ?? []).map((r) => r.visit_id).filter(Boolean));
   const { data: visitBackfillRows } = await supabase
     .from("visits")
@@ -66,23 +80,24 @@ export default async function MedicalRecordsPage({
   const missing = (visitBackfillRows ?? []).filter(
     (v) => !existingVisitIds.has(v.id) && Boolean(v.diagnosis || v.symptoms || v.treatment_plan),
   );
-  if (missing.length) {
-    const { error: backfillErr } = await supabase.from("medical_records").insert(
-      missing.map((v) => ({
+  for (const v of missing.slice(0, 50)) {
+    try {
+      await upsertMedicalRecordForVisit(supabase, {
         clinic_id,
         branch_id: v.branch_id,
         pet_id: v.pet_id,
         visit_id: v.id,
         diagnosis: v.diagnosis ?? null,
         notes: v.treatment_plan ?? v.symptoms ?? null,
-      })),
-    );
-    if (backfillErr) throw new Error(backfillErr.message);
+      });
+    } catch {
+      // Skip duplicates or RLS edge cases — page should still load.
+    }
   }
 
   let recordsQuery = supabase
     .from("medical_records")
-    .select("id, created_at, diagnosis, lab_tests, notes, visits(id), pets(id, name), branches(name)")
+    .select("id, pet_id, created_at, diagnosis, lab_tests, notes, visits(id), pets(id, name), branches(name)")
     .eq("clinic_id", clinic_id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -92,6 +107,7 @@ export default async function MedicalRecordsPage({
 
   const firstRecord = records?.[0];
   const heroPet = firstRecord ? pick(firstRecord, "pets", "name") : "—";
+  const heroPetId = firstRecord?.pet_id as string | undefined;
 
   return (
     <AppShell
@@ -128,25 +144,7 @@ export default async function MedicalRecordsPage({
         </div>
       </div>
 
-      <div className="relative mb-6 max-w-xl">
-        <span className="material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-outline-variant">
-          search
-        </span>
-        <form method="get" className="block">
-          <select
-            className="input-soft w-full rounded-xl py-2.5 pl-12 pr-4 text-sm"
-            name="pet"
-            defaultValue={petFilter}
-          >
-            <option value="">All pets</option>
-            {pets?.map((pet) => (
-              <option key={pet.id} value={pet.id}>
-                {pet.name}
-              </option>
-            ))}
-          </select>
-        </form>
-      </div>
+      <MedicalRecordsPetFilter pets={pets ?? []} defaultPetId={petFilter} />
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 flex flex-col gap-6 lg:col-span-4">
@@ -156,10 +154,12 @@ export default async function MedicalRecordsPage({
               {(visits ?? []).map((v) => {
                 const pet = pick(v, "pets", "name");
                 const owner = pick(v, "owners", "full_name");
+                const petId = (v as { pet_id?: string }).pet_id;
                 return (
-                  <div
+                  <Link
                     key={v.id}
-                    className="cursor-pointer rounded-xl border-l-4 border-primary bg-primary/5 p-4 transition-colors hover:bg-primary/10"
+                    href={`/visits/${v.id}`}
+                    className="block rounded-xl border-l-4 border-primary bg-primary/5 p-4 transition-colors hover:bg-primary/10"
                   >
                     <div className="mb-2 flex justify-between gap-2">
                       <span className="rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
@@ -172,7 +172,10 @@ export default async function MedicalRecordsPage({
                     <h4 className="font-bold text-on-surface">
                       {pet} <span className="text-on-surface-variant">• {owner}</span>
                     </h4>
-                  </div>
+                    {petId ? (
+                      <p className="mt-1 text-[10px] font-semibold text-primary">Open visit →</p>
+                    ) : null}
+                  </Link>
                 );
               })}
               {!visits?.length ? <p className="text-sm text-on-surface-variant">No visits yet.</p> : null}
@@ -204,77 +207,148 @@ export default async function MedicalRecordsPage({
                   {String(heroPet).slice(0, 1)}
                 </div>
                 <div className="pb-2">
-                  <h3 className="font-headline text-2xl font-extrabold text-on-background">{heroPet}</h3>
+                  {heroPetId ? (
+                    <Link href={`/pets/${heroPetId}`} className="font-headline text-2xl font-extrabold text-primary hover:underline">
+                      {heroPet}
+                    </Link>
+                  ) : (
+                    <h3 className="font-headline text-2xl font-extrabold text-on-background">{heroPet}</h3>
+                  )}
                   <p className="text-sm font-medium text-on-surface-variant">Latest record preview</p>
                 </div>
               </div>
             </div>
             <div className="mt-12 space-y-6 p-8 pt-4">
-              <div className="flex gap-8 border-b border-surface-container text-sm font-bold text-on-surface-variant">
-                <span className="border-b-2 border-primary pb-4 text-primary">Records</span>
-                <span className="pb-4 opacity-60">Diagnostics</span>
-                <span className="pb-4 opacity-60">History</span>
-              </div>
+              <Suspense fallback={<div className="h-10 border-b border-surface-container" />}>
+                <MedicalRecordsTabs active={tab} />
+              </Suspense>
 
-              <section className="card-soft">
-                <h2 className="mb-3 font-headline text-lg font-bold">New record from visit</h2>
-                <form action={createMedicalRecord} className="grid gap-3">
-                  <select className="input-soft" name="visit_id" required>
-                    <option value="">Select visit</option>
-                    {visits?.map((visit) => (
-                      <option key={visit.id} value={visit.id}>
-                        {new Date(visit.created_at).toLocaleString()} | {pick(visit, "pets", "name")} |{" "}
-                        {pick(visit, "owners", "full_name")}
-                      </option>
+              {tab === "records" ? (
+                <>
+                  <section className="card-soft">
+                    <h2 className="mb-3 font-headline text-lg font-bold">New record from visit</h2>
+                    <form action={createMedicalRecord} className="grid gap-3">
+                      <select className="input-soft" name="visit_id" required>
+                        <option value="">Select visit</option>
+                        {visits?.map((visit) => (
+                          <option key={visit.id} value={visit.id}>
+                            {new Date(visit.created_at).toLocaleString()} | {pick(visit, "pets", "name")} |{" "}
+                            {pick(visit, "owners", "full_name")}
+                          </option>
+                        ))}
+                      </select>
+                      <textarea className="input-soft" name="diagnosis" placeholder="Diagnosis" />
+                      <textarea className="input-soft" name="lab_tests" placeholder="Lab tests / findings" />
+                      <textarea className="input-soft" name="notes" placeholder="Clinical notes" />
+                      <SubmitButton className="btn-primary" pendingLabel="Saving…">
+                        Save record
+                      </SubmitButton>
+                    </form>
+                  </section>
+
+                  <div className="space-y-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-primary">Timeline</h3>
+                    {records?.map((record) => {
+                      const petId = record.pet_id as string | undefined;
+                      const visitId = pick(record, "visits", "id");
+                      return (
+                        <article
+                          key={record.id}
+                          className="glass-card rounded-xl border border-outline-variant/15 p-5 shadow-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-semibold text-on-background">
+                              {pick(record, "pets", "name")} · {pick(record, "branches", "name")} ·{" "}
+                              {new Date(record.created_at).toLocaleString()}
+                            </p>
+                            <div className="flex gap-2 text-xs font-semibold">
+                              {petId ? (
+                                <Link className="text-primary hover:underline" href={`/pets/${petId}`}>
+                                  Patient
+                                </Link>
+                              ) : null}
+                              {visitId && visitId !== "-" ? (
+                                <Link className="text-primary hover:underline" href={`/visits/${visitId}`}>
+                                  Visit
+                                </Link>
+                              ) : null}
+                            </div>
+                          </div>
+                          <p className="mt-2 text-sm text-on-surface-variant">
+                            <strong>Diagnosis:</strong> {record.diagnosis ?? "—"}
+                          </p>
+                          <p className="text-sm text-on-surface-variant">
+                            <strong>Lab:</strong> {record.lab_tests ?? "—"}
+                          </p>
+                          <p className="text-sm text-on-surface-variant">
+                            <strong>Notes:</strong> {record.notes ?? "—"}
+                          </p>
+                        </article>
+                      );
+                    })}
+                    {!records?.length ? (
+                      <p className="text-sm text-on-surface-variant">No medical records found for this filter.</p>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+
+              {tab === "diagnostics" ? (
+                <section className="card-soft space-y-3">
+                  <h2 className="font-headline text-lg font-bold">Diagnostics</h2>
+                  <p className="text-sm text-on-surface-variant">
+                    Lab and diagnostic results tied to visits appear here. Open a visit from the timeline or recent
+                    encounters to add lab findings, then they sync to the medical record.
+                  </p>
+                  {records
+                    ?.filter((r) => (r.lab_tests ?? "").trim())
+                    .map((record) => (
+                      <div key={record.id} className="rounded-xl border border-outline-variant/15 bg-white p-4">
+                        <p className="text-sm font-bold text-on-background">
+                          {pick(record, "pets", "name")} · {new Date(record.created_at).toLocaleDateString()}
+                        </p>
+                        <p className="mt-1 text-sm text-on-surface-variant">{record.lab_tests}</p>
+                      </div>
                     ))}
-                  </select>
-                  <textarea className="input-soft" name="diagnosis" placeholder="Diagnosis" />
-                  <textarea className="input-soft" name="lab_tests" placeholder="Lab tests / findings" />
-                  <textarea className="input-soft" name="notes" placeholder="Clinical notes" />
-                  <SubmitButton className="btn-primary" pendingLabel="Saving…">
-                    Save record
-                  </SubmitButton>
-                </form>
-              </section>
+                  {!records?.some((r) => (r.lab_tests ?? "").trim()) ? (
+                    <p className="text-sm text-on-surface-variant">No lab/diagnostic notes in the current filter.</p>
+                  ) : null}
+                </section>
+              ) : null}
 
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-primary">Timeline</h3>
-                {records?.map((record) => (
-                  <article
-                    key={record.id}
-                    className="glass-card rounded-xl border border-outline-variant/15 p-5 shadow-sm"
-                  >
-                    <p className="font-semibold text-on-background">
-                      {pick(record, "pets", "name")} · {pick(record, "branches", "name")} ·{" "}
-                      {new Date(record.created_at).toLocaleString()}
-                    </p>
-                    <p className="mt-2 text-sm text-on-surface-variant">
-                      <strong>Diagnosis:</strong> {record.diagnosis ?? "—"}
-                    </p>
-                    <p className="text-sm text-on-surface-variant">
-                      <strong>Lab:</strong> {record.lab_tests ?? "—"}
-                    </p>
-                    <p className="text-sm text-on-surface-variant">
-                      <strong>Notes:</strong> {record.notes ?? "—"}
-                    </p>
-                  </article>
-                ))}
-                {!records?.length ? (
-                  <p className="text-sm text-on-surface-variant">No medical records found for this filter.</p>
-                ) : null}
-              </div>
+              {tab === "history" ? (
+                <section className="card-soft space-y-3">
+                  <h2 className="font-headline text-lg font-bold">History</h2>
+                  <p className="text-sm text-on-surface-variant">
+                    Chronological clinical history for the selected patient filter.
+                  </p>
+                  <ul className="space-y-2">
+                    {records?.map((record) => {
+                      const petId = record.pet_id as string | undefined;
+                      return (
+                        <li key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-container-low px-3 py-2 text-sm">
+                          <span>
+                            {new Date(record.created_at).toLocaleString()} — {pick(record, "pets", "name")}
+                            {record.diagnosis ? `: ${record.diagnosis}` : ""}
+                          </span>
+                          {petId ? (
+                            <Link href={`/pets/${petId}?view=medication`} className="text-xs font-semibold text-primary hover:underline">
+                              Full history
+                            </Link>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {!records?.length ? (
+                    <p className="text-sm text-on-surface-variant">No history for this filter.</p>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
           </div>
         </div>
       </div>
-
-      <Link
-        href="#"
-        className="fixed bottom-8 right-8 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary-container to-primary text-white shadow-2xl transition-transform hover:scale-105"
-        aria-label="Back to top"
-      >
-        <span className="material-symbols-outlined text-2xl">edit_square</span>
-      </Link>
     </AppShell>
   );
 }

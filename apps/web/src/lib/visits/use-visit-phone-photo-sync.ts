@@ -8,6 +8,7 @@ type AttachmentRow = {
   storage_path: string;
   mime_type: string | null;
   file_name: string | null;
+  created_at?: string | null;
 };
 
 export function useVisitPhonePhotoSync({
@@ -19,7 +20,7 @@ export function useVisitPhonePhotoSync({
   visitId: string;
   clinicId: string;
   enabled: boolean;
-  onImageFile: (file: File) => void | Promise<void>;
+  onImageFile: (file: File, meta?: { capturedAt?: string }) => void | Promise<void>;
 }) {
   const processedIds = useRef<Set<string>>(new Set());
   const onImageFileRef = useRef(onImageFile);
@@ -40,7 +41,7 @@ export function useVisitPhonePhotoSync({
     const file = new File([blob], row.file_name ?? "phone-capture.jpg", {
       type: blob.type || "image/jpeg",
     });
-    await onImageFileRef.current(file);
+    await onImageFileRef.current(file, { capturedAt: row.created_at ?? undefined });
   }, []);
 
   const checkLatestAttachment = useCallback(async () => {

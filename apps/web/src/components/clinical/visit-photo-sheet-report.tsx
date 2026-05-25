@@ -28,6 +28,7 @@ export function VisitPhotoSheetReport({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [capturedAtIso, setCapturedAtIso] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +39,11 @@ export function VisitPhotoSheetReport({
       return null;
     });
     setPhotoFile(null);
+    setCapturedAtIso(null);
   }, []);
 
   const loadPhoto = useCallback(
-    (file: File | null, options?: { fromPhone?: boolean }) => {
+    (file: File | null, options?: { fromPhone?: boolean; capturedAt?: string }) => {
       resetPhoto();
       setMessage(null);
       setError(null);
@@ -52,6 +54,7 @@ export function VisitPhotoSheetReport({
       }
 
       setPhotoFile(file);
+      setCapturedAtIso(options?.capturedAt ?? new Date().toISOString());
       setPreviewUrl(URL.createObjectURL(file));
       setMessage(
         options?.fromPhone
@@ -66,7 +69,7 @@ export function VisitPhotoSheetReport({
     visitId,
     clinicId,
     enabled: showPhoneCapture,
-    onImageFile: (file) => loadPhoto(file, { fromPhone: true }),
+    onImageFile: (file, meta) => loadPhoto(file, { fromPhone: true, capturedAt: meta?.capturedAt }),
   });
 
   async function savePdf() {
@@ -80,6 +83,7 @@ export function VisitPhotoSheetReport({
     try {
       const fd = new FormData();
       fd.set("visit_id", visitId);
+      fd.set("captured_at", capturedAtIso ?? new Date().toISOString());
       const ext = photoFile.name.split(".").pop()?.toLowerCase() || "jpg";
       const safeExt = ext === "png" || ext === "jpeg" || ext === "jpg" ? ext : "jpg";
       fd.set(

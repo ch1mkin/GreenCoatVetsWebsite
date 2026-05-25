@@ -14,21 +14,20 @@ type Props = {
   children: ReactNode;
 };
 
-/**
- * Single-click selects the row; double-click navigates to the record; "Open" always navigates.
- */
+/** Single-click opens the record; row also highlights on click. */
 export function RecordDirectoryRow({ href, recordId, selectedId, onSelect, preview, children }: Props) {
   const router = useRouter();
   const selected = selectedId === recordId;
 
   const go = useCallback(() => {
+    onSelect(recordId);
     router.push(href);
-  }, [href, router]);
+  }, [href, onSelect, recordId, router]);
 
   return (
     <RecordHoverPreview content={preview}>
       <div
-        role="group"
+        role="link"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -36,12 +35,8 @@ export function RecordDirectoryRow({ href, recordId, selectedId, onSelect, previ
             go();
           }
         }}
-        onClick={() => onSelect(recordId)}
-        onDoubleClick={(e) => {
-          e.preventDefault();
-          go();
-        }}
-        className={`relative flex cursor-default items-center gap-2.5 rounded-md border p-2.5 pr-[4.75rem] transition-colors active:scale-[0.995] ${
+        onClick={go}
+        className={`relative flex cursor-pointer items-center gap-2.5 rounded-md border p-2.5 pr-[4.75rem] transition-colors active:scale-[0.995] ${
           selected
             ? "border-primary/50 bg-white ring-1 ring-primary/30"
             : "border-slate-200/80 bg-white hover:bg-slate-50"
@@ -63,8 +58,7 @@ export function RecordDirectoryRow({ href, recordId, selectedId, onSelect, previ
 export function DirectorySelectionHint() {
   return (
     <p className="mb-2 border-b border-slate-200/80 pb-2 text-[10px] leading-snug text-slate-600">
-      <span className="font-semibold text-slate-800">Tip:</span> click to select, double-click or{" "}
-      <span className="font-medium">Open</span> for the record. Hover for preview.
+      <span className="font-semibold text-slate-800">Tip:</span> click a row to open the record. Hover for preview.
     </p>
   );
 }

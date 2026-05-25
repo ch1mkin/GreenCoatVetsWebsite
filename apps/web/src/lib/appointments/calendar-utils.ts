@@ -2,6 +2,76 @@
 
 export type CalendarView = "day" | "week" | "month";
 
+const DEFAULT_CALENDAR_TIME_ZONE =
+  typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+
+export function resolveCalendarTimeZone(clinicTimeZone?: string | null): string {
+  const trimmed = (clinicTimeZone ?? "").trim();
+  if (!trimmed) return DEFAULT_CALENDAR_TIME_ZONE;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: trimmed });
+    return trimmed;
+  } catch {
+    return DEFAULT_CALENDAR_TIME_ZONE;
+  }
+}
+
+function datePartsInTimeZone(isoOrDate: string | Date, timeZone: string) {
+  const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return {
+    year: pick("year"),
+    month: pick("month"),
+    day: pick("day"),
+    hour: pick("hour"),
+    minute: pick("minute"),
+  };
+}
+
+/** YYYY-MM-DD in the clinic (or viewer) timezone — used for column placement. */
+export function toDateKeyInTimeZone(isoOrDate: string | Date, timeZone: string): string {
+  const { year, month, day } = datePartsInTimeZone(isoOrDate, timeZone);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Minutes from midnight in the given timezone (for vertical layout). */
+export function minutesFromMidnightInTimeZone(isoOrDate: string | Date, timeZone: string): number {
+  const { hour, minute } = datePartsInTimeZone(isoOrDate, timeZone);
+  return hour * 60 + minute;
+}
+
+export function formatCalendarTime(
+  isoOrDate: string | Date,
+  timeZone: string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  const date = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  return date.toLocaleTimeString(undefined, {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    ...options,
+  });
+}
+
+/** Label for a row that starts at hour24:00 on the clinic day grid (8–20). */
+export function formatHourLabel(hour24: number): string {
+  if (hour24 === 0) return "12 AM";
+  if (hour24 === 12) return "12 PM";
+  if (hour24 < 12) return `${hour24} AM`;
+  return `${hour24 - 12} PM`;
+}
+
 export function startOfWeekSunday(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
