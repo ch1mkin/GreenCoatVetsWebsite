@@ -12,6 +12,10 @@ export async function sendVaccinationAlertEmail(params: {
   dose?: string | null;
   dueOn?: string | null;
   notes?: string | null;
+  respondUrl?: string | null;
+  markDoneUrl?: string | null;
+  notDoneUrl?: string | null;
+  optOutUrl?: string | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   const to = params.to.trim().toLowerCase();
   if (!to) return { sent: false, reason: "no_recipient" };
@@ -27,7 +31,18 @@ export async function sendVaccinationAlertEmail(params: {
     brandName,
     heading: "Vaccination reminder",
     intro: `Hi ${params.ownerName || "there"}, ${params.petName} has a vaccination reminder from ${params.clinicName}.`,
-    body: ["Please keep this reminder for your records and contact the clinic if you need to adjust the appointment date."],
+    body: [
+      "Please keep this reminder for your records and contact the clinic if you need to adjust the appointment date.",
+      ...(params.markDoneUrl && params.notDoneUrl
+        ? [
+            `Mark as done: ${params.markDoneUrl}`,
+            `Not done yet (remind tomorrow): ${params.notDoneUrl}`,
+            ...(params.optOutUrl ? [`Stop reminders: ${params.optOutUrl}`] : []),
+          ]
+        : []),
+    ],
+    ctaLabel: params.respondUrl ? "Respond to this reminder" : undefined,
+    ctaHref: params.respondUrl ?? undefined,
     details: [
       { label: "Clinic", value: params.clinicName },
       { label: "Branch", value: params.branchName?.trim() || "—" },

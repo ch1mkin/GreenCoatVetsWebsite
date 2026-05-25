@@ -40,6 +40,7 @@ export async function submitGuestBooking(formData: FormData) {
   const clinic = await resolveClinic();
   const branchId = String(formData.get("branch_id") ?? "").trim();
   const appointmentType = String(formData.get("appointment_type") ?? "consultation").trim();
+  const doctorId = String(formData.get("doctor_id") ?? "").trim() || null;
   const startsAtRaw = String(formData.get("starts_at") ?? "").trim();
   const fullName = String(formData.get("guest_full_name") ?? "").trim();
   const phone = String(formData.get("guest_phone") ?? "").trim();
@@ -77,7 +78,7 @@ export async function submitGuestBooking(formData: FormData) {
   const { data, error } = await supabase.rpc("create_guest_website_booking", {
     p_clinic_id: clinic.id,
     p_branch_id: branchId,
-    p_doctor_id: null,
+    p_doctor_id: doctorId,
     p_starts_at: startsAt,
     p_appointment_type: appointmentType,
     p_owner_full_name: fullName,

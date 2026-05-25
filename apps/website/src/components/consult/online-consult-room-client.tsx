@@ -1,0 +1,202 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+type RoomInfo = {
+  room_name: string;
+  starts_at: string;
+  ends_at: string;
+  duration_minutes: number;
+  pet_name: string;
+  owner_name: string;
+  doctor_name: string;
+};
+
+type JitsiApi = {
+  executeCommand: (command: string, ...args: unknown[]) => void;
+  dispose: () => void;
+  addEventListener: (event: string, handler: () => void) => void;
+};
+
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI?: new (domain: string, options: Record<string, unknown>) => JitsiApi;
+  }
+}
+
+function loadJitsiScript(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.JitsiMeetExternalAPI) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-jitsi="1"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://meet.jit.si/external_api.js";
+    script.async = true;
+    script.dataset.jitsi = "1";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load video engine"));
+    document.body.appendChild(script);
+  });
+}
+
+type Props = {
+  appointmentId: string;
+  token: string | null;
+  clinicName: string;
+  displayName: string;
+  room: RoomInfo;
+};
+
+export function OnlineConsultRoomClient({ appointmentId, token, clinicName, displayName, room }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const apiRef = useRef<JitsiApi | null>(null);
+  const [muted, setMuted] = useState(false);
+  const [videoOff, setVideoOff] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [ended, setEnded] = useState(false);
+
+  const hangUp = useCallback(() => {
+    apiRef.current?.executeCommand("hangup");
+    apiRef.current?.dispose();
+    apiRef.current = null;
+    setEnded(true);
+  }, []);
+
+  useEffect(() => {
+    const endsAt = new Date(room.ends_at).getTime();
+    const tick = () => {
+      const left = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0 && !ended) {
+        hangUp();
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [room.ends_at, ended, hangUp]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await loadJitsiScript();
+      if (cancelled || !containerRef.current || !window.JitsiMeetExternalAPI) return;
+
+      const api = new window.JitsiMeetExternalAPI("meet.jit.si", {
+        roomName: room.room_name,
+        parentNode: containerRef.current,
+        width: "100%",
+        height: "100%",
+        userInfo: { displayName },
+        configOverwrite: {
+          prejoinPageEnabled: false,
+          startWithAudioMuted: false,
+          startWithVideoMuted: false,
+          disableDeepLinking: true,
+          enableWelcomePage: false,
+          defaultLogoUrl: "about:blank",
+          hideConferenceSubject: true,
+        },
+        interfaceConfigOverwrite: {
+          SHOW_JITSI_WATERMARK: false,
+          SHOW_WATERMARK_FOR_GUESTS: false,
+          SHOW_BRAND_WATERMARK: false,
+          MOBILE_APP_PROMO: false,
+          TOOLBAR_BUTTONS: [],
+          DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+          FILM_STRIP_MAX_HEIGHT: 120,
+          DEFAULT_BACKGROUND: "#1a2e28",
+        },
+      });
+
+      apiRef.current = api;
+      api.addEventListener("readyToClose", () => setEnded(true));
+    })();
+
+    return () => {
+      cancelled = true;
+      apiRef.current?.dispose();
+      apiRef.current = null;
+    };
+  }, [room.room_name, displayName]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  if (ended) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#1a2e28] px-4 text-white">
+        <h1 className="text-2xl font-bold">Call ended</h1>
+        <p className="mt-2 text-center text-white/80">Thank you for using {clinicName} online consultation.</p>
+        <a href="/" className="mt-8 rounded-full bg-white/10 px-6 py-3 text-sm font-bold hover:bg-white/20">
+          Back to website
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-[100dvh] flex-col bg-[#1a2e28] text-white">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 px-4 py-3 sm:px-6">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold">{clinicName}</p>
+          <p className="truncate text-xs text-white/70">
+            {room.pet_name} · {room.doctor_name}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-right text-xs">
+          {secondsLeft != null ? (
+            <span className={`rounded-full px-3 py-1 font-mono font-bold ${secondsLeft < 120 ? "bg-amber-500/90 text-black" : "bg-white/10"}`}>
+              {formatTime(secondsLeft)} left
+            </span>
+          ) : null}
+          <span className="hidden text-white/50 sm:inline">ID {appointmentId.slice(0, 8)}</span>
+        </div>
+      </header>
+
+      <div ref={containerRef} className="relative min-h-0 flex-1 bg-[#0f1f1a]" />
+
+      <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-white/10 px-4 py-4 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            apiRef.current?.executeCommand("toggleAudio");
+          }}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${muted ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          <span className="material-symbols-outlined text-xl">{muted ? "mic_off" : "mic"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = !videoOff;
+            setVideoOff(next);
+            apiRef.current?.executeCommand("toggleVideo");
+          }}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${videoOff ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
+          aria-label={videoOff ? "Turn camera on" : "Turn camera off"}
+        >
+          <span className="material-symbols-outlined text-xl">{videoOff ? "videocam_off" : "videocam"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={hangUp}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-500"
+          aria-label="Leave call"
+        >
+          <span className="material-symbols-outlined text-2xl">call_end</span>
+        </button>
+      </footer>
+    </div>
+  );
+}

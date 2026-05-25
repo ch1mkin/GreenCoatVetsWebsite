@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { sendVaccinationAlertEmail } from "@/lib/email/send-vaccination-alert-email";
+import { vaccinationReminderUrls } from "@/lib/reminders/vaccination-reminder-urls";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createVaccinationRecord(formData: FormData) {
@@ -81,7 +82,11 @@ export async function sendVaccinationReminderNow(formData: FormData) {
   const ownerId = pet?.owner_id ?? null;
   if (!ownerId) throw new Error("No owner linked to this pet.");
 
-  const { data: owner, error: ownerErr } = await supabase.from("owners").select("user_id, email").eq("id", ownerId).maybeSingle();
+  const { data: owner, error: ownerErr } = await supabase
+    .from("owners")
+    .select("user_id, email, full_name")
+    .eq("id", ownerId)
+    .maybeSingle();
   if (ownerErr) throw new Error(ownerErr.message);
 
   const message = `${pet?.name ?? "Your pet"} has a vaccination due on ${row.due_on ?? "the scheduled date"}.`;
@@ -121,6 +126,34 @@ export async function sendVaccinationReminderNow(formData: FormData) {
 
   const { error: insertErr } = await supabase.from("notifications").insert(inserts);
   if (insertErr) throw new Error(insertErr.message);
+
+  if (owner?.email) {
+    const { data: token, error: tokenErr } = await supabase.rpc("ensure_vaccination_reminder_token", {
+      p_vaccination_record_id: row.id,
+    });
+    if (!tokenErr && token) {
+      const { data: clinicRow } = await supabase.from("clinics").select("name").eq("id", clinic_id).maybeSingle();
+      const links = vaccinationReminderUrls(String(token));
+      const { data: vaxDetail } = await supabase
+        .from("vaccination_records")
+        .select("vaccine_name, dose, due_on")
+        .eq("id", row.id)
+        .maybeSingle();
+      await sendVaccinationAlertEmail({
+        to: owner.email,
+        ownerName: owner.full_name?.trim() || "there",
+        petName: pet?.name?.trim() || "your pet",
+        clinicName: clinicRow?.name?.trim() || "Your clinic",
+        vaccineName: vaxDetail?.vaccine_name ?? "Vaccination",
+        dose: vaxDetail?.dose,
+        dueOn: vaxDetail?.due_on,
+        respondUrl: links.respondPage,
+        markDoneUrl: links.completed,
+        notDoneUrl: links.notDone,
+        optOutUrl: links.optOut,
+      });
+    }
+  }
 
   const { error: updateErr } = await supabase
     .from("vaccination_records")

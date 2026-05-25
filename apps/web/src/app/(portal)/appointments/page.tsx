@@ -6,6 +6,7 @@ import {
   createAppointment,
   sendWebsiteAppointmentsDeleteCodeAction,
   sendWebsiteOwnerPetDeleteCodeAction,
+  rescheduleOnlineConsult,
   updateAppointmentStatus,
 } from "./actions";
 import { createVisitFromAppointment } from "@/app/(portal)/visits/actions";
@@ -176,7 +177,7 @@ export default async function AppointmentsPage({
   let query = supabase
     .from("appointments")
     .select(
-      "id, starts_at, appointment_type, status, notes, booking_source, branch_id, owners(full_name), pets(name), branches(name), staff_profiles(full_name)"
+      "id, starts_at, ends_at, meet_link, appointment_type, status, notes, booking_source, branch_id, owners(full_name), pets(name), branches(name), staff_profiles(full_name)"
     )
     .eq("clinic_id", clinic_id)
     .order("starts_at", { ascending: false })
@@ -524,12 +525,35 @@ export default async function AppointmentsPage({
                     </form>
                   </td>
                   <td className="px-3 py-3">
-                    <form action={startConsultation}>
-                      <input type="hidden" name="appointment_id" value={appt.id} />
-                      <SubmitButton className="btn-primary py-1.5 text-xs" pendingLabel="…">
-                        Open visit
-                      </SubmitButton>
-                    </form>
+                    {appt.appointment_type === "online_consult" ? (
+                      <div className="space-y-2">
+                        <a
+                          href={`/api/online-consult/redirect/${appt.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-primary underline"
+                        >
+                          Join video (staff)
+                        </a>
+                        {appt.meet_link ? (
+                          <p className="text-[10px] text-on-surface-variant break-all">Owner link: {appt.meet_link as string}</p>
+                        ) : null}
+                        <form action={rescheduleOnlineConsult} className="flex flex-col gap-1">
+                          <input type="hidden" name="appointment_id" value={appt.id} />
+                          <AppointmentDateTimeField name="starts_at" className="input-soft py-1.5 text-xs" />
+                          <SubmitButton className="btn-secondary py-1.5 text-xs" pendingLabel="…">
+                            Reschedule online
+                          </SubmitButton>
+                        </form>
+                      </div>
+                    ) : (
+                      <form action={startConsultation}>
+                        <input type="hidden" name="appointment_id" value={appt.id} />
+                        <SubmitButton className="btn-primary py-1.5 text-xs" pendingLabel="…">
+                          Open visit
+                        </SubmitButton>
+                      </form>
+                    )}
                   </td>
                 </tr>
               ))}

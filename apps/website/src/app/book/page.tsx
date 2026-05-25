@@ -7,6 +7,7 @@ import { getOwnerPortalContext } from "@/lib/owner/portal";
 import { clinicMetadata } from "@/lib/seo/clinic-metadata";
 import { createClient } from "@/lib/supabase/server";
 import { AppointmentDateTimeField } from "@/components/site/appointment-datetime-field";
+import { BookingDoctorSlotPicker } from "@/components/site/booking-doctor-slot-picker";
 import { BookingProgressIndicator } from "@/components/site/booking-progress-indicator";
 import { BookingSubmitButton } from "@/components/site/booking-submit-button";
 import { submitGuestBooking } from "@/app/book/actions";
@@ -59,6 +60,12 @@ export default async function BookAppointmentPage({
           .order("name", { ascending: true })
       : { data: null };
 
+  const { data: bookingDoctors } = await supabase.rpc("get_public_booking_doctors", {
+    p_clinic_id: bookingClinic.id,
+  });
+  const doctorRows = (bookingDoctors ?? []) as { id: string; full_name: string; branch_id: string | null }[];
+  const hasBookingDoctors = doctorRows.length > 0;
+
   const branchRows = (branches ?? []) as { id: string; name: string }[];
   const hasOwnerPets = Boolean((pets?.length ?? 0) > 0);
   const walkInMode = searchParams?.walk_in === "1" || searchParams?.walk_in === "true";
@@ -102,6 +109,12 @@ export default async function BookAppointmentPage({
                 Log in
               </Link>
             )}
+            <Link
+              href="/book/senior-vet"
+              className="inline-flex items-center justify-center rounded-xl border border-outline-variant px-4 py-2.5 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-low"
+            >
+              Senior Vet online
+            </Link>
           </div>
         </div>
 
@@ -132,7 +145,9 @@ export default async function BookAppointmentPage({
                   Visit details
                 </h2>
                 <p className="mb-4 text-sm text-on-surface-variant">
-                  The clinic will assign a clinician for your visit. You do not need to pick a doctor here.
+                  {hasBookingDoctors
+                    ? "Pick a doctor and an open time slot, or leave the doctor blank for clinic assignment."
+                    : "The clinic will assign a clinician for your visit."}
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
@@ -237,10 +252,14 @@ export default async function BookAppointmentPage({
                       ))}
                     </select>
                   </div>
-                  <div className="sm:col-span-2">
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
-                    <AppointmentDateTimeField className={field} />
-                  </div>
+                  {hasBookingDoctors ? (
+                    <BookingDoctorSlotPicker clinicId={bookingClinic.id} doctors={doctorRows} fieldClassName={field} optionalDoctor />
+                  ) : (
+                    <div className="sm:col-span-2">
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
+                      <AppointmentDateTimeField className={field} />
+                    </div>
+                  )}
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                       Chief complaint / main concern
@@ -416,7 +435,9 @@ export default async function BookAppointmentPage({
                   Visit details
                 </h2>
                 <p className="mb-4 text-sm text-on-surface-variant">
-                  A clinician will be assigned by the clinic after you submit — no doctor selection needed.
+                  {hasBookingDoctors
+                    ? "Select a doctor and time slot when available, or choose a date/time manually below."
+                    : "A clinician will be assigned by the clinic after you submit."}
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
@@ -440,10 +461,14 @@ export default async function BookAppointmentPage({
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
-                    <AppointmentDateTimeField className={field} />
-                  </div>
+                  {hasBookingDoctors ? (
+                    <BookingDoctorSlotPicker clinicId={bookingClinic.id} doctors={doctorRows} fieldClassName={field} optionalDoctor />
+                  ) : (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">Date &amp; time</label>
+                      <AppointmentDateTimeField className={field} />
+                    </div>
+                  )}
                   <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-on-surface-variant">
                       Chief complaint / main concern

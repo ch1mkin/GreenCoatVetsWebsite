@@ -72,6 +72,9 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           { href: "/reception/walk-in", label: "Walk-in guest" },
           { href: "/appointments", label: "Appointments" },
           { href: "/appointments/calendar", label: "Calendar" },
+          { href: "/appointments/availability", label: "Doctor availability" },
+          { href: "/vaccinations", label: "Vaccinations" },
+          { href: "/settings/online-consult", label: "Senior Vet online consult" },
           { href: "/medical-records", label: "Medical records" },
           { href: "/medicines", label: "Medicine catalog" },
         ],
@@ -134,6 +137,8 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           items: [
             { href: "/appointments", label: "Appointments" },
             { href: "/appointments/calendar", label: "Calendar" },
+            { href: "/appointments/availability", label: "Doctor availability" },
+            { href: "/vaccinations", label: "Vaccinations" },
             { href: "/medicines", label: "Medicine catalog" },
           ],
         },
@@ -159,6 +164,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
           title: "Clinic",
           items: [
             { href: "/clinic-profile", label: "Clinic profile" },
+            { href: "/settings/online-consult", label: "Senior Vet online consult" },
             { href: "/team", label: "Team & roles" },
             { href: "/invite-qrs", label: "Staff QR invites" },
             { href: "/announcements", label: "Announcements" },

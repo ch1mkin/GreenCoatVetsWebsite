@@ -43,6 +43,7 @@ export async function submitOwnerBooking(formData: FormData) {
   const petAgeYears = String(formData.get("pet_age_years") ?? "").trim();
   const petAgeMonths = parseBookingAgeYearsToMonths(petAgeYears);
   const appointmentType = String(formData.get("appointment_type") ?? "consultation").trim();
+  const doctorId = String(formData.get("doctor_id") ?? "").trim() || null;
   const startsAtRaw = String(formData.get("starts_at") ?? "").trim();
   const notes = String(formData.get("notes") ?? "").trim();
   const chiefComplaint = String(formData.get("chief_complaint") ?? "").trim();
@@ -148,7 +149,7 @@ export async function submitOwnerBooking(formData: FormData) {
   const { error } = await supabase.from("appointments").insert({
     clinic_id: clinic.id,
     branch_id: branchId,
-    doctor_id: null,
+    doctor_id: doctorId,
     pet_id: petId,
     owner_id: ownerRow.id,
     appointment_type: appointmentType,

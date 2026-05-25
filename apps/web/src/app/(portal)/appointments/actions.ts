@@ -479,3 +479,39 @@ export async function updateAppointmentStatus(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/appointments");
 }
+
+export async function rescheduleOnlineConsult(formData: FormData) {
+  const appointmentId = String(formData.get("appointment_id") ?? "").trim();
+  const startsAtRaw = String(formData.get("starts_at") ?? "").trim();
+  if (!appointmentId || !startsAtRaw) {
+    throw new Error("Appointment and new start time are required.");
+  }
+
+  const { clinic_id } = await getActiveMembership();
+  const supabase = createClient();
+
+  const { data: settings } = await supabase
+    .from("clinic_online_consult_settings")
+    .select("duration_minutes")
+    .eq("clinic_id", clinic_id)
+    .maybeSingle();
+
+  const duration = settings?.duration_minutes ?? 10;
+  const startsAt = new Date(startsAtRaw);
+  if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid start time.");
+  const endsAt = new Date(startsAt.getTime() + duration * 60 * 1000);
+
+  const { error } = await supabase
+    .from("appointments")
+    .update({
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      notes: `Rescheduled by clinic staff at ${new Date().toISOString()}`,
+    })
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinic_id)
+    .eq("appointment_type", "online_consult");
+
+  if (error) throw new Error(error.message);
+  revalidatePath("/appointments");
+}
