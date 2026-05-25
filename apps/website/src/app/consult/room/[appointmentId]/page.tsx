@@ -86,7 +86,6 @@ export default async function OnlineConsultRoomPage({
   return (
     <OnlineConsultRoomClient
       appointmentId={appointmentId}
-      token={token}
       clinicName={clinic.name}
       displayName={displayName}
       room={room}

@@ -45,13 +45,12 @@ function loadJitsiScript(): Promise<void> {
 
 type Props = {
   appointmentId: string;
-  token: string | null;
   clinicName: string;
   displayName: string;
   room: RoomInfo;
 };
 
-export function OnlineConsultRoomClient({ appointmentId, token, clinicName, displayName, room }: Props) {
+export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName, room }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<JitsiApi | null>(null);
   const [muted, setMuted] = useState(false);
