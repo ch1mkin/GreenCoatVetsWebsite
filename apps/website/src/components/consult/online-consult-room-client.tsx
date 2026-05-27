@@ -7,6 +7,8 @@ type RoomInfo = {
   room_name: string;
   starts_at: string;
   ends_at: string;
+  call_started_at?: string | null;
+  call_ends_at?: string | null;
   duration_minutes: number;
   pet_name: string;
   owner_name: string;
@@ -23,6 +25,8 @@ type Props = {
 type SignalMessage =
   | { type: "doctor_started" }
   | { type: "owner_ready" }
+  | { type: "call_ended" }
+  | { type: "timer_sync"; call_ends_at: string }
   | { type: "offer"; sdp: RTCSessionDescriptionInit }
   | { type: "answer"; sdp: RTCSessionDescriptionInit }
   | { type: "ice"; candidate: RTCIceCandidateInit };
@@ -38,6 +42,10 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const endedRef = useRef(false);
+  const callEndsAtRef = useRef<number | null>(
+    room.call_ends_at ? new Date(room.call_ends_at).getTime() : null,
+  );
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -76,33 +84,53 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
     return pc;
   }, [sendSignal]);
 
-  const hangUp = useCallback(() => {
-    pcRef.current?.close();
-    pcRef.current = null;
-    if (channelRef.current) {
-      channelRef.current.unsubscribe();
-      channelRef.current = null;
-    }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
-    remoteStreamRef.current = null;
-    setEnded(true);
+  const hangUp = useCallback(
+    (notifyRemote = true) => {
+      if (endedRef.current) return;
+      endedRef.current = true;
+      if (notifyRemote) void sendSignal({ type: "call_ended" });
+      pcRef.current?.close();
+      pcRef.current = null;
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        channelRef.current = null;
+      }
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+      remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
+      remoteStreamRef.current = null;
+      setEnded(true);
+    },
+    [sendSignal],
+  );
+
+  const applyCallEndsAt = useCallback((iso: string) => {
+    const ms = new Date(iso).getTime();
+    if (!Number.isFinite(ms)) return;
+    callEndsAtRef.current = ms;
   }, []);
 
   useEffect(() => {
-    const endsAt = new Date(room.ends_at).getTime();
+    if (room.call_ends_at) applyCallEndsAt(room.call_ends_at);
+  }, [room.call_ends_at, applyCallEndsAt]);
+
+  useEffect(() => {
     const tick = () => {
+      const endsAt = callEndsAtRef.current;
+      if (endsAt == null) {
+        setSecondsLeft(null);
+        return;
+      }
       const left = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
       setSecondsLeft(left);
-      if (left <= 0 && !ended) {
-        hangUp();
+      if (left <= 0 && !endedRef.current) {
+        hangUp(false);
       }
     };
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [room.ends_at, ended, hangUp]);
+  }, [hangUp]);
 
   useEffect(() => {
     let mounted = true;
@@ -113,9 +141,17 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
     channelRef.current = roomChannel;
 
     const onSignal = async (payload: SignalMessage) => {
-      if (!mounted) return;
+      if (!mounted || endedRef.current) return;
       if (payload.type === "doctor_started" && role === "owner") {
         setConnectionLabel("Doctor joined. Connecting...");
+      }
+      if (payload.type === "call_ended") {
+        hangUp(false);
+        return;
+      }
+      if (payload.type === "timer_sync") {
+        applyCallEndsAt(payload.call_ends_at);
+        return;
       }
       if (payload.type === "owner_ready" && role === "doctor") {
         const pc = await ensurePeerConnection();
@@ -164,7 +200,12 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
       });
 
       if (!mounted) return;
-      if (role === "doctor") await sendSignal({ type: "doctor_started" });
+      if (role === "doctor") {
+        await sendSignal({ type: "doctor_started" });
+        if (room.call_ends_at) {
+          await sendSignal({ type: "timer_sync", call_ends_at: room.call_ends_at });
+        }
+      }
       if (role === "owner") await sendSignal({ type: "owner_ready" });
     })();
 
@@ -179,7 +220,7 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
       remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
       remoteStreamRef.current = null;
     };
-  }, [ensurePeerConnection, role, room.room_name, sendSignal]);
+  }, [applyCallEndsAt, ensurePeerConnection, hangUp, role, room.call_ends_at, room.room_name, sendSignal]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -210,10 +251,16 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
         </div>
         <div className="flex items-center gap-3 text-right text-xs">
           {secondsLeft != null ? (
-            <span className={`rounded-full px-3 py-1 font-mono font-bold ${secondsLeft < 120 ? "bg-amber-500/90 text-black" : "bg-white/10"}`}>
+            <span
+              className={`rounded-full px-3 py-1 font-mono font-bold ${secondsLeft < 120 ? "bg-amber-500/90 text-black" : "bg-white/10"}`}
+            >
               {formatTime(secondsLeft)} left
             </span>
-          ) : null}
+          ) : (
+            <span className="rounded-full bg-white/10 px-3 py-1 text-white/70">
+              {room.duration_minutes} min session
+            </span>
+          )}
           <span className="hidden text-white/50 sm:inline">ID {appointmentId.slice(0, 8)}</span>
         </div>
       </header>
@@ -261,7 +308,7 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room 
         </button>
         <button
           type="button"
-          onClick={hangUp}
+          onClick={() => hangUp(true)}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-500"
           aria-label="Leave call"
         >

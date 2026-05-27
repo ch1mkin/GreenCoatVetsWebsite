@@ -24,27 +24,13 @@ export default async function AccountAppointmentsPage() {
 
   const portal = await getOwnerPortalContext(user.id);
   if (!portal) redirect("/account");
-  const { owner, clinic } = portal;
+  const { clinic } = portal;
 
-  const ownerEmail = user.email?.trim().toLowerCase() ?? null;
-  let ownerIds = [owner.id];
-  if (ownerEmail) {
-    const { data: linkedOwners } = await supabase
-      .from("owners")
-      .select("id, email")
-      .eq("clinic_id", clinic.id)
-      .ilike("email", ownerEmail);
-    const linkedIds = (linkedOwners ?? []).map((r) => r.id as string);
-    ownerIds = Array.from(new Set([...ownerIds, ...linkedIds]));
-  }
-
-  const { data: rows } = await supabase
-    .from("appointments")
-    .select("id, starts_at, status, appointment_type, doctor_id, online_consult_paid_at, razorpay_payment_id, meet_link, pets(name)")
-    .eq("clinic_id", clinic.id)
-    .in("owner_id", ownerIds)
-    .order("starts_at", { ascending: false })
-    .limit(50);
+  const { data: rows, error } = await supabase.rpc("get_owner_portal_appointments", {
+    p_clinic_id: clinic.id,
+    p_limit: 50,
+  });
+  if (error) throw new Error(error.message);
 
   type Raw = {
     id: string;
@@ -55,25 +41,10 @@ export default async function AccountAppointmentsPage() {
     online_consult_paid_at: string | null;
     razorpay_payment_id: string | null;
     meet_link: string | null;
-    pets: { name: string } | null;
+    pet_name: string | null;
   };
 
-  function normalizePets(pets: unknown): { name: string } | null {
-    if (pets == null) return null;
-    if (Array.isArray(pets)) {
-      const first = pets[0];
-      if (first && typeof first === "object" && first !== null && "name" in first) {
-        return { name: String((first as { name: unknown }).name) };
-      }
-      return null;
-    }
-    if (typeof pets === "object" && pets !== null && "name" in pets) {
-      return { name: String((pets as { name: unknown }).name) };
-    }
-    return null;
-  }
-
-  const raw: Raw[] = (rows ?? []).map((r) => ({
+  const raw: Raw[] = ((rows ?? []) as Raw[]).map((r) => ({
     id: r.id as string,
     starts_at: r.starts_at as string,
     status: r.status as string,
@@ -82,12 +53,10 @@ export default async function AccountAppointmentsPage() {
     online_consult_paid_at: (r.online_consult_paid_at as string | null) ?? null,
     razorpay_payment_id: (r.razorpay_payment_id as string | null) ?? null,
     meet_link: (r.meet_link as string | null) ?? null,
-    pets: normalizePets(r.pets),
+    pet_name: (r.pet_name as string | null) ?? null,
   }));
 
-  const doctorIds = Array.from(
-    new Set(raw.map((r) => r.doctor_id).filter((id): id is string => Boolean(id))),
-  );
+  const doctorIds = Array.from(new Set(raw.map((r) => r.doctor_id).filter((id): id is string => Boolean(id))));
   const { data: doctors } =
     doctorIds.length > 0
       ? await supabase.from("staff_profiles").select("id, full_name").in("id", doctorIds)
@@ -96,15 +65,12 @@ export default async function AccountAppointmentsPage() {
 
   const list = raw.map((a) => ({
     ...a,
+    pets: a.pet_name ? { name: a.pet_name } : null,
     doctor_full_name: a.doctor_id ? doctorName[a.doctor_id] ?? null : null,
-    is_paid_senior_vet:
-      a.appointment_type === "online_consult" &&
-      Boolean(a.online_consult_paid_at) &&
-      Boolean(a.razorpay_payment_id) &&
-      !String(a.razorpay_payment_id).startsWith("test_"),
+    is_senior_vet_online: a.appointment_type === "online_consult" && Boolean(a.online_consult_paid_at),
   }));
 
-  const paidSeniorVet = list.filter((a) => a.is_paid_senior_vet);
+  const seniorVetOnline = list.filter((a) => a.is_senior_vet_online);
 
   return (
     <main className="bg-surface pb-20 pt-8 text-on-background sm:pt-12">
@@ -122,12 +88,12 @@ export default async function AccountAppointmentsPage() {
           .
         </p>
 
-        {paidSeniorVet.length ? (
+        {seniorVetOnline.length ? (
           <section className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
-            <p className="text-sm font-semibold text-emerald-900">Paid Senior Vet appointments</p>
+            <p className="text-sm font-semibold text-emerald-900">Senior Vet online consultations</p>
             <ul className="mt-3 space-y-2">
-              {paidSeniorVet.slice(0, 5).map((a) => (
-                <li key={`paid-${a.id}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              {seniorVetOnline.slice(0, 5).map((a) => (
+                <li key={`sv-${a.id}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span>
                     {formatWhen(a.starts_at)} · {a.pets?.name ?? "Pet"} · {a.doctor_full_name ?? "Senior veterinarian"}
                   </span>

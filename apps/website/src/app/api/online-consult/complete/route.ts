@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { SENIOR_VET_ONLINE_CONSENT_TEXT, SENIOR_VET_ONLINE_CONSENT_VERSION } from "@/lib/booking/senior-vet-consent";
-import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { createHostingerTransport, getHostingerFromAddress, resolveAdminNotificationEmail } from "@/lib/email/hostinger-mail";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
 import { buildOnlineConsultConsentPdf } from "@/lib/pdf/online-consent-pdf";
 import { buildOnlineConsultJoinUrl } from "@/lib/online-consult/build-join-url";
@@ -107,11 +107,20 @@ export async function POST(request: Request) {
 
     const result = data as {
       appointment_id?: string;
+      owner_id?: string;
       meet_link?: string;
       join_url?: string;
       doctor_join_url?: string;
       merge_token?: string;
     };
+
+    const {
+      data: { user: bookingUser },
+    } = await supabase.auth.getUser();
+    const ownerEmailNorm = body.owner_email?.trim().toLowerCase() ?? "";
+    if (bookingUser?.email && ownerEmailNorm && bookingUser.email.toLowerCase() === ownerEmailNorm && result.owner_id) {
+      await admin.from("owners").update({ user_id: bookingUser.id }).eq("id", result.owner_id);
+    }
     const joinUrl =
       result.join_url ??
       result.meet_link ??
@@ -120,6 +129,13 @@ export async function POST(request: Request) {
         : null);
     const doctorJoinUrl = result.doctor_join_url ?? null;
     const branchName = body.branch_id ?? "";
+
+    const consentAttachment = {
+      filename: `senior-vet-consent-${result.appointment_id ?? "booking"}.pdf`,
+      content: Buffer.from(pdfBytes),
+    };
+    const transporter = createHostingerTransport();
+    const from = getHostingerFromAddress();
 
     try {
       await sendAppointmentBookingNotificationEmail({
@@ -136,14 +152,35 @@ export async function POST(request: Request) {
         notes: `Senior Vet online · Owner video: ${joinUrl ?? "—"} · Doctor video: ${doctorJoinUrl ?? "—"} · Consent v${SENIOR_VET_ONLINE_CONSENT_VERSION}`,
         bookingSource: "guest_website",
         bookingCode: result.merge_token,
+        consentPdfAttachment: consentAttachment,
       });
     } catch (mailErr) {
       console.error("[senior-vet] notification email failed", mailErr);
     }
 
+    const adminEmail = await resolveAdminNotificationEmail(supabase, clinic.id);
+    if (adminEmail && transporter && from) {
+      try {
+        await transporter.sendMail({
+          from,
+          to: adminEmail,
+          subject: `${clinic.name} — Senior Vet consent signed (${body.pet_name?.trim() || "Pet"})`,
+          text: `Signed Senior Vet online consent for ${body.owner_full_name?.trim() || "Owner"} / ${body.pet_name?.trim() || "Pet"}. PDF attached.`,
+          html: `<p>Signed Senior Vet online consent for <strong>${body.owner_full_name?.trim() || "Owner"}</strong> / <strong>${body.pet_name?.trim() || "Pet"}</strong>.</p><p>PDF attached.</p>`,
+          attachments: [
+            {
+              filename: consentAttachment.filename,
+              content: consentAttachment.content,
+              contentType: "application/pdf",
+            },
+          ],
+        });
+      } catch (adminMailErr) {
+        console.error("[senior-vet] admin consent email failed", adminMailErr);
+      }
+    }
+
     const ownerEmail = body.owner_email?.trim();
-    const transporter = createHostingerTransport();
-    const from = getHostingerFromAddress();
     if (ownerEmail && transporter && from) {
       try {
         await transporter.sendMail({

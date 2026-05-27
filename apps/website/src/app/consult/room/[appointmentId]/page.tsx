@@ -8,6 +8,8 @@ type RoomPayload = {
   room_name: string;
   starts_at: string;
   ends_at: string;
+  call_started_at?: string | null;
+  call_ends_at?: string | null;
   duration_minutes: number;
   doctor_joined_at?: string | null;
   pet_name: string;

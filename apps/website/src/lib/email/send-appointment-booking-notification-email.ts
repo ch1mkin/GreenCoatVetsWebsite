@@ -18,6 +18,8 @@ export async function sendAppointmentBookingNotificationEmail(params: {
   bookingSource: "owner_portal" | "guest_website";
   /** Guest booking confirmation / claim code (merge_token). */
   bookingCode?: string | null;
+  /** Signed consent PDF attached to staff/admin notification emails. */
+  consentPdfAttachment?: { filename: string; content: Buffer } | null;
 }): Promise<{ sent: boolean; reason?: string }> {
   const supabase = createClient();
   const transporter = createHostingerTransport();
@@ -64,6 +66,16 @@ export async function sendAppointmentBookingNotificationEmail(params: {
       footer: `${brandName} booking notifications`,
     });
 
+    const staffAttachments = params.consentPdfAttachment
+      ? [
+          {
+            filename: params.consentPdfAttachment.filename,
+            content: params.consentPdfAttachment.content,
+            contentType: "application/pdf",
+          },
+        ]
+      : undefined;
+
     for (const recipient of recipients) {
       await transporter.sendMail({
         from,
@@ -72,6 +84,7 @@ export async function sendAppointmentBookingNotificationEmail(params: {
         subject: `[${params.clinicName}] New appointment: ${params.petName} · ${when}`,
         text: staffMail.text,
         html: staffMail.html,
+        attachments: staffAttachments,
       });
     }
   }
