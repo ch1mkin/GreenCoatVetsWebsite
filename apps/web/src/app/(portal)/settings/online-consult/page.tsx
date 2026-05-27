@@ -2,10 +2,15 @@ import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { getUserAccess } from "@/lib/auth/get-user-access";
 import { getRoleNavGroups, type AppRole } from "@/lib/auth/permissions";
 import { AppShell } from "@/components/web/app-shell";
+import { SubmitButton } from "@/components/web/submit-button";
 import { createClient } from "@/lib/supabase/server";
 import { saveOnlineConsultSettings } from "./actions";
 
-export default async function OnlineConsultSettingsPage() {
+export default async function OnlineConsultSettingsPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const membership = await getActiveMembership();
   const access = await getUserAccess();
   const supabase = createClient();
@@ -17,9 +22,24 @@ export default async function OnlineConsultSettingsPage() {
 
   const nav = getRoleNavGroups(membership.role as AppRole, access.isSuperAdmin);
   const priceInr = settings?.price_paise != null ? (settings.price_paise / 100).toFixed(0) : "999";
+  const saved = searchParams?.saved === "1" || searchParams?.saved === "true";
+  const error =
+    typeof searchParams?.error === "string" && searchParams.error.trim().length > 0
+      ? searchParams.error
+      : null;
 
   return (
-    <AppShell navGroups={nav} title="Senior Vet online consultation">
+    <AppShell navGroups={nav} title="Senior Vet online consultation" activeHref="/settings/online-consult">
+      {saved ? (
+        <section className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          Settings saved successfully.
+        </section>
+      ) : null}
+      {error ? (
+        <section className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+          {error}
+        </section>
+      ) : null}
       <p className="mb-6 max-w-2xl text-sm text-on-surface-variant">
         Owners book and pay on the public website, sign consent, and join a Meet-style video room on your clinic site. Calls are limited to the duration below.
       </p>
@@ -56,9 +76,9 @@ export default async function OnlineConsultSettingsPage() {
             className="mt-1 w-full rounded-lg border px-3 py-2"
           />
         </label>
-        <button type="submit" className="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary">
+        <SubmitButton className="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-on-primary" pendingLabel="Saving settings...">
           Save settings
-        </button>
+        </SubmitButton>
       </form>
     </AppShell>
   );

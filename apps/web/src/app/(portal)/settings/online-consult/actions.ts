@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,7 +13,9 @@ export async function saveOnlineConsultSettings(formData: FormData) {
   const durationMinutes = Number(formData.get("duration_minutes") ?? 10);
   const reminderMinutes = Number(formData.get("reminder_minutes_before") ?? 20);
 
-  if (!productName || pricePaise < 0) throw new Error("Product name and price are required.");
+  if (!productName || pricePaise < 0) {
+    redirect(`/settings/online-consult?error=${encodeURIComponent("Product name and price are required.")}`);
+  }
 
   const { clinic_id } = await getActiveMembership();
   const supabase = createClient();
@@ -28,6 +31,9 @@ export async function saveOnlineConsultSettings(formData: FormData) {
     updated_at: new Date().toISOString(),
   });
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    redirect(`/settings/online-consult?error=${encodeURIComponent(error.message)}`);
+  }
   revalidatePath("/settings/online-consult");
+  redirect("/settings/online-consult?saved=1");
 }
