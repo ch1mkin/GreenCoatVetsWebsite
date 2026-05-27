@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { PasswordField } from "@/components/PasswordField";
 import { mapAuthError } from "@/lib/auth/map-auth-error";
 import { loginHintMessage } from "@/lib/auth/login-hints";
-import { getWebAppOrigin } from "@/lib/auth/web-app-origin";
 import { resolveWebPortalLoginRoutingAction } from "./auth-routing-actions";
 import { beginPortalLoginOtpAction } from "./otp-actions";
 
@@ -64,29 +63,6 @@ export function LoginForm({
     },
     [router],
   );
-
-  async function onContinueWithGoogle() {
-    setError(null);
-    setIsSubmitting(true);
-
-    const supabase = createClient();
-    const redirectTo = new URL("/auth/callback", getWebAppOrigin());
-    if (invite) {
-      redirectTo.searchParams.set("invite", invite);
-    }
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: redirectTo.toString(),
-        queryParams: { prompt: "select_account" },
-      },
-    });
-
-    if (oauthError) {
-      setIsSubmitting(false);
-      setError(mapAuthError(oauthError.message));
-    }
-  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,23 +173,8 @@ export function LoginForm({
               ) : null}
             </div>
 
-            <div className="mb-6 space-y-3">
-              <button
-                type="button"
-                onClick={onContinueWithGoogle}
-                disabled={isSubmitting}
-                className="flex w-full items-center justify-center gap-3 rounded-2xl border border-outline-variant/25 bg-white px-4 py-3.5 font-semibold text-on-background shadow-sm transition hover:border-primary/30 hover:bg-primary/5 disabled:opacity-60"
-              >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[13px] font-bold text-[#4285F4] shadow-sm">
-                  G
-                </span>
-                Continue with Google
-              </button>
-              <div className="flex items-center gap-3 text-xs uppercase tracking-[0.24em] text-on-surface-variant/80">
-                <span className="h-px flex-1 bg-outline-variant/20" />
-                <span>Email and password</span>
-                <span className="h-px flex-1 bg-outline-variant/20" />
-              </div>
+            <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs font-semibold text-primary">
+              Google sign-in is available on the public website only. Use email and password for web portal login.
             </div>
 
             <div className="space-y-4">
