@@ -12,6 +12,7 @@ export async function createInviteQr(formData: FormData) {
     | "clinic_admin"
     | "branch_admin"
     | "doctor"
+    | "senior_doctor"
     | "receptionist"
     | "lab_technician"
     | "pharmacist"

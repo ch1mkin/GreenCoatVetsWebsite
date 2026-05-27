@@ -17,6 +17,7 @@ const ASSIGN_ROLES = [
   { value: "clinic_admin", label: "Clinic admin" },
   { value: "branch_admin", label: "Branch admin" },
   { value: "doctor", label: "Doctor" },
+  { value: "senior_doctor", label: "Senior doctor" },
   { value: "receptionist", label: "Receptionist" },
   { value: "lab_technician", label: "Lab technician" },
   { value: "pharmacist", label: "Pharmacist" },

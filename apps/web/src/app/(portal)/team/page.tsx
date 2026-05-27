@@ -12,6 +12,7 @@ import { SubmitButton } from "@/components/web/submit-button";
 
 const ASSIGN_ROLES = [
   { value: "doctor", label: "Doctor" },
+  { value: "senior_doctor", label: "Senior doctor" },
   { value: "receptionist", label: "Receptionist" },
   { value: "branch_admin", label: "Branch admin" },
   { value: "marketing_editor", label: "Website editor" },

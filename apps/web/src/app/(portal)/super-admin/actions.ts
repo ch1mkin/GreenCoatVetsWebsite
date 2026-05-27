@@ -337,7 +337,7 @@ export async function superAdminAssignUserToClinicAction(formData: FormData) {
       p_role: role,
       p_staff_full_name: fullName,
       p_staff_phone: phone,
-      p_working_hours: role === "doctor" ? workingHours : null,
+      p_working_hours: role === "doctor" || role === "senior_doctor" ? workingHours : null,
     });
     if (error) {
       if (createdUserId) {

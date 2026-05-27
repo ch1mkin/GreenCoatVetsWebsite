@@ -12,12 +12,13 @@ type Props = {
   clinicName: string;
   productName: string;
   priceInr: number;
+  testMode: boolean;
   branches: Branch[];
   doctors: Doctor[];
   fieldClassName: string;
 };
 
-export function SeniorVetConsultClient({ clinicId, clinicName, productName, priceInr, branches, doctors, fieldClassName }: Props) {
+export function SeniorVetConsultClient({ clinicId, clinicName, productName, priceInr, testMode, branches, doctors, fieldClassName }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
     try {
       const fd = new FormData(form);
       let pay = payment;
-      if (!pay) {
+      if (!pay && !testMode) {
         const orderRes = await fetch("/api/online-consult/create-order", { method: "POST" });
         const orderJson = (await orderRes.json()) as {
           razorpayOrderId?: string;
@@ -124,9 +125,9 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
           pet_name: fd.get("pet_name"),
           pet_species: fd.get("pet_species"),
           chief_complaint: fd.get("chief_complaint"),
-          razorpay_order_id: pay!.orderId,
-          razorpay_payment_id: pay!.paymentId,
-          razorpay_signature: pay!.signature,
+          razorpay_order_id: pay?.orderId ?? (testMode ? `test_order_${Date.now()}` : ""),
+          razorpay_payment_id: pay?.paymentId ?? (testMode ? `test_payment_${Date.now()}` : ""),
+          razorpay_signature: pay?.signature ?? (testMode ? "test_signature" : ""),
           signature_png: getSignaturePng(),
           consent_accepted: true,
         }),
@@ -151,7 +152,7 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
       }}
     >
       <p className="text-sm text-on-surface-variant">
-        {productName} — ₹{priceInr.toLocaleString("en-IN")}. Video call up to 10 minutes after the doctor joins.
+        {productName} — {testMode ? "Testing mode (no payment)" : `₹${priceInr.toLocaleString("en-IN")}`}. Video call up to 10 minutes.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -189,6 +190,7 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
       </div>
 
       <BookingDoctorSlotPicker clinicId={clinicId} doctors={doctors} fieldClassName={fieldClassName} />
+      {!doctors.length ? <p className="text-sm text-red-700">No Senior doctors are active for booking yet.</p> : null}
 
       <label className="block text-sm sm:col-span-2">
         Chief concern
@@ -226,7 +228,7 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
         disabled={paying}
         className="gradient-primary rounded-xl px-6 py-4 font-headline text-lg font-bold text-on-primary disabled:opacity-60"
       >
-        {paying ? (payment ? "Confirming booking…" : "Opening payment…") : `Pay ₹${priceInr} & book`}
+        {paying ? (payment || testMode ? "Confirming booking…" : "Opening payment…") : testMode ? "Book test consultation" : `Pay ₹${priceInr} & book`}
       </button>
     </form>
   );

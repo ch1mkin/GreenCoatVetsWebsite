@@ -69,7 +69,7 @@ export default async function AppointmentCalendarPage({
       .from("staff_profiles")
       .select("id, full_name")
       .eq("clinic_id", clinic_id)
-      .eq("role", "doctor")
+      .in("role", ["doctor", "senior_doctor"])
       .eq("is_active", true)
       .order("full_name", { ascending: true }),
     (() => {

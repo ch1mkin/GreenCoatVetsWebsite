@@ -29,6 +29,10 @@ export default async function OnlineConsultSettingsPage() {
           <input type="checkbox" name="enabled" defaultChecked={settings?.enabled ?? false} className="h-4 w-4" />
           Enable Senior Vet online booking
         </label>
+        <label className="flex items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" name="test_mode" defaultChecked={settings?.test_mode ?? false} className="h-4 w-4" />
+          Test mode (skip payment for workflow testing)
+        </label>
         <label className="block text-sm">
           Product name (shown at checkout)
           <input name="product_name" defaultValue={settings?.product_name ?? "Senior Vet consultation"} className="mt-1 w-full rounded-lg border px-3 py-2" required />

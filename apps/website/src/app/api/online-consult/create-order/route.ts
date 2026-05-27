@@ -10,13 +10,21 @@ export async function POST() {
     const supabase = createClient();
     const { data: settings, error } = await supabase
       .from("clinic_online_consult_settings")
-      .select("enabled, price_paise, product_name")
+      .select("enabled, test_mode, price_paise, product_name")
       .eq("clinic_id", clinic.id)
       .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     if (!settings?.enabled) {
       return NextResponse.json({ error: "Senior Vet online consultation is not available." }, { status: 403 });
+    }
+
+    if (settings.test_mode) {
+      return NextResponse.json({
+        testMode: true,
+        amountPaise: 0,
+        productName: settings.product_name,
+      });
     }
 
     const rz = await getRazorpayServerConfig();

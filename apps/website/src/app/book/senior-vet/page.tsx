@@ -25,7 +25,7 @@ export default async function SeniorVetBookPage() {
   const [{ data: settings }, { data: branches }, { data: doctors }] = await Promise.all([
     supabase.from("clinic_online_consult_settings").select("*").eq("clinic_id", clinic.id).maybeSingle(),
     supabase.rpc("get_public_branches_for_clinic", { p_clinic_id: clinic.id }),
-    supabase.rpc("get_public_booking_doctors", { p_clinic_id: clinic.id }),
+    supabase.rpc("get_public_senior_booking_doctors", { p_clinic_id: clinic.id }),
   ]);
 
   if (!settings?.enabled) {
@@ -49,15 +49,17 @@ export default async function SeniorVetBookPage() {
       <div className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="font-headline text-3xl font-extrabold text-on-background">{settings.product_name}</h1>
         <p className="mt-2 text-on-surface-variant">
-          Pay online, sign consent, and join a private video room on this website (Meet-style). Session length: {settings.duration_minutes} minutes.
+          Book with a Senior doctor only, sign consent, and join a private video room on this website (Meet-style). Session length:{" "}
+          {settings.duration_minutes} minutes.
         </p>
-        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+        {!settings.test_mode ? <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" /> : null}
         <div className="mt-10">
           <SeniorVetConsultClient
             clinicId={clinic.id}
             clinicName={clinic.name}
             productName={settings.product_name}
             priceInr={priceInr}
+            testMode={Boolean(settings.test_mode)}
             branches={branchRows}
             doctors={doctorRows}
             fieldClassName={field}

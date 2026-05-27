@@ -46,9 +46,12 @@ export async function getUserAccess(): Promise<UserAccess> {
   // This prevents stale global-admin access after role changes in Supabase.
   const isSuperAdmin = Boolean(superAdmin) && (!membership || membership.role === "super_admin");
 
+  const normalizedMembership =
+    membership?.role === "senior_doctor" ? { ...membership, role: "doctor" } : membership;
+
   return {
     userId: user.id,
     isSuperAdmin,
-    membership,
+    membership: normalizedMembership,
   };
 }

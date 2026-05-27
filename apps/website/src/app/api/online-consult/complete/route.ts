@@ -37,25 +37,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Consent is required." }, { status: 400 });
     }
 
-    const rz = await getRazorpayServerConfig();
-    if (!rz?.keySecret) {
-      return NextResponse.json({ error: "Payment not configured." }, { status: 500 });
-    }
+    const clinic = await resolveClinic();
+    const supabase = createClient();
+    const { data: consultSettings } = await supabase
+      .from("clinic_online_consult_settings")
+      .select("test_mode")
+      .eq("clinic_id", clinic.id)
+      .maybeSingle();
+    const isTestMode = Boolean(consultSettings?.test_mode);
 
     const orderId = body.razorpay_order_id?.trim();
     const paymentId = body.razorpay_payment_id?.trim();
     const signature = body.razorpay_signature?.trim();
-    if (!orderId || !paymentId || !signature) {
+    if (!isTestMode && (!orderId || !paymentId || !signature)) {
       return NextResponse.json({ error: "Missing payment confirmation." }, { status: 400 });
     }
 
-    const expected = crypto.createHmac("sha256", rz.keySecret).update(`${orderId}|${paymentId}`).digest("hex");
-    if (expected !== signature) {
-      return NextResponse.json({ error: "Invalid payment signature." }, { status: 400 });
+    if (!isTestMode) {
+      const rz = await getRazorpayServerConfig();
+      if (!rz?.keySecret) {
+        return NextResponse.json({ error: "Payment not configured." }, { status: 500 });
+      }
+      const expected = crypto.createHmac("sha256", rz.keySecret).update(`${orderId}|${paymentId}`).digest("hex");
+      if (expected !== signature) {
+        return NextResponse.json({ error: "Invalid payment signature." }, { status: 400 });
+      }
     }
 
-    const clinic = await resolveClinic();
-    const supabase = createClient();
     const admin = createServiceRoleClient();
     if (!admin) return NextResponse.json({ error: "Server storage not configured." }, { status: 503 });
 
@@ -69,7 +77,7 @@ export async function POST(request: Request) {
       signaturePngBase64: body.signature_png,
     });
 
-    const path = `online-consent/${clinic.id}/${orderId}.pdf`;
+    const path = `online-consent/${clinic.id}/${orderId ?? `test_${Date.now()}`}.pdf`;
     const { error: uploadErr } = await admin.storage.from(BUCKET).upload(path, pdfBytes, {
       contentType: "application/pdf",
       upsert: true,
@@ -89,8 +97,8 @@ export async function POST(request: Request) {
       p_pet_name: body.pet_name,
       p_pet_species: body.pet_species || "unknown",
       p_chief_complaint: body.chief_complaint,
-      p_razorpay_order_id: orderId,
-      p_razorpay_payment_id: paymentId,
+      p_razorpay_order_id: orderId ?? `test_order_${Date.now()}`,
+      p_razorpay_payment_id: paymentId ?? `test_payment_${Date.now()}`,
       p_consent_pdf_path: path,
       p_website_base_url: getWebsitePublicBaseUrl(),
     });

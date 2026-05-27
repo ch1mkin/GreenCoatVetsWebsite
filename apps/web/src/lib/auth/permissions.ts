@@ -3,6 +3,7 @@ export type AppRole =
   | "clinic_admin"
   | "branch_admin"
   | "doctor"
+  | "senior_doctor"
   | "receptionist"
   | "lab_technician"
   | "pharmacist"
@@ -22,6 +23,7 @@ export function roleCanGenerateQr(
         "clinic_admin",
         "branch_admin",
         "doctor",
+        "senior_doctor",
         "receptionist",
         "lab_technician",
         "pharmacist",
@@ -35,13 +37,14 @@ export function roleCanGenerateQr(
       allowedRoles: [
         "branch_admin",
         "doctor",
+        "senior_doctor",
         "receptionist",
         "lab_technician",
         "pharmacist",
       ],
     };
   }
-  if (role === "receptionist" || role === "doctor") {
+  if (role === "receptionist" || role === "doctor" || role === "senior_doctor") {
     return { clinicSelectable: false, allowedRoles: ["pet_owner"] };
   }
   return { clinicSelectable: false, allowedRoles: [] };
@@ -208,6 +211,7 @@ export function getRoleNavGroups(role: AppRole, isSuperAdmin: boolean): NavGroup
         },
       ];
     case "doctor":
+    case "senior_doctor":
       return [
         base,
         {
