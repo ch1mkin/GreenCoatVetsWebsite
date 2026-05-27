@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { BookingDoctorSlotPicker } from "@/components/site/booking-doctor-slot-picker";
+import { AppointmentDateTimeField } from "@/components/site/appointment-datetime-field";
 import { SENIOR_VET_ONLINE_CONSENT_TEXT } from "@/lib/booking/senior-vet-consent";
 
 type Doctor = { id: string; full_name: string; branch_id: string | null };
@@ -189,7 +189,23 @@ export function SeniorVetConsultClient({ clinicId, clinicName, productName, pric
         </label>
       </div>
 
-      <BookingDoctorSlotPicker clinicId={clinicId} doctors={doctors} fieldClassName={fieldClassName} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="text-sm">
+          Senior doctor
+          <select name="doctor_id" required className={fieldClassName}>
+            <option value="">Select senior doctor</option>
+            {doctors.map((doctor) => (
+              <option key={doctor.id} value={doctor.id}>
+                {doctor.full_name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          Consultation date &amp; time
+          <AppointmentDateTimeField className={fieldClassName} />
+        </label>
+      </div>
       {!doctors.length ? <p className="text-sm text-red-700">No Senior doctors are active for booking yet.</p> : null}
 
       <label className="block text-sm sm:col-span-2">

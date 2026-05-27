@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { OnlineConsultRoomClient } from "@/components/consult/online-consult-room-client";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
 import { createClient } from "@/lib/supabase/server";
@@ -38,6 +39,11 @@ export default async function OnlineConsultRoomPage({
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (role !== "doctor" && !user) {
+    const redirectPath = `/consult/room/${appointmentId}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+    redirect(`/login?redirect=${encodeURIComponent(redirectPath)}`);
+  }
+
   const { data: roomData, error } = await supabase.rpc("validate_online_consult_join", {
     p_appointment_id: appointmentId,
     p_token: token,
@@ -71,7 +77,7 @@ export default async function OnlineConsultRoomPage({
 
   const startsAt = new Date(room.starts_at).getTime();
   const earlyWindowMs = 10 * 60 * 1000;
-  if (Date.now() < startsAt - earlyWindowMs && !user) {
+  if (role !== "doctor" && Date.now() < startsAt - earlyWindowMs) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#1a2e28] px-4 text-center text-white">
         <h1 className="text-xl font-bold">Waiting room</h1>
