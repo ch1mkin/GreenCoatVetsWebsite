@@ -105,13 +105,20 @@ export async function POST(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    const result = data as { appointment_id?: string; meet_link?: string; join_url?: string; merge_token?: string };
+    const result = data as {
+      appointment_id?: string;
+      meet_link?: string;
+      join_url?: string;
+      doctor_join_url?: string;
+      merge_token?: string;
+    };
     const joinUrl =
       result.join_url ??
       result.meet_link ??
       (result.appointment_id && result.merge_token
         ? buildOnlineConsultJoinUrl(result.appointment_id, result.merge_token)
         : null);
+    const doctorJoinUrl = result.doctor_join_url ?? null;
     const branchName = body.branch_id ?? "";
 
     try {
@@ -126,7 +133,7 @@ export async function POST(request: Request) {
         ownerEmail: body.owner_email?.trim() || "",
         ownerPhone: body.owner_phone?.trim() || "",
         chiefComplaint: body.chief_complaint || null,
-        notes: `Senior Vet online · Video: ${joinUrl ?? "—"} · Consent v${SENIOR_VET_ONLINE_CONSENT_VERSION}`,
+        notes: `Senior Vet online · Owner video: ${joinUrl ?? "—"} · Doctor video: ${doctorJoinUrl ?? "—"} · Consent v${SENIOR_VET_ONLINE_CONSENT_VERSION}`,
         bookingSource: "guest_website",
         bookingCode: result.merge_token,
       });
@@ -150,6 +157,38 @@ export async function POST(request: Request) {
         });
       } catch (ownerMailErr) {
         console.error("[senior-vet] owner email failed", ownerMailErr);
+      }
+    }
+
+    if (doctorJoinUrl && transporter && from && body.doctor_id?.trim()) {
+      try {
+        const { data: doctorProfile } = await admin
+          .from("staff_profiles")
+          .select("full_name, user_id")
+          .eq("id", body.doctor_id.trim())
+          .maybeSingle();
+        const doctorUserId = doctorProfile?.user_id?.trim();
+        if (doctorUserId) {
+          const { data: doctorUser } = await admin
+            .from("app_users")
+            .select("email")
+            .eq("id", doctorUserId)
+            .maybeSingle();
+          const doctorEmail = doctorUser?.email?.trim();
+          if (doctorEmail) {
+            const doctorName = doctorProfile?.full_name?.trim() || "Doctor";
+            const when = body.starts_at ? new Date(body.starts_at).toLocaleString() : "scheduled time";
+            await transporter.sendMail({
+              from,
+              to: doctorEmail,
+              subject: `${clinic.name} — Senior Vet consult link`,
+              text: `Hi ${doctorName}, consultation for ${body.pet_name?.trim() || "pet"} is booked at ${when}. Start call directly (no website login needed): ${doctorJoinUrl}`,
+              html: `<p>Hi ${doctorName},</p><p>Your Senior Vet consultation for <strong>${body.pet_name?.trim() || "pet"}</strong> is booked for <strong>${when}</strong>.</p><p><a href="${doctorJoinUrl}">Start consultation (no login required)</a></p>`,
+            });
+          }
+        }
+      } catch (doctorMailErr) {
+        console.error("[senior-vet] doctor email failed", doctorMailErr);
       }
     }
 

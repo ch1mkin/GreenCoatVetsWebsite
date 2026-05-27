@@ -149,6 +149,13 @@ export default async function AccountAppointmentsPage() {
                     <p className="text-xs capitalize text-primary">{a.status.replace(/_/g, " ")}</p>
                   </div>
                 </div>
+                {a.appointment_type === "online_consult" && a.meet_link ? (
+                  <div className="mt-3">
+                    <a href={a.meet_link} className="text-sm font-semibold text-primary underline">
+                      Join consultation
+                    </a>
+                  </div>
+                ) : null}
               </li>
             ))
           ) : (

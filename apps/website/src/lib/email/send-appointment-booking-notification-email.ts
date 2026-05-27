@@ -26,7 +26,13 @@ export async function sendAppointmentBookingNotificationEmail(params: {
 
   const [branding, recipients] = await Promise.all([
     getPlatformBranding(),
-    resolveClinicNotificationRecipients(supabase, params.clinicId, ["clinic_admin", "branch_admin", "receptionist", "doctor"]),
+    resolveClinicNotificationRecipients(supabase, params.clinicId, [
+      "clinic_admin",
+      "branch_admin",
+      "receptionist",
+      "doctor",
+      "senior_doctor",
+    ]),
   ]);
   if (!recipients.length && !params.ownerEmail?.trim()) return { sent: false, reason: "no_recipient" };
 
