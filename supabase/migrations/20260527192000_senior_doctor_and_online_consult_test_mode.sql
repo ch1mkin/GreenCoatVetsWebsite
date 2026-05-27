@@ -1,10 +1,5 @@
 -- Add senior doctor role and online consult testing mode.
-
-do $$ begin
-  alter type public.app_role add value if not exists 'senior_doctor';
-exception
-  when duplicate_object then null;
-end $$;
+-- NOTE: enum value is created in 20260527191000_add_senior_doctor_enum.sql.
 
 alter table public.clinic_online_consult_settings
   add column if not exists test_mode boolean not null default false;
