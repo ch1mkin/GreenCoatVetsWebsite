@@ -539,7 +539,7 @@ export default async function AppointmentsPage({
                           <>
                             <p className="text-[10px] text-on-surface-variant break-all">Owner link: {appt.meet_link as string}</p>
                             <p className="text-[10px] text-on-surface-variant">
-                              Doctor direct link is available from "Join video (staff)" URL.
+                              Doctor direct link is available from &quot;Join video (staff)&quot; URL.
                             </p>
                           </>
                         ) : null}
