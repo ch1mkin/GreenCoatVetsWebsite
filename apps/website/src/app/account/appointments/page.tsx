@@ -26,11 +26,23 @@ export default async function AccountAppointmentsPage() {
   if (!portal) redirect("/account");
   const { owner, clinic } = portal;
 
+  const ownerEmail = user.email?.trim().toLowerCase() ?? null;
+  let ownerIds = [owner.id];
+  if (ownerEmail) {
+    const { data: linkedOwners } = await supabase
+      .from("owners")
+      .select("id, email")
+      .eq("clinic_id", clinic.id)
+      .ilike("email", ownerEmail);
+    const linkedIds = (linkedOwners ?? []).map((r) => r.id as string);
+    ownerIds = Array.from(new Set([...ownerIds, ...linkedIds]));
+  }
+
   const { data: rows } = await supabase
     .from("appointments")
     .select("id, starts_at, status, appointment_type, doctor_id, online_consult_paid_at, razorpay_payment_id, meet_link, pets(name)")
     .eq("clinic_id", clinic.id)
-    .eq("owner_id", owner.id)
+    .in("owner_id", ownerIds)
     .order("starts_at", { ascending: false })
     .limit(50);
 

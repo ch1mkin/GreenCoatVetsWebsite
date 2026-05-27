@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type RoomInfo = {
   room_name: string;
@@ -16,16 +17,77 @@ type Props = {
   appointmentId: string;
   clinicName: string;
   displayName: string;
+  role: "doctor" | "owner";
   room: RoomInfo;
 };
 
-export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName, room }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+type SignalMessage =
+  | { type: "doctor_started" }
+  | { type: "owner_ready" }
+  | { type: "offer"; sdp: RTCSessionDescriptionInit }
+  | { type: "answer"; sdp: RTCSessionDescriptionInit }
+  | { type: "ice"; candidate: RTCIceCandidateInit };
+
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
+};
+
+export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName, role, room }: Props) {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [videoOff, setVideoOff] = useState(false);
+  const [connectionLabel, setConnectionLabel] = useState("Preparing camera and microphone...");
+
+  const sendSignal = useCallback(async (payload: SignalMessage) => {
+    if (!channelRef.current) return;
+    await channelRef.current.send({ type: "broadcast", event: "signal", payload });
+  }, []);
+
+  const ensurePeerConnection = useCallback(async () => {
+    if (pcRef.current) return pcRef.current;
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    pc.onicecandidate = (event) => {
+      if (event.candidate) void sendSignal({ type: "ice", candidate: event.candidate.toJSON() });
+    };
+    pc.ontrack = (event) => {
+      if (!remoteStreamRef.current) {
+        remoteStreamRef.current = new MediaStream();
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStreamRef.current;
+      }
+      const incoming = event.streams[0];
+      if (!incoming) return;
+      for (const track of incoming.getTracks()) {
+        remoteStreamRef.current.addTrack(track);
+      }
+      setConnectionLabel("Connected");
+    };
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        pc.addTrack(track, localStreamRef.current as MediaStream);
+      });
+    }
+    pcRef.current = pc;
+    return pc;
+  }, [sendSignal]);
 
   const hangUp = useCallback(() => {
-    if (containerRef.current) containerRef.current.innerHTML = "";
+    pcRef.current?.close();
+    pcRef.current = null;
+    if (channelRef.current) {
+      channelRef.current.unsubscribe();
+      channelRef.current = null;
+    }
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
+    remoteStreamRef.current = null;
     setEnded(true);
   }, []);
 
@@ -44,21 +106,81 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName
   }, [room.ends_at, ended, hangUp]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const iframe = document.createElement("iframe");
-    // Free alternative to meet.jit.si embed demo limit.
-    iframe.src = `https://talky.io/${encodeURIComponent(room.room_name)}#name=${encodeURIComponent(displayName)}`;
-    iframe.allow = "camera; microphone; fullscreen; autoplay; display-capture";
-    iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    iframe.style.border = "0";
-    iframe.title = "Online consultation room";
-    containerRef.current.innerHTML = "";
-    containerRef.current.appendChild(iframe);
-    return () => {
-      if (containerRef.current) containerRef.current.innerHTML = "";
+    let mounted = true;
+    const supabase = createClient();
+    const roomChannel = supabase.channel(`online-consult:${room.room_name}`, {
+      config: { broadcast: { self: false } },
+    });
+    channelRef.current = roomChannel;
+
+    const onSignal = async (payload: SignalMessage) => {
+      if (!mounted) return;
+      if (payload.type === "doctor_started" && role === "owner") {
+        setConnectionLabel("Doctor joined. Connecting...");
+      }
+      if (payload.type === "owner_ready" && role === "doctor") {
+        const pc = await ensurePeerConnection();
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await sendSignal({ type: "offer", sdp: offer });
+      }
+      if (payload.type === "offer" && role === "owner") {
+        const pc = await ensurePeerConnection();
+        await pc.setRemoteDescription(payload.sdp);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendSignal({ type: "answer", sdp: answer });
+      }
+      if (payload.type === "answer" && role === "doctor") {
+        const pc = await ensurePeerConnection();
+        await pc.setRemoteDescription(payload.sdp);
+      }
+      if (payload.type === "ice") {
+        const pc = await ensurePeerConnection();
+        await pc.addIceCandidate(payload.candidate);
+      }
     };
-  }, [room.room_name, displayName]);
+
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        if (!mounted) return;
+        localStreamRef.current = stream;
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        setConnectionLabel(role === "doctor" ? "Waiting for owner to join..." : "Waiting for doctor to start...");
+      } catch {
+        setConnectionLabel("Camera/mic permission required to start call.");
+        return;
+      }
+
+      roomChannel.on("broadcast", { event: "signal" }, (packet) => {
+        const payload = (packet as { payload?: SignalMessage }).payload;
+        if (payload) void onSignal(payload);
+      });
+
+      await new Promise<void>((resolve) => {
+        roomChannel.subscribe((status) => {
+          if (status === "SUBSCRIBED") resolve();
+        });
+      });
+
+      if (!mounted) return;
+      if (role === "doctor") await sendSignal({ type: "doctor_started" });
+      if (role === "owner") await sendSignal({ type: "owner_ready" });
+    })();
+
+    return () => {
+      mounted = false;
+      pcRef.current?.close();
+      pcRef.current = null;
+      roomChannel.unsubscribe();
+      channelRef.current = null;
+      localStreamRef.current?.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+      remoteStreamRef.current?.getTracks().forEach((t) => t.stop());
+      remoteStreamRef.current = null;
+    };
+  }, [ensurePeerConnection, role, room.room_name, sendSignal]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -97,9 +219,47 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName
         </div>
       </header>
 
-      <div ref={containerRef} className="relative min-h-0 flex-1 bg-[#0f1f1a]" />
+      <div className="relative min-h-0 flex-1 bg-[#0f1f1a] p-3">
+        <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full rounded-xl bg-black object-cover" />
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="absolute bottom-6 right-6 h-28 w-44 rounded-lg border border-white/30 bg-black object-cover shadow-lg"
+        />
+        <div className="absolute left-6 top-6 rounded-full bg-black/60 px-3 py-1 text-xs text-white/90">{connectionLabel}</div>
+      </div>
 
       <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-white/10 px-4 py-4 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            localStreamRef.current?.getAudioTracks().forEach((t) => {
+              t.enabled = !next;
+            });
+          }}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${muted ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          <span className="material-symbols-outlined text-xl">{muted ? "mic_off" : "mic"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = !videoOff;
+            setVideoOff(next);
+            localStreamRef.current?.getVideoTracks().forEach((t) => {
+              t.enabled = !next;
+            });
+          }}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${videoOff ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
+          aria-label={videoOff ? "Turn camera on" : "Turn camera off"}
+        >
+          <span className="material-symbols-outlined text-xl">{videoOff ? "videocam_off" : "videocam"}</span>
+        </button>
         <button
           type="button"
           onClick={hangUp}

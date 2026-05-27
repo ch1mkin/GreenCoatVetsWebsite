@@ -131,6 +131,7 @@ export default async function OnlineConsultRoomPage({
       appointmentId={appointmentId}
       clinicName={clinic.name}
       displayName={displayName}
+      role={role === "doctor" ? "doctor" : "owner"}
       room={room}
     />
   );
