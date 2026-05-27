@@ -23,6 +23,18 @@ async function resolveWebsiteLoginRouting(
   }
 
   try {
+    const { data: membership } = await supabase
+      .from("user_clinic_memberships")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const websiteStaffRoles = new Set(["super_admin", "clinic_admin", "branch_admin", "doctor", "senior_doctor"]);
+    const isWebsiteStaff = typeof membership?.role === "string" && websiteStaffRoles.has(membership.role);
+
     const lookupClient = createServiceRoleClient() ?? supabase;
     const caps = await fetchUserAuthCapabilities(lookupClient, user.id, user.email);
     const destination = resolveAuthDestination(surface, caps, getAuthAppUrls());
@@ -32,6 +44,9 @@ async function resolveWebsiteLoginRouting(
     }
 
     if (destination.outcome === "redirect_external") {
+      if (surface === "website_public" && isWebsiteStaff) {
+        return { ok: true, kind: "continue", next: "/staff/online-consults" };
+      }
       await supabase.auth.signOut();
       return { ok: true, kind: "external", url: destination.url };
     }

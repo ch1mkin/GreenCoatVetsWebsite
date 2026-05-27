@@ -28,7 +28,7 @@ export default async function AccountAppointmentsPage() {
 
   const { data: rows } = await supabase
     .from("appointments")
-    .select("id, starts_at, status, appointment_type, doctor_id, pets(name)")
+    .select("id, starts_at, status, appointment_type, doctor_id, online_consult_paid_at, razorpay_payment_id, meet_link, pets(name)")
     .eq("clinic_id", clinic.id)
     .eq("owner_id", owner.id)
     .order("starts_at", { ascending: false })
@@ -40,6 +40,9 @@ export default async function AccountAppointmentsPage() {
     status: string;
     appointment_type: string;
     doctor_id: string | null;
+    online_consult_paid_at: string | null;
+    razorpay_payment_id: string | null;
+    meet_link: string | null;
     pets: { name: string } | null;
   };
 
@@ -64,6 +67,9 @@ export default async function AccountAppointmentsPage() {
     status: r.status as string,
     appointment_type: r.appointment_type as string,
     doctor_id: (r.doctor_id as string | null) ?? null,
+    online_consult_paid_at: (r.online_consult_paid_at as string | null) ?? null,
+    razorpay_payment_id: (r.razorpay_payment_id as string | null) ?? null,
+    meet_link: (r.meet_link as string | null) ?? null,
     pets: normalizePets(r.pets),
   }));
 
@@ -79,7 +85,14 @@ export default async function AccountAppointmentsPage() {
   const list = raw.map((a) => ({
     ...a,
     doctor_full_name: a.doctor_id ? doctorName[a.doctor_id] ?? null : null,
+    is_paid_senior_vet:
+      a.appointment_type === "online_consult" &&
+      Boolean(a.online_consult_paid_at) &&
+      Boolean(a.razorpay_payment_id) &&
+      !String(a.razorpay_payment_id).startsWith("test_"),
   }));
+
+  const paidSeniorVet = list.filter((a) => a.is_paid_senior_vet);
 
   return (
     <main className="bg-surface pb-20 pt-8 text-on-background sm:pt-12">
@@ -96,6 +109,26 @@ export default async function AccountAppointmentsPage() {
           </Link>
           .
         </p>
+
+        {paidSeniorVet.length ? (
+          <section className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4">
+            <p className="text-sm font-semibold text-emerald-900">Paid Senior Vet appointments</p>
+            <ul className="mt-3 space-y-2">
+              {paidSeniorVet.slice(0, 5).map((a) => (
+                <li key={`paid-${a.id}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span>
+                    {formatWhen(a.starts_at)} · {a.pets?.name ?? "Pet"} · {a.doctor_full_name ?? "Senior veterinarian"}
+                  </span>
+                  {a.meet_link ? (
+                    <a href={a.meet_link} className="font-semibold text-primary underline">
+                      Join call
+                    </a>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <ul className="mt-8 space-y-3">
           {list.length ? (

@@ -23,6 +23,17 @@ export default async function AccountPage({
   const portal = await getOwnerPortalContext(user.id);
   const ownerClinic = portal?.clinic;
   const owner = portal?.owner ?? null;
+  const { data: membership } = await supabase
+    .from("user_clinic_memberships")
+    .select("role, clinic_id")
+    .eq("user_id", user.id)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const isStaffWebsiteRole = Boolean(
+    membership?.role && ["senior_doctor", "doctor", "clinic_admin", "branch_admin", "super_admin"].includes(membership.role),
+  );
   const claimed = searchParams.claimed === "1" || searchParams.claimed === "true";
   const booked = searchParams.booked === "1" || searchParams.booked === "true";
   const completed = searchParams.completed === "1" || searchParams.completed === "true";
@@ -195,6 +206,11 @@ export default async function AccountPage({
                 <Link href="/account/orders" className="font-medium text-primary hover:underline">
                   Store orders
                 </Link>
+                {isStaffWebsiteRole ? (
+                  <Link href="/staff/online-consults" className="font-medium text-primary hover:underline">
+                    Staff online consult view
+                  </Link>
+                ) : null}
                 <Link href="/" className="font-medium text-primary hover:underline">
                   Marketing site home
                 </Link>
