@@ -8,7 +8,6 @@ type Doctor = { id: string; full_name: string; branch_id: string | null };
 type Branch = { id: string; name: string };
 
 type Props = {
-  clinicId: string;
   clinicName: string;
   productName: string;
   priceInr: number;
@@ -18,7 +17,7 @@ type Props = {
   fieldClassName: string;
 };
 
-export function SeniorVetConsultClient({ clinicId, clinicName, productName, priceInr, testMode, branches, doctors, fieldClassName }: Props) {
+export function SeniorVetConsultClient({ clinicName, productName, priceInr, testMode, branches, doctors, fieldClassName }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);

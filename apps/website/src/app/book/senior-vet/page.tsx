@@ -55,7 +55,6 @@ export default async function SeniorVetBookPage() {
         {!settings.test_mode ? <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" /> : null}
         <div className="mt-10">
           <SeniorVetConsultClient
-            clinicId={clinic.id}
             clinicName={clinic.name}
             productName={settings.product_name}
             priceInr={priceInr}
