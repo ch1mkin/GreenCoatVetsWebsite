@@ -538,8 +538,8 @@ export default async function AppointmentsPage({
                         {appt.meet_link ? (
                           <>
                             <p className="text-[10px] text-on-surface-variant break-all">Owner link: {appt.meet_link as string}</p>
-                            <p className="text-[10px] text-on-surface-variant break-all">
-                              Doctor direct link: {(appt.meet_link as string).includes("?") ? `${appt.meet_link as string}&role=doctor` : `${appt.meet_link as string}?role=doctor`}
+                            <p className="text-[10px] text-on-surface-variant">
+                              Doctor direct link is available from "Join video (staff)" URL.
                             </p>
                           </>
                         ) : null}

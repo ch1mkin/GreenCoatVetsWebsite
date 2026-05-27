@@ -12,37 +12,6 @@ type RoomInfo = {
   doctor_name: string;
 };
 
-type JitsiApi = {
-  executeCommand: (command: string, ...args: unknown[]) => void;
-  dispose: () => void;
-  addEventListener: (event: string, handler: () => void) => void;
-};
-
-declare global {
-  interface Window {
-    JitsiMeetExternalAPI?: new (domain: string, options: Record<string, unknown>) => JitsiApi;
-  }
-}
-
-function loadJitsiScript(): Promise<void> {
-  if (typeof window === "undefined") return Promise.resolve();
-  if (window.JitsiMeetExternalAPI) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-jitsi="1"]');
-    if (existing) {
-      existing.addEventListener("load", () => resolve());
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://meet.jit.si/external_api.js";
-    script.async = true;
-    script.dataset.jitsi = "1";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Could not load video engine"));
-    document.body.appendChild(script);
-  });
-}
-
 type Props = {
   appointmentId: string;
   clinicName: string;
@@ -52,16 +21,11 @@ type Props = {
 
 export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName, room }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const apiRef = useRef<JitsiApi | null>(null);
-  const [muted, setMuted] = useState(false);
-  const [videoOff, setVideoOff] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [ended, setEnded] = useState(false);
 
   const hangUp = useCallback(() => {
-    apiRef.current?.executeCommand("hangup");
-    apiRef.current?.dispose();
-    apiRef.current = null;
+    if (containerRef.current) containerRef.current.innerHTML = "";
     setEnded(true);
   }, []);
 
@@ -80,46 +44,19 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName
   }, [room.ends_at, ended, hangUp]);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      await loadJitsiScript();
-      if (cancelled || !containerRef.current || !window.JitsiMeetExternalAPI) return;
-
-      const api = new window.JitsiMeetExternalAPI("meet.jit.si", {
-        roomName: room.room_name,
-        parentNode: containerRef.current,
-        width: "100%",
-        height: "100%",
-        userInfo: { displayName },
-        configOverwrite: {
-          prejoinPageEnabled: false,
-          startWithAudioMuted: false,
-          startWithVideoMuted: false,
-          disableDeepLinking: true,
-          enableWelcomePage: false,
-          defaultLogoUrl: "about:blank",
-          hideConferenceSubject: true,
-        },
-        interfaceConfigOverwrite: {
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false,
-          SHOW_BRAND_WATERMARK: false,
-          MOBILE_APP_PROMO: false,
-          TOOLBAR_BUTTONS: [],
-          DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-          FILM_STRIP_MAX_HEIGHT: 120,
-          DEFAULT_BACKGROUND: "#1a2e28",
-        },
-      });
-
-      apiRef.current = api;
-      api.addEventListener("readyToClose", () => setEnded(true));
-    })();
-
+    if (!containerRef.current) return;
+    const iframe = document.createElement("iframe");
+    // Free alternative to meet.jit.si embed demo limit.
+    iframe.src = `https://talky.io/${encodeURIComponent(room.room_name)}#name=${encodeURIComponent(displayName)}`;
+    iframe.allow = "camera; microphone; fullscreen; autoplay; display-capture";
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
+    iframe.style.border = "0";
+    iframe.title = "Online consultation room";
+    containerRef.current.innerHTML = "";
+    containerRef.current.appendChild(iframe);
     return () => {
-      cancelled = true;
-      apiRef.current?.dispose();
-      apiRef.current = null;
+      if (containerRef.current) containerRef.current.innerHTML = "";
     };
   }, [room.room_name, displayName]);
 
@@ -163,30 +100,6 @@ export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName
       <div ref={containerRef} className="relative min-h-0 flex-1 bg-[#0f1f1a]" />
 
       <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-white/10 px-4 py-4 sm:gap-4">
-        <button
-          type="button"
-          onClick={() => {
-            const next = !muted;
-            setMuted(next);
-            apiRef.current?.executeCommand("toggleAudio");
-          }}
-          className={`flex h-12 w-12 items-center justify-center rounded-full ${muted ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
-          aria-label={muted ? "Unmute" : "Mute"}
-        >
-          <span className="material-symbols-outlined text-xl">{muted ? "mic_off" : "mic"}</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const next = !videoOff;
-            setVideoOff(next);
-            apiRef.current?.executeCommand("toggleVideo");
-          }}
-          className={`flex h-12 w-12 items-center justify-center rounded-full ${videoOff ? "bg-red-600" : "bg-white/15 hover:bg-white/25"}`}
-          aria-label={videoOff ? "Turn camera on" : "Turn camera off"}
-        >
-          <span className="material-symbols-outlined text-xl">{videoOff ? "videocam_off" : "videocam"}</span>
-        </button>
         <button
           type="button"
           onClick={hangUp}

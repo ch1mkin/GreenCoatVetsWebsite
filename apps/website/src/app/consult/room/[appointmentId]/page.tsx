@@ -9,6 +9,7 @@ type RoomPayload = {
   starts_at: string;
   ends_at: string;
   duration_minutes: number;
+  doctor_joined_at?: string | null;
   pet_name: string;
   owner_name: string;
   doctor_name: string;
@@ -24,6 +25,8 @@ export default async function OnlineConsultRoomPage({
   const appointmentId = params.appointmentId?.trim();
   const tokenRaw = searchParams?.token;
   const token = (Array.isArray(tokenRaw) ? tokenRaw[0] : tokenRaw)?.trim() || null;
+  const doctorTokenRaw = searchParams?.doctor_token;
+  const doctorToken = (Array.isArray(doctorTokenRaw) ? doctorTokenRaw[0] : doctorTokenRaw)?.trim() || null;
   const role = String(searchParams?.role ?? "guest").trim();
 
   if (!appointmentId) {
@@ -44,9 +47,33 @@ export default async function OnlineConsultRoomPage({
     redirect(`/login?redirect=${encodeURIComponent(redirectPath)}`);
   }
 
+  if (role === "doctor") {
+    if (!doctorToken) {
+      return (
+        <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#1a2e28] px-4 text-center text-white">
+          <h1 className="text-xl font-bold">Doctor link required</h1>
+          <p className="max-w-md text-sm text-white/80">Use the secure doctor join link from the clinic portal.</p>
+        </main>
+      );
+    }
+    const { error: doctorJoinErr } = await supabase.rpc("mark_online_consult_doctor_joined", {
+      p_appointment_id: appointmentId,
+      p_doctor_token: doctorToken,
+    });
+    if (doctorJoinErr) {
+      return (
+        <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#1a2e28] px-4 text-center text-white">
+          <h1 className="text-xl font-bold">Cannot verify doctor link</h1>
+          <p className="max-w-md text-sm text-white/80">{doctorJoinErr.message}</p>
+        </main>
+      );
+    }
+  }
+
   const { data: roomData, error } = await supabase.rpc("validate_online_consult_join", {
     p_appointment_id: appointmentId,
-    p_token: token,
+    p_token: role === "doctor" ? doctorToken : token,
+    p_role: role === "doctor" ? "doctor" : "owner",
   });
 
   if (error || !roomData) {
@@ -76,14 +103,25 @@ export default async function OnlineConsultRoomPage({
         : room.owner_name || "Guest";
 
   const startsAt = new Date(room.starts_at).getTime();
-  if (Date.now() < startsAt) {
+  const ownerUnlockAt = startsAt - 60 * 60 * 1000;
+  if (role !== "doctor" && Date.now() < ownerUnlockAt) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#1a2e28] px-4 text-center text-white">
         <h1 className="text-xl font-bold">Meeting locked until scheduled time</h1>
         <p className="text-sm text-white/80">
-          Your consultation starts at {new Date(room.starts_at).toLocaleString()}.
+          Your consultation starts at {new Date(room.starts_at).toLocaleString()}. You can join one hour before start.
         </p>
-        <p className="text-xs text-white/60">Refresh this page at that exact time to join.</p>
+        <p className="text-xs text-white/60">Refresh this page when the one-hour window opens.</p>
+      </main>
+    );
+  }
+
+  if (role !== "doctor" && !room.doctor_joined_at) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#1a2e28] px-4 text-center text-white">
+        <h1 className="text-xl font-bold">Waiting for senior doctor to join</h1>
+        <p className="text-sm text-white/80">You can enter as soon as the doctor starts the meeting.</p>
+        <p className="text-xs text-white/60">Refresh this page in a few moments.</p>
       </main>
     );
   }

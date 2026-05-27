@@ -103,20 +103,7 @@ export default async function StaffOnlineConsultsPage() {
                       <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Test</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
-                    {item.meet_link ? (
-                      <a
-                        className="text-sm font-semibold text-primary underline"
-                        href={item.meet_link.includes("?") ? `${item.meet_link}&role=doctor` : `${item.meet_link}?role=doctor`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open call
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+                  <td className="px-4 py-3">Use portal Join link</td>
                 </tr>
               ))}
             </tbody>

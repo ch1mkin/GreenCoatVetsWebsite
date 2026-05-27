@@ -15,18 +15,18 @@ export async function GET(_request: Request, { params }: { params: { appointment
 
   const { data: appt, error } = await supabase
     .from("appointments")
-    .select("id, starts_at, guest_merge_token, appointment_type, meet_link, owners(full_name, email), pets(name), clinics(name)")
+    .select("id, starts_at, guest_merge_token, online_consult_doctor_join_token, appointment_type, meet_link, owners(full_name, email), pets(name), clinics(name)")
     .eq("id", appointmentId)
     .eq("clinic_id", clinic_id)
     .eq("appointment_type", "online_consult")
     .maybeSingle();
 
-  if (error || !appt?.guest_merge_token) {
+  if (error || !appt?.guest_merge_token || !(appt.online_consult_doctor_join_token as string | null)) {
     return NextResponse.json({ error: "Online consultation not found" }, { status: 404 });
   }
 
   const websiteBase = (process.env.NEXT_PUBLIC_WEBSITE_APP_URL ?? "https://www.greencoatvets.com").replace(/\/$/, "");
-  const url = `${websiteBase}/consult/room/${appointmentId}?token=${appt.guest_merge_token}&role=doctor`;
+  const url = `${websiteBase}/consult/room/${appointmentId}?role=doctor&doctor_token=${appt.online_consult_doctor_join_token as string}`;
 
   const ownerRaw = appt.owners as { full_name?: string | null; email?: string | null } | { full_name?: string | null; email?: string | null }[] | null;
   const owner = Array.isArray(ownerRaw) ? ownerRaw[0] : ownerRaw;
