@@ -76,15 +76,14 @@ export default async function OnlineConsultRoomPage({
         : room.owner_name || "Guest";
 
   const startsAt = new Date(room.starts_at).getTime();
-  const earlyWindowMs = 10 * 60 * 1000;
-  if (role !== "doctor" && Date.now() < startsAt - earlyWindowMs) {
+  if (Date.now() < startsAt) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#1a2e28] px-4 text-center text-white">
-        <h1 className="text-xl font-bold">Waiting room</h1>
+        <h1 className="text-xl font-bold">Meeting locked until scheduled time</h1>
         <p className="text-sm text-white/80">
-          Your consultation starts at {new Date(room.starts_at).toLocaleString()}. You can join up to 10 minutes early.
+          Your consultation starts at {new Date(room.starts_at).toLocaleString()}.
         </p>
-        <p className="text-xs text-white/60">Refresh this page when it is time.</p>
+        <p className="text-xs text-white/60">Refresh this page at that exact time to join.</p>
       </main>
     );
   }
