@@ -16,7 +16,6 @@ type RoomInfo = {
 type Props = {
   appointmentId: string;
   clinicName: string;
-  displayName: string;
   role: "doctor" | "owner";
   room: RoomInfo;
 };
@@ -32,7 +31,7 @@ const RTC_CONFIG: RTCConfiguration = {
   iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }],
 };
 
-export function OnlineConsultRoomClient({ appointmentId, clinicName, displayName, role, room }: Props) {
+export function OnlineConsultRoomClient({ appointmentId, clinicName, role, room }: Props) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);

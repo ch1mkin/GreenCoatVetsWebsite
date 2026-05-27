@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -27,6 +27,29 @@ export function LoginForm({
   const oauthMode = searchParams.get("oauth") === "google";
   const resetDone = searchParams.get("reset") === "1";
   const hintMessage = loginHintMessage(searchParams.get("hint"));
+
+  const finishWebsitePublicSignIn = useCallback(
+    async (isCancelled?: () => boolean) => {
+      const routing = await resolveWebsitePublicLoginRoutingAction();
+      if (isCancelled?.()) return;
+      if (!routing.ok) {
+        setIsSubmitting(false);
+        setError(routing.error);
+        return;
+      }
+      if (routing.kind === "external") {
+        window.location.assign(routing.url);
+        return;
+      }
+
+      const safeRedirect =
+        redirectAfter.startsWith("/") && !redirectAfter.startsWith("//") ? redirectAfter : routing.next;
+      setIsSubmitting(false);
+      router.replace(safeRedirect);
+      router.refresh();
+    },
+    [redirectAfter, router],
+  );
 
   useEffect(() => {
     if (!oauthMode) return;
@@ -68,27 +91,7 @@ export function LoginForm({
     return () => {
       cancelled = true;
     };
-  }, [invite, oauthMode, redirectAfter, router]);
-
-  async function finishWebsitePublicSignIn(isCancelled?: () => boolean) {
-    const routing = await resolveWebsitePublicLoginRoutingAction();
-    if (isCancelled?.()) return;
-    if (!routing.ok) {
-      setIsSubmitting(false);
-      setError(routing.error);
-      return;
-    }
-    if (routing.kind === "external") {
-      window.location.assign(routing.url);
-      return;
-    }
-
-    const safeRedirect =
-      redirectAfter.startsWith("/") && !redirectAfter.startsWith("//") ? redirectAfter : routing.next;
-    setIsSubmitting(false);
-    router.replace(safeRedirect);
-    router.refresh();
-  }
+  }, [finishWebsitePublicSignIn, invite, oauthMode]);
 
   async function onContinueWithGoogle() {
     setError(null);

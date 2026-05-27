@@ -95,13 +95,6 @@ export default async function OnlineConsultRoomPage({
 
   const room = roomData as RoomPayload;
   const clinic = await resolveClinic();
-  const displayName =
-    role === "doctor"
-      ? room.doctor_name || "Veterinarian"
-      : user
-        ? room.owner_name || "Pet owner"
-        : room.owner_name || "Guest";
-
   const startsAt = new Date(room.starts_at).getTime();
   const ownerUnlockAt = startsAt - 60 * 60 * 1000;
   if (role !== "doctor" && Date.now() < ownerUnlockAt) {
@@ -130,7 +123,6 @@ export default async function OnlineConsultRoomPage({
     <OnlineConsultRoomClient
       appointmentId={appointmentId}
       clinicName={clinic.name}
-      displayName={displayName}
       role={role === "doctor" ? "doctor" : "owner"}
       room={room}
     />

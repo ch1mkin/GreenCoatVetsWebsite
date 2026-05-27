@@ -26,10 +26,11 @@ export function HeroImageSlider({
   }, [resolvedUrls, failed, fallback]);
 
   const [index, setIndex] = useState(0);
+  const listSignature = useMemo(() => list.join("|"), [list]);
 
   useEffect(() => {
     setIndex(0);
-  }, [list.join("|")]);
+  }, [listSignature]);
 
   useEffect(() => {
     if (list.length <= 1) return;
