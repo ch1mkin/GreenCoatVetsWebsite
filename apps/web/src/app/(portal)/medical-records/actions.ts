@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
+import { upsertMedicalRecordForVisit } from "@/lib/medical-records/upsert-by-visit";
 import { createClient } from "@/lib/supabase/server";
 
 export async function createMedicalRecord(formData: FormData) {
@@ -26,17 +27,16 @@ export async function createMedicalRecord(formData: FormData) {
     .single();
   if (visitError) throw new Error(visitError.message);
 
-  const { error } = await supabase.from("medical_records").insert({
+  await upsertMedicalRecordForVisit(supabase, {
     clinic_id,
-    branch_id: visit.branch_id,
-    pet_id: visit.pet_id,
+    branch_id: visit.branch_id as string,
+    pet_id: visit.pet_id as string,
     visit_id: visit.id,
     diagnosis: diagnosis || null,
     lab_tests: labTests || null,
     notes: notes || null,
     created_by: user?.id ?? null,
   });
-  if (error) throw new Error(error.message);
 
   revalidatePath("/medical-records");
 }

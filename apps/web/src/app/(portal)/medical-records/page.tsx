@@ -59,7 +59,7 @@ export default async function MedicalRecordsPage({
       .select("id, pet_id, created_at, pets(name), owners(full_name)")
       .eq("clinic_id", clinic_id)
       .order("created_at", { ascending: false })
-      .limit(12),
+      .limit(50),
     supabase.from("pets").select("id, name").eq("clinic_id", clinic_id).order("name", { ascending: true }).limit(300),
   ]);
   if (visitsError) throw new Error(visitsError.message);
@@ -77,9 +77,7 @@ export default async function MedicalRecordsPage({
     .eq("clinic_id", clinic_id)
     .order("created_at", { ascending: false })
     .limit(500);
-  const missing = (visitBackfillRows ?? []).filter(
-    (v) => !existingVisitIds.has(v.id) && Boolean(v.diagnosis || v.symptoms || v.treatment_plan),
-  );
+  const missing = (visitBackfillRows ?? []).filter((v) => !existingVisitIds.has(v.id));
   for (const v of missing.slice(0, 50)) {
     try {
       await upsertMedicalRecordForVisit(supabase, {
@@ -137,14 +135,14 @@ export default async function MedicalRecordsPage({
         </div>
         <div className="flex flex-wrap gap-2">
           <span className="btn-secondary cursor-default text-sm opacity-80">Export (soon)</span>
-          <Link href="/visits" className="btn-primary flex items-center gap-2 text-sm">
-            <span className="material-symbols-outlined text-base">add</span>
-            Open visit
+          <Link href="/appointments" className="btn-primary flex items-center gap-2 text-sm">
+            <span className="material-symbols-outlined text-base">event</span>
+            Appointments
           </Link>
         </div>
       </div>
 
-      <MedicalRecordsPetFilter pets={pets ?? []} defaultPetId={petFilter} />
+      <MedicalRecordsPetFilter pets={pets ?? []} defaultPetId={petFilter} activeTab={tab} />
 
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-12 flex flex-col gap-6 lg:col-span-4">

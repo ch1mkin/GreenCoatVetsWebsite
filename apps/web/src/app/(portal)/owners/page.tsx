@@ -9,10 +9,13 @@ import { AppShell } from "@/components/web/app-shell";
 import { getRoleNavGroups } from "@/lib/auth/permissions";
 import { SubmitButton } from "@/components/web/submit-button";
 import { OwnersDirectoryClient, type OwnerDirectoryRowData } from "@/components/workspace/owners-directory-client";
+import { OwnersDirectoryWithBulkDelete } from "@/components/workspace/owners-directory-with-bulk-delete";
 import { buildSignedUrlMap, urlForDisplay } from "@/lib/storage/resolve-signed-image-url";
 
 type SearchParams = {
   q?: string;
+  deleted?: string;
+  error?: string;
 };
 
 function initials(name: string) {
@@ -30,6 +33,8 @@ export default async function OwnersPage({
   searchParams: SearchParams;
 }) {
   const query = (searchParams.q ?? "").trim();
+  const deleted = searchParams.deleted === "1" || searchParams.deleted === "true";
+  const errorMessage = (searchParams.error ?? "").trim() || null;
   const access = await getUserAccess();
   if (!access.membership && !access.isSuperAdmin) redirect("/dashboard");
   const role = (access.membership?.role ?? (access.isSuperAdmin ? "super_admin" : "pet_owner")) as
@@ -133,6 +138,18 @@ export default async function OwnersPage({
         </div>
       }
     >
+      {errorMessage ? (
+        <section className="card-soft mb-3 border border-red-200 bg-red-50 text-red-900">
+          <p className="font-semibold">Could not delete selected clients</p>
+          <p className="mt-1 text-sm">{errorMessage}</p>
+        </section>
+      ) : null}
+      {deleted ? (
+        <section className="card-soft mb-3 border border-emerald-200 bg-emerald-50 text-emerald-950">
+          <p className="font-semibold">Clients deleted</p>
+          <p className="mt-1 text-sm">Selected owner records and linked pets were permanently removed.</p>
+        </section>
+      ) : null}
       <section className="card-soft">
         <form className="flex flex-wrap items-end gap-2" method="get">
           <div className="relative min-w-[240px] flex-1">
@@ -175,7 +192,11 @@ export default async function OwnersPage({
 
       <section className="mt-3 space-y-2">
         <h2 className="font-headline text-xs font-bold uppercase tracking-wide text-slate-700">Directory</h2>
-        <OwnersDirectoryClient rows={ownerRows} />
+        {access.isSuperAdmin ? (
+          <OwnersDirectoryWithBulkDelete rows={ownerRows} clinicId={clinic_id} />
+        ) : (
+          <OwnersDirectoryClient rows={ownerRows} />
+        )}
       </section>
     </AppShell>
   );

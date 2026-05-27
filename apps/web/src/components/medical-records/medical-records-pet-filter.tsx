@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 export function MedicalRecordsPetFilter({
   pets,
   defaultPetId,
+  activeTab,
 }: {
   pets: { id: string; name: string }[];
   defaultPetId: string;
+  activeTab?: string;
 }) {
   const router = useRouter();
 
@@ -27,8 +29,11 @@ export function MedicalRecordsPetFilter({
         defaultValue={defaultPetId}
         onChange={(e) => {
           const pet = e.target.value;
-          const url = pet ? `/medical-records?pet=${encodeURIComponent(pet)}` : "/medical-records";
-          router.push(url);
+          const params = new URLSearchParams();
+          if (pet) params.set("pet", pet);
+          if (activeTab && activeTab !== "records") params.set("tab", activeTab);
+          const qs = params.toString();
+          router.push(qs ? `/medical-records?${qs}` : "/medical-records");
         }}
       >
         <option value="">All pets</option>

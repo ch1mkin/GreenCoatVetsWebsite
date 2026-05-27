@@ -475,3 +475,42 @@ export async function superAdminSendPasswordResetAction(formData: FormData) {
   }
   redirect(`/super-admin/users?${params.toString()}`);
 }
+
+export async function superAdminDeleteOwnersAction(formData: FormData) {
+  let errorMessage: string | null = null;
+
+  try {
+    await assertSuperAdmin();
+    const clinicId = String(formData.get("clinic_id") ?? "").trim();
+    const ownerIds = formData.getAll("owner_ids").map((v) => String(v).trim()).filter(Boolean);
+    const confirmPhrase = String(formData.get("confirm_delete_text") ?? "")
+      .trim()
+      .toLowerCase();
+
+    if (!clinicId) throw new Error("Clinic is required.");
+    if (!ownerIds.length) throw new Error("Select at least one client to delete.");
+    if (confirmPhrase !== "confirm") throw new Error('Type "confirm" to permanently delete selected clients.');
+
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("super_admin_delete_owners", {
+      p_clinic_id: clinicId,
+      p_owner_ids: ownerIds,
+    });
+    if (error) throw new Error(error.message);
+
+    const result = (data ?? {}) as { owner_count?: number };
+    if (!result.owner_count) throw new Error("No clients were deleted.");
+  } catch (error) {
+    errorMessage = error instanceof Error ? error.message : "Could not delete selected clients.";
+  }
+
+  if (errorMessage) {
+    redirect(`/owners?error=${encodeURIComponent(errorMessage)}`);
+  }
+
+  revalidatePath("/owners");
+  revalidatePath("/pets");
+  revalidatePath("/appointments");
+  revalidatePath("/medical-records");
+  redirect("/owners?deleted=1");
+}

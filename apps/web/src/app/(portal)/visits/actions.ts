@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 import { REFERRED_TEST_OPTIONS, testFieldName } from "@/lib/clinical/referred-tests";
+import { formatLabTestsFromEvaluation } from "@/lib/medical-records/lab-tests-from-evaluation";
 import { upsertMedicalRecordForVisit } from "@/lib/medical-records/upsert-by-visit";
 import { regenerateVisitReportPdfAttachment } from "@/app/(portal)/visits/visit-report-actions";
 
@@ -68,6 +69,52 @@ export async function createVisitFromAppointment(formData: FormData) {
   return createdVisit.id;
 }
 
+async function syncMedicalRecordFromVisit(
+  supabase: ReturnType<typeof createClient>,
+  clinic_id: string,
+  visitId: string,
+  labTestsOverride?: string | null,
+) {
+  const { data: visit, error: visitErr } = await supabase
+    .from("visits")
+    .select("branch_id, pet_id, diagnosis, symptoms, treatment_plan")
+    .eq("id", visitId)
+    .eq("clinic_id", clinic_id)
+    .single();
+  if (visitErr) throw new Error(visitErr.message);
+
+  let labTests = labTestsOverride;
+  if (labTests === undefined) {
+    const { data: evaluation } = await supabase
+      .from("visit_clinical_evaluations")
+      .select("tests_referred, tests_other")
+      .eq("visit_id", visitId)
+      .maybeSingle();
+    labTests = formatLabTestsFromEvaluation(
+      (evaluation?.tests_referred as string[] | null) ?? null,
+      (evaluation?.tests_other as string | null) ?? null,
+    );
+  }
+
+  const notesCombined =
+    [visit.symptoms, visit.treatment_plan].filter(Boolean).join("\n\n") || null;
+
+  const row = {
+    clinic_id,
+    branch_id: visit.branch_id as string,
+    pet_id: visit.pet_id as string,
+    visit_id: visitId,
+    diagnosis: (visit.diagnosis as string | null) ?? null,
+    notes: notesCombined,
+  };
+
+  if (labTests) {
+    await upsertMedicalRecordForVisit(supabase, { ...row, lab_tests: labTests });
+  } else {
+    await upsertMedicalRecordForVisit(supabase, row);
+  }
+}
+
 async function persistVisitConsultation(
   supabase: ReturnType<typeof createClient>,
   clinic_id: string,
@@ -122,17 +169,7 @@ async function persistVisitConsultation(
     if (apptUpdateError) throw new Error(apptUpdateError.message);
   }
 
-  const notesCombined = [symptoms, treatmentPlan].filter(Boolean).join("\n\n") || null;
-
-  await upsertMedicalRecordForVisit(supabase, {
-    clinic_id,
-    branch_id: visit.branch_id as string,
-    pet_id: visit.pet_id as string,
-    visit_id: visitId,
-    diagnosis: diagnosis || null,
-    notes: notesCombined,
-    lab_tests: null,
-  });
+  await syncMedicalRecordFromVisit(supabase, clinic_id, visitId);
 }
 
 async function persistVisitClinicalEvaluation(
@@ -188,6 +225,9 @@ async function persistVisitClinicalEvaluation(
   });
 
   if (upErr) throw new Error(upErr.message);
+
+  const labTests = formatLabTestsFromEvaluation(referred, row.tests_other);
+  await syncMedicalRecordFromVisit(supabase, clinic_id, visitId, labTests);
 }
 
 /** If the visit row never got a doctor_id but the appointment has one, copy it for display, Rx, and reporting. */
@@ -263,6 +303,7 @@ export async function saveVisitClinicalEvaluation(formData: FormData) {
   await syncVisitDoctorFromAppointment(supabase, clinic_id, visitId);
 
   revalidatePath(`/visits/${visitId}`);
+  revalidatePath("/medical-records");
   redirectAfterVisitSave(visitId, formData);
 }
 

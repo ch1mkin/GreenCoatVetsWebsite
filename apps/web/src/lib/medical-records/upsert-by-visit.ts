@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 type Supabase = ReturnType<typeof createClient>;
 
 /**
- * One chart row per visit. The DB may not have UNIQUE(visit_id), so we cannot use PostgREST upsert onConflict.
+ * One chart row per visit. Updates preserve lab_tests unless explicitly provided.
  */
 export async function upsertMedicalRecordForVisit(
   supabase: Supabase,
@@ -15,6 +15,7 @@ export async function upsertMedicalRecordForVisit(
     diagnosis: string | null;
     notes: string | null;
     lab_tests?: string | null;
+    created_by?: string | null;
   },
 ): Promise<void> {
   const { data: rows, error: selErr } = await supabase
@@ -27,19 +28,18 @@ export async function upsertMedicalRecordForVisit(
   if (selErr) throw new Error(selErr.message);
 
   const existingId = rows?.[0]?.id as string | undefined;
+  const labTestsProvided = Object.prototype.hasOwnProperty.call(row, "lab_tests");
 
   if (existingId) {
-    const { error } = await supabase
-      .from("medical_records")
-      .update({
-        clinic_id: row.clinic_id,
-        branch_id: row.branch_id,
-        pet_id: row.pet_id,
-        diagnosis: row.diagnosis,
-        notes: row.notes,
-        lab_tests: row.lab_tests ?? null,
-      })
-      .eq("id", existingId);
+    const patch: Record<string, unknown> = {
+      clinic_id: row.clinic_id,
+      branch_id: row.branch_id,
+      pet_id: row.pet_id,
+      diagnosis: row.diagnosis,
+      notes: row.notes,
+    };
+    if (labTestsProvided) patch.lab_tests = row.lab_tests ?? null;
+    const { error } = await supabase.from("medical_records").update(patch).eq("id", existingId);
     if (error) throw new Error(error.message);
     return;
   }
@@ -52,6 +52,7 @@ export async function upsertMedicalRecordForVisit(
     diagnosis: row.diagnosis,
     notes: row.notes,
     lab_tests: row.lab_tests ?? null,
+    created_by: row.created_by ?? null,
   });
   if (error) throw new Error(error.message);
 }
