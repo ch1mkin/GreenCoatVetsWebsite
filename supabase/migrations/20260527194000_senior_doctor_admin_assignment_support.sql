@@ -3,6 +3,20 @@
 alter table public.staff_profiles
   drop constraint if exists staff_profiles_doctor_required_fields;
 
+-- Backfill legacy rows so the stricter doctor/senior_doctor constraint can be applied safely.
+update public.staff_profiles
+set
+  full_name = coalesce(nullif(trim(coalesce(full_name, '')), ''), 'Staff Member'),
+  phone = coalesce(nullif(trim(coalesce(phone, '')), ''), 'NA'),
+  working_hours = coalesce(nullif(trim(coalesce(working_hours, '')), ''), 'To be updated'),
+  updated_at = now()
+where role in ('doctor', 'senior_doctor')
+  and (
+    nullif(trim(coalesce(full_name, '')), '') is null
+    or nullif(trim(coalesce(phone, '')), '') is null
+    or nullif(trim(coalesce(working_hours, '')), '') is null
+  );
+
 alter table public.staff_profiles
   add constraint staff_profiles_doctor_required_fields
   check (
