@@ -536,7 +536,12 @@ export default async function AppointmentsPage({
                           Join video (staff)
                         </a>
                         {appt.meet_link ? (
-                          <p className="text-[10px] text-on-surface-variant break-all">Owner link: {appt.meet_link as string}</p>
+                          <>
+                            <p className="text-[10px] text-on-surface-variant break-all">Owner link: {appt.meet_link as string}</p>
+                            <p className="text-[10px] text-on-surface-variant break-all">
+                              Doctor direct link: {(appt.meet_link as string).includes("?") ? `${appt.meet_link as string}&role=doctor` : `${appt.meet_link as string}?role=doctor`}
+                            </p>
+                          </>
                         ) : null}
                         <form action={rescheduleOnlineConsult} className="flex flex-col gap-1">
                           <input type="hidden" name="appointment_id" value={appt.id} />

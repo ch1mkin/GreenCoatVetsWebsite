@@ -105,7 +105,12 @@ export default async function StaffOnlineConsultsPage() {
                   </td>
                   <td className="px-4 py-3">
                     {item.meet_link ? (
-                      <a className="text-sm font-semibold text-primary underline" href={item.meet_link} target="_blank" rel="noreferrer">
+                      <a
+                        className="text-sm font-semibold text-primary underline"
+                        href={item.meet_link.includes("?") ? `${item.meet_link}&role=doctor` : `${item.meet_link}?role=doctor`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         Open call
                       </a>
                     ) : (
