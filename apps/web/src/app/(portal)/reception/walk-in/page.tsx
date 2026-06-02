@@ -141,6 +141,31 @@ export default async function WalkInGuestPage() {
             />
           </label>
           <label className="flex flex-col gap-0.5">
+            <span className="font-semibold text-slate-800">Breed</span>
+            <input name="breed" className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="Breed (optional)" />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="font-semibold text-slate-800">Age (months)</span>
+            <input
+              name="age_months"
+              type="number"
+              min={0}
+              className="rounded border border-slate-200 bg-white px-2 py-1.5"
+              placeholder="e.g. 18"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="font-semibold text-slate-800">Weight (kg)</span>
+            <input
+              name="weight_kg"
+              type="number"
+              step="0.01"
+              min={0}
+              className="rounded border border-slate-200 bg-white px-2 py-1.5"
+              placeholder="e.g. 12.5"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
             <span className="font-semibold text-slate-800">Primary branch</span>
             <select name="branch_id" className="rounded border border-slate-200 bg-white px-2 py-1.5">
               <option value="">—</option>
@@ -152,7 +177,7 @@ export default async function WalkInGuestPage() {
             </select>
           </label>
           <label className="flex items-center gap-2 text-[11px]">
-            <input type="checkbox" name="create_appointment" className="rounded border-slate-300" />
+            <input type="checkbox" name="create_appointment" defaultChecked className="rounded border-slate-300" />
             <span>Also create a same-day appointment (needs branch)</span>
           </label>
           <label className="flex flex-col gap-0.5">
@@ -160,7 +185,7 @@ export default async function WalkInGuestPage() {
             <textarea name="notes" rows={2} className="rounded border border-slate-200 bg-white px-2 py-1.5" placeholder="Optional" />
           </label>
           <SubmitButton className="btn-primary btn-compact" pendingLabel="Saving…">
-            Save walk-in & open patient
+            Save walk-in & go to appointments
           </SubmitButton>
         </form>
 

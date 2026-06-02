@@ -78,6 +78,14 @@ function sourceLabel(source: string | null | undefined): string {
   return source.replace(/_/g, " ");
 }
 
+function formatAppointmentDateTime(iso: string): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(iso));
+}
+
 export default async function AppointmentsPage({
   searchParams,
 }: {
@@ -198,7 +206,9 @@ export default async function AppointmentsPage({
     query = query.eq("booking_source", source);
   }
   if (date) {
-    query = query.gte("starts_at", `${date}T00:00:00`).lt("starts_at", `${date}T23:59:59`);
+    const dayStart = new Date(`${date}T00:00:00`);
+    const dayEnd = new Date(`${date}T23:59:59.999`);
+    query = query.gte("starts_at", dayStart.toISOString()).lte("starts_at", dayEnd.toISOString());
   }
 
   const { data: appointments, error: appointmentsError } = await query;
@@ -501,7 +511,7 @@ export default async function AppointmentsPage({
             <tbody>
               {appointments?.map((appt) => (
                 <tr className="border-t border-outline-variant/20 odd:bg-surface even:bg-surface-container-low" key={appt.id} id={`appt-${appt.id}`}>
-                  <td className="px-3 py-3">{new Date(appt.starts_at).toLocaleString()}</td>
+                  <td className="px-3 py-3">{formatAppointmentDateTime(appt.starts_at)}</td>
                   <td className="px-3 py-3">{appt.appointment_type}</td>
                   <td className="px-3 py-3">{pickName(appt.owners, "full_name")}</td>
                   <td className="px-3 py-3">{pickName(appt.pets, "name")}</td>

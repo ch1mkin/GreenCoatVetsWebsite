@@ -38,12 +38,23 @@ export async function createWalkInGuestPatient(formData: FormData) {
   const phone = String(formData.get("phone") ?? "").trim();
   const petName = String(formData.get("pet_name") ?? "").trim();
   const species = normalizeLegacySpeciesToCanonical(String(formData.get("species") ?? "").trim() || "unknown");
+  const breed = String(formData.get("breed") ?? "").trim();
+  const ageMonthsRaw = String(formData.get("age_months") ?? "").trim();
+  const weightKgRaw = String(formData.get("weight_kg") ?? "").trim();
   const branchId = String(formData.get("branch_id") ?? "").trim();
   const createAppointment = String(formData.get("create_appointment") ?? "") === "on";
   const notes = String(formData.get("notes") ?? "").trim();
 
   if (!phone) throw new Error("Phone is required for walk-in.");
   if (!petName) throw new Error("Patient name is required.");
+  const ageMonths = ageMonthsRaw ? Number.parseInt(ageMonthsRaw, 10) : null;
+  const weightKg = weightKgRaw ? Number.parseFloat(weightKgRaw) : null;
+  if (ageMonthsRaw && (!Number.isFinite(ageMonths as number) || (ageMonths as number) < 0)) {
+    throw new Error("Age (months) must be a valid non-negative number.");
+  }
+  if (weightKgRaw && (!Number.isFinite(weightKg as number) || (weightKg as number) < 0)) {
+    throw new Error("Weight (kg) must be a valid non-negative number.");
+  }
 
   const { first, last, full } = splitOwnerName(ownerRaw || "");
 
@@ -77,6 +88,9 @@ export async function createWalkInGuestPatient(formData: FormData) {
       owner_id: ownerRow.id,
       name: petName,
       species,
+      breed: breed || null,
+      age_months: ageMonths,
+      weight_kg: weightKg,
       patient_code: patientCode,
       primary_branch_id: branchId || null,
     })
@@ -95,7 +109,7 @@ export async function createWalkInGuestPatient(formData: FormData) {
       appointment_type: "consultation",
       status: "scheduled",
       starts_at: new Date().toISOString(),
-      notes: "Walk-in from web front desk",
+      notes: notes ? `Walk-in from web front desk. ${notes}` : "Walk-in from web front desk",
     });
     if (aErr) throw new Error(aErr.message);
   }
@@ -103,5 +117,5 @@ export async function createWalkInGuestPatient(formData: FormData) {
   revalidatePath("/owners");
   revalidatePath("/pets");
   revalidatePath("/appointments");
-  redirect(`/pets/${petRow.id}`);
+  redirect("/appointments");
 }
