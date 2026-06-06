@@ -158,10 +158,14 @@ export async function POST(request: Request) {
         ownerEmail: body.owner_email?.trim() || "",
         ownerPhone: body.owner_phone?.trim() || "",
         chiefComplaint: body.chief_complaint || null,
-        notes: `Senior Vet online · Owner video: ${joinUrl ?? "—"} · Doctor video: ${doctorJoinUrl ?? "—"} · Consent v${SENIOR_VET_ONLINE_CONSENT_VERSION}`,
+        notes: `Senior Vet online consultation · Consent v${SENIOR_VET_ONLINE_CONSENT_VERSION}`,
         bookingSource: "guest_website",
         bookingCode: result.merge_token,
         consentPdfAttachment: consentAttachment,
+        staffCtas: [
+          ...(joinUrl ? [{ label: "Owner video room", href: joinUrl }] : []),
+          ...(doctorJoinUrl ? [{ label: "Doctor video room", href: doctorJoinUrl }] : []),
+        ],
       });
     } catch (mailErr) {
       console.error("[senior-vet] notification email failed", mailErr);

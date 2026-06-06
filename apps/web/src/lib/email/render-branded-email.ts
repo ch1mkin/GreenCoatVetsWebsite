@@ -3,6 +3,11 @@ type EmailDetail = {
   value: string;
 };
 
+export type EmailCta = {
+  label: string;
+  href: string;
+};
+
 type BrandedEmailInput = {
   brandName: string;
   heading: string;
@@ -10,8 +15,11 @@ type BrandedEmailInput = {
   body?: string[];
   details?: EmailDetail[];
   bullets?: string[];
+  /** @deprecated Prefer `ctas` for one or more action buttons. */
   ctaLabel?: string;
+  /** @deprecated Prefer `ctas` for one or more action buttons. */
   ctaHref?: string;
+  ctas?: EmailCta[];
   footer?: string;
 };
 
@@ -24,12 +32,41 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function resolveCtas(input: BrandedEmailInput): EmailCta[] {
+  if (input.ctas?.length) {
+    return input.ctas.filter((cta) => cta.label.trim() && cta.href.trim());
+  }
+  if (input.ctaLabel?.trim() && input.ctaHref?.trim()) {
+    return [{ label: input.ctaLabel.trim(), href: input.ctaHref.trim() }];
+  }
+  return [];
+}
+
+function renderEmailButtons(ctas: EmailCta[]): string {
+  return ctas
+    .map(
+      (cta) => `
+        <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 12px;">
+          <tr>
+            <td align="center" style="border-radius:999px;background:#0d8b68;">
+              <a href="${escapeHtml(cta.href)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;border-radius:999px;padding:14px 24px;font-size:14px;font-weight:700;line-height:1.2;color:#ffffff;text-decoration:none;">
+                ${escapeHtml(cta.label)}
+              </a>
+            </td>
+          </tr>
+        </table>
+      `,
+    )
+    .join("");
+}
+
 export function renderBrandedEmail(input: BrandedEmailInput): { html: string; text: string } {
   const intro = input.intro?.trim() || "";
   const body = (input.body ?? []).map((item) => item.trim()).filter(Boolean);
   const details = (input.details ?? []).filter((item) => item.label.trim() && item.value.trim());
   const bullets = (input.bullets ?? []).map((item) => item.trim()).filter(Boolean);
   const footer = input.footer?.trim() || `Sent by ${input.brandName}`;
+  const ctas = resolveCtas(input);
 
   const html = `
     <div style="margin:0;background:#f4f8f6;padding:32px 16px;font-family:Inter,Arial,sans-serif;color:#16312b;">
@@ -70,17 +107,7 @@ export function renderBrandedEmail(input: BrandedEmailInput): { html: string; te
               `
               : ""
           }
-          ${
-            input.ctaLabel && input.ctaHref
-              ? `
-                <div style="margin-top:28px;">
-                  <a href="${escapeHtml(input.ctaHref)}" style="display:inline-block;border-radius:999px;background:#0d8b68;padding:14px 22px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">
-                    ${escapeHtml(input.ctaLabel)}
-                  </a>
-                </div>
-              `
-              : ""
-          }
+          ${ctas.length ? `<div style="margin-top:28px;">${renderEmailButtons(ctas)}</div>` : ""}
         </div>
         <div style="padding:18px 32px;border-top:1px solid #e4efea;font-size:12px;line-height:1.6;color:#5f6f68;background:#fbfdfc;">
           ${escapeHtml(footer)}
@@ -107,7 +134,13 @@ export function renderBrandedEmail(input: BrandedEmailInput): { html: string; te
           ...bullets.map((item) => `- ${item}`),
         ].join("\n")
       : "",
-    input.ctaLabel && input.ctaHref ? `\n${input.ctaLabel}: ${input.ctaHref}` : "",
+    ctas.length
+      ? [
+          "",
+          "Actions:",
+          ...ctas.map((cta) => `→ ${cta.label}`),
+        ].join("\n")
+      : "",
     "",
     footer,
   ]

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { renderBrandedEmail } from "@/lib/email/render-branded-email";
+import { getPlatformBranding } from "@/lib/platform-branding";
 import { getActiveMembership } from "@/lib/auth/get-active-membership";
 import { createClient } from "@/lib/supabase/server";
 
@@ -41,12 +43,28 @@ export async function GET(_request: Request, { params }: { params: { appointment
   if (ownerEmail && transporter && from) {
     try {
       const when = appt.starts_at ? new Date(appt.starts_at as string).toLocaleString() : "now";
+      const joinHref = String(appt.meet_link ?? url).trim();
+      const branding = await getPlatformBranding();
+      const brandName = branding.product_name || clinic?.name || "GreenCoatVets";
+      const mail = renderBrandedEmail({
+        brandName,
+        heading: "Your doctor is ready",
+        intro: `Hi ${owner?.full_name ?? "there"}, your doctor is ready to start the online consultation for ${pet?.name ?? "your pet"}.`,
+        body: ["Tap the button below to join the video call now."],
+        details: [
+          { label: "Clinic", value: clinic?.name ?? "Clinic" },
+          { label: "Pet", value: pet?.name ?? "Your pet" },
+          { label: "Scheduled time", value: when },
+        ],
+        ctas: [{ label: "Join consultation now", href: joinHref }],
+        footer: `${brandName} · Senior Vet online consultations`,
+      });
       await transporter.sendMail({
         from,
         to: ownerEmail,
         subject: `${clinic?.name ?? "Clinic"}: Doctor is ready for your online consultation`,
-        text: `Hi ${owner?.full_name ?? "there"}, your doctor is ready to start the consultation for ${pet?.name ?? "your pet"}. Join now: ${appt.meet_link ?? url}. Scheduled time: ${when}.`,
-        html: `<p>Hi ${owner?.full_name ?? "there"},</p><p>Your doctor is ready to start the online consultation for <strong>${pet?.name ?? "your pet"}</strong>.</p><p><a href="${appt.meet_link ?? url}">Join consultation now</a></p><p>Scheduled time: ${when}</p>`,
+        text: mail.text,
+        html: mail.html,
       });
     } catch (mailError) {
       console.error("[online-consult/redirect] owner notify failed", mailError);

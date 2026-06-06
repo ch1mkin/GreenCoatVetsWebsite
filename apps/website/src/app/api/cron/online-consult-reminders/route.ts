@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createHostingerTransport, getHostingerFromAddress } from "@/lib/email/hostinger-mail";
+import { renderBrandedEmail } from "@/lib/email/render-branded-email";
+import { getPlatformBranding } from "@/lib/platform-branding";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 function authorizeCron(request: Request): boolean {
@@ -22,6 +24,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not configured" }, { status: 503 });
   }
 
+  const branding = await getPlatformBranding();
+  const brandName = branding.product_name || "GreenCoatVets";
+
   const now = new Date();
   const windowStart = new Date(now.getTime() + 18 * 60 * 1000).toISOString();
   const windowEnd = new Date(now.getTime() + 22 * 60 * 1000).toISOString();
@@ -42,19 +47,37 @@ export async function POST(request: Request) {
     const owners = row.owners as { full_name?: string; email?: string } | { full_name?: string; email?: string }[] | null;
     const owner = Array.isArray(owners) ? owners[0] : owners;
     const email = owner?.email?.trim();
-    if (!email) continue;
+    const joinUrl = String(row.meet_link ?? "").trim();
+    if (!email || !joinUrl) continue;
     const clinics = row.clinics as { name?: string } | { name?: string }[] | null;
     const clinicName = (Array.isArray(clinics) ? clinics[0]?.name : clinics?.name) ?? "Clinic";
     const pets = row.pets as { name?: string } | { name?: string }[] | null;
     const petName = (Array.isArray(pets) ? pets[0]?.name : pets?.name) ?? "your pet";
     const when = new Date(row.starts_at as string).toLocaleString();
+    const ownerName = owner?.full_name?.trim() || "there";
+
+    const mail = renderBrandedEmail({
+      brandName: brandName || clinicName,
+      heading: "Your video call starts soon",
+      intro: `Hi ${ownerName}, your Senior Vet online consultation for ${petName} begins in about 20 minutes.`,
+      body: [
+        "Tap the button below when it is time to join. The call opens in your browser — no separate app required.",
+      ],
+      details: [
+        { label: "Clinic", value: clinicName },
+        { label: "Pet", value: petName },
+        { label: "When", value: when },
+      ],
+      ctas: [{ label: "Join video call", href: joinUrl }],
+      footer: `${brandName || clinicName} · Senior Vet online consultations`,
+    });
 
     await transporter.sendMail({
       from,
       to: email,
       subject: `${clinicName} — Senior Vet call in ~20 minutes`,
-      text: `Hi ${owner?.full_name ?? "there"}, your online consultation for ${petName} starts at ${when}. Join: ${row.meet_link}`,
-      html: `<p>Hi ${owner?.full_name ?? "there"},</p><p>Your Senior Vet online consultation for <strong>${petName}</strong> starts at <strong>${when}</strong>.</p><p><a href="${row.meet_link}">Join video call on our website</a></p><p style="font-size:12px;color:#666">The call opens in your browser — no Google Meet required.</p>`,
+      text: mail.text,
+      html: mail.html,
     });
     sent += 1;
   }

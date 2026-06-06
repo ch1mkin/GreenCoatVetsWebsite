@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getPlatformBranding } from "@/lib/platform-branding";
 import { createHostingerTransport, getHostingerFromAddress, resolveClinicNotificationRecipients } from "./hostinger-mail";
-import { renderBrandedEmail } from "./render-branded-email";
+import { renderBrandedEmail, type EmailCta } from "./render-branded-email";
 
 export async function sendAppointmentBookingNotificationEmail(params: {
   clinicId: string;
@@ -20,6 +20,8 @@ export async function sendAppointmentBookingNotificationEmail(params: {
   bookingCode?: string | null;
   /** Signed consent PDF attached to staff/admin notification emails. */
   consentPdfAttachment?: { filename: string; content: Buffer } | null;
+  /** Action buttons for staff (e.g. owner/doctor video room) — URLs hidden behind labels. */
+  staffCtas?: EmailCta[];
 }): Promise<{ sent: boolean; reason?: string }> {
   const supabase = createClient();
   const transporter = createHostingerTransport();
@@ -63,6 +65,7 @@ export async function sendAppointmentBookingNotificationEmail(params: {
         { label: "Notes", value: params.notes?.trim() || "—" },
         ...(bookingCode ? [{ label: "Booking code", value: bookingCode }] : []),
       ],
+      ctas: params.staffCtas,
       footer: `${brandName} booking notifications`,
     });
 

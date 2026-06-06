@@ -35,7 +35,7 @@ export async function sendSeniorVetDoctorConsultEmail(ctx: SeniorVetConsultEmail
     intro: `Hi ${ctx.doctorName}, a pet owner has booked an online video consultation with you.`,
     body: [
       "The signed consent form is attached to this email as a PDF. Please review it before starting the call.",
-      "Use the secure link below to join — no website login is required.",
+      "Tap the button below to join the video consultation — no website login is required.",
     ],
     details: [
       { label: "Pet", value: ctx.petName },
@@ -45,8 +45,7 @@ export async function sendSeniorVetDoctorConsultEmail(ctx: SeniorVetConsultEmail
       { label: "When", value: ctx.whenLabel },
       { label: "Chief complaint", value: ctx.chiefComplaint?.trim() || "—" },
     ],
-    ctaLabel: "Start video consultation",
-    ctaHref: ctx.doctorJoinUrl,
+    ctas: [{ label: "Start video consultation", href: ctx.doctorJoinUrl }],
     footer: `${brandName} · Senior Vet online consultations`,
   });
 
@@ -137,8 +136,7 @@ export async function sendSeniorVetOwnerConfirmationEmail(params: {
       { label: "Pet", value: params.petName },
       { label: "When", value: params.whenLabel },
     ],
-    ctaLabel: params.joinUrl ? "Join video call on our website" : undefined,
-    ctaHref: params.joinUrl ?? undefined,
+    ctas: params.joinUrl ? [{ label: "Join video call", href: params.joinUrl }] : undefined,
     footer: `${brandName} · Appointment confirmation`,
   });
 
