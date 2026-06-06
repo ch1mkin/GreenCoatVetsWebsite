@@ -115,7 +115,6 @@ export async function sendSeniorVetOwnerConfirmationEmail(params: {
   petName: string;
   whenLabel: string;
   joinUrl: string | null;
-  consentAttachment: ConsentAttachment;
   transporter: MailTransporter;
   from: string;
 }): Promise<void> {
@@ -127,7 +126,7 @@ export async function sendSeniorVetOwnerConfirmationEmail(params: {
     heading: "Your Senior Vet consultation is confirmed",
     intro: `Hi ${params.ownerName}, your online consultation for ${params.petName} is booked.`,
     body: [
-      "Your signed consent form is attached to this email for your records.",
+      "Your signed consent is saved with the clinic.",
       "Join the video call at the scheduled time using the button below.",
       "You will receive a reminder before your session.",
     ],
@@ -144,14 +143,7 @@ export async function sendSeniorVetOwnerConfirmationEmail(params: {
     from: params.from,
     to: params.ownerEmail,
     subject: `${params.clinicName} — Senior Vet consultation confirmed for ${params.petName}`,
-    text: `${mail.text}\n\nSigned consent PDF attached.`,
+    text: mail.text,
     html: mail.html,
-    attachments: [
-      {
-        filename: params.consentAttachment.filename,
-        content: params.consentAttachment.content,
-        contentType: "application/pdf",
-      },
-    ],
   });
 }

@@ -12,7 +12,7 @@ export default function SeniorVetConfirmedPage({
     <main className="mx-auto max-w-lg px-4 py-16">
       <h1 className="font-headline text-2xl font-bold text-on-background">Consultation booked</h1>
       <p className="mt-4 text-on-surface-variant">
-        Payment received. A consent PDF and join link were sent to your email. You will receive a reminder 20 minutes before your slot.
+        Payment received. A confirmation email with your join link was sent. You will receive a reminder 20 minutes before your slot.
       </p>
       {meet ? (
         <a

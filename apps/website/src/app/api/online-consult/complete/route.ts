@@ -199,7 +199,6 @@ export async function POST(request: Request) {
           petName: body.pet_name?.trim() || "Pet",
           whenLabel,
           joinUrl,
-          consentAttachment,
           transporter,
           from,
         });
