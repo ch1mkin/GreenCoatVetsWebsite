@@ -1,3 +1,3 @@
-export const SENIOR_VET_ONLINE_CONSENT_VERSION = "senior-vet-online-v1";
+export const SENIOR_VET_ONLINE_CONSENT_VERSION = "senior-vet-online-v2";
 
-export const SENIOR_VET_ONLINE_CONSENT_TEXT = `I consent to a Senior Veterinarian online video consultation for my pet. I understand this is telemedicine with limitations compared to an in-clinic exam. I agree to pay the listed fee, join the video session at the scheduled time, and allow the clinic to store this consent and consultation notes. I confirm I am the pet owner or authorized caregiver.`;
+export const SENIOR_VET_ONLINE_CONSENT_TEXT = `I fully authorize and consent to a Senior Veterinarian online video consultation for my pet. I understand this service is online telemedicine only and has limitations compared to an in-clinic physical examination. I acknowledge that my veterinarian may recommend an in-clinic visit and that in-clinic examinations are often more effective for diagnosis and treatment. I agree to pay the listed fee, join the video session at the scheduled time, and allow the clinic to store this consent and consultation notes. I confirm I am the pet owner or authorized caregiver.`;

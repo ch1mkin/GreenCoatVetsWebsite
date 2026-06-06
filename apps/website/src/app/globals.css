@@ -43,6 +43,40 @@
   background: linear-gradient(135deg, #36c497 0%, #006c50 100%);
 }
 
+@keyframes senior-vet-fab-radiate {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.senior-vet-fab-pulse {
+  animation: senior-vet-fab-radiate 2.4s ease-out infinite;
+}
+
+.senior-vet-fab-button {
+  background: linear-gradient(135deg, #ffba3f 0%, #008f6b 55%, #006c50 100%);
+  animation: senior-vet-fab-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes senior-vet-fab-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 10px 28px rgba(255, 186, 63, 0.45),
+      0 0 0 0 rgba(0, 143, 107, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 14px 36px rgba(255, 186, 63, 0.55),
+      0 0 0 10px rgba(0, 143, 107, 0);
+  }
+}
+
 .text-gradient {
   background: linear-gradient(to bottom right, #36c497, #006c50);
   -webkit-background-clip: text;
