@@ -133,7 +133,7 @@ export default async function TeamManagementPage({
             <input
               name="working_hours"
               className="rounded border border-slate-200 bg-white px-2 py-1.5 text-[12px]"
-              placeholder="Optional — defaults to “To be updated”"
+              placeholder="Required if role is Doctor or Senior doctor"
             />
           </label>
           <label className="flex items-center gap-2 text-[11px] md:col-span-2 lg:col-span-3">

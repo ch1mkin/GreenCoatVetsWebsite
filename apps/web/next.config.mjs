@@ -1,4 +1,13 @@
 /** @type {import('next').NextConfig} */
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import nextEnv from "@next/env";
+
+const { loadEnvConfig } = nextEnv;
+
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
+loadEnvConfig(repoRoot);
+
 const nextConfig = {
   transpilePackages: ["@saasclinics/lib"],
   experimental: {
