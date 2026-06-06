@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
-import { buildPlatformIcons } from "@saasclinics/lib";
+import { buildPlatformIcons, resolveFaviconUrl } from "@saasclinics/lib";
 import { getPlatformBranding } from "@/lib/platform-branding";
 
 const inter = Inter({
@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase,
     title: { default: title, template: `%s · ${branding.product_name}` },
     description: "Veterinary clinic operations — appointments, records, pharmacy, and payments.",
-    icons: buildPlatformIcons(),
+    icons: buildPlatformIcons(resolveFaviconUrl(branding)),
     robots: { index: false, follow: false },
   };
 }

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { DATA_SHARING_CONSENT_KEY } from "@saasclinics/lib";
+import { DATA_SHARING_CONSENT_KEY } from "@saasclinics/lib/consent";
 import { acceptDataSharingConsent } from "@/app/(portal)/consent/actions";
 
 type ProfileGateProps = {

@@ -4,15 +4,26 @@ export type PlatformIconMetadata = {
   apple?: Array<{ url: string; type?: string; sizes?: string }>;
 };
 
-/** Dynamic /icon route — custom upload from platform control, otherwise default paw PNG. */
-export function buildPlatformIcons(): PlatformIconMetadata {
+const STATIC_PLATFORM_ICONS: PlatformIconMetadata = {
+  icon: [
+    { url: "/favicon.ico", sizes: "any" },
+    { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
+  ],
+  shortcut: [{ url: "/favicon.ico" }],
+  apple: [{ url: "/favicon-48x48.png", type: "image/png", sizes: "180x180" }],
+};
+
+/** Static favicons by default; pass uploaded favicon URL from platform control when set. */
+export function buildPlatformIcons(customFaviconUrl?: string | null): PlatformIconMetadata {
+  const custom = customFaviconUrl?.trim();
+  if (!custom) return STATIC_PLATFORM_ICONS;
   return {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon", type: "image/png", sizes: "48x48" },
+      { url: custom, type: "image/png", sizes: "48x48" },
     ],
     shortcut: [{ url: "/favicon.ico" }],
-    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
+    apple: [{ url: custom, type: "image/png", sizes: "180x180" }],
   };
 }
 

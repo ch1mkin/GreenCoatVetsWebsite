@@ -284,8 +284,6 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
   revalidatePath("/login");
   revalidatePath("/signup");
   revalidatePath("/", "layout");
-  revalidatePath("/icon");
-  revalidatePath("/apple-icon");
 }
 
 export async function refreshUsersFromRegistryAsSuperAdmin() {

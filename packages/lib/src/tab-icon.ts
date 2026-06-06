@@ -33,7 +33,7 @@ export function isSquareFavicon(bytes: ArrayBuffer): boolean {
 }
 
 export function validateSquarePngUpload(bytes: Uint8Array): { ok: true } | { ok: false; reason: string } {
-  const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const buf = new Uint8Array(bytes).buffer;
   if (bytes.byteLength < 24) return { ok: false, reason: "Invalid PNG file." };
   const dim = pngDimensions(buf);
   if (!dim) return { ok: false, reason: "Favicon must be a PNG file." };
@@ -46,14 +46,17 @@ export function validateSquarePngUpload(bytes: Uint8Array): { ok: true } | { ok:
   return { ok: true };
 }
 
-async function loadDefaultFaviconPng(): Promise<Uint8Array | null> {
-  try {
-    const { readFile } = await import("node:fs/promises");
-    const path = await import("node:path");
-    return await readFile(path.join(process.cwd(), "public", "favicon-48x48.png"));
-  } catch {
-    return null;
+async function loadDefaultFaviconPng(): Promise<ArrayBuffer | null> {
+  const bases = [process.env.NEXT_PUBLIC_WEB_APP_URL, process.env.NEXT_PUBLIC_SITE_URL].filter(Boolean) as string[];
+  for (const base of bases) {
+    try {
+      const res = await fetch(`${base.replace(/\/$/, "")}/favicon-48x48.png`, { cache: "force-cache" });
+      if (res.ok) return await res.arrayBuffer();
+    } catch {
+      // Try next base URL.
+    }
   }
+  return null;
 }
 
 export async function fetchTabIconResponse(faviconUrl: string | null): Promise<Response> {
