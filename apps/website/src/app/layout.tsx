@@ -54,7 +54,8 @@ export default async function RootLayout({
     getActiveMarketingPopups(),
   ]);
   const navCopy = mergeHomepageCopy(marketing.homepage_copy);
-  const sitemapUrl = `${await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings)}/sitemap.xml`;
+  const publicBase = await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings);
+  const sitemapUrl = `${publicBase}/sitemap.xml`;
   const effectiveFooterNav = branding.website_store_enabled
     ? footerNav
     : footerNav.map((group) => ({
@@ -65,6 +66,9 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`scroll-smooth ${inter.variable} ${manrope.variable}`}>
       <head>
+        <link rel="icon" href={`${publicBase}/favicon-48x48.png`} type="image/png" sizes="48x48" />
+        <link rel="icon" href={`${publicBase}/favicon.ico`} sizes="any" />
+        <link rel="apple-touch-icon" href={`${publicBase}/apple-touch-icon.png`} sizes="180x180" />
         <link rel="sitemap" type="application/xml" title="Sitemap" href={sitemapUrl} />
         <link
           rel="stylesheet"
