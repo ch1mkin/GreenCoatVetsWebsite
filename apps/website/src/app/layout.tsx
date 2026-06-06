@@ -54,6 +54,7 @@ export default async function RootLayout({
     getActiveMarketingPopups(),
   ]);
   const navCopy = mergeHomepageCopy(marketing.homepage_copy);
+  const sitemapUrl = `${await getWebsitePublicBaseUrlFromRequest(marketing.seo_settings)}/sitemap.xml`;
   const effectiveFooterNav = branding.website_store_enabled
     ? footerNav
     : footerNav.map((group) => ({
@@ -64,6 +65,7 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`scroll-smooth ${inter.variable} ${manrope.variable}`}>
       <head>
+        <link rel="sitemap" type="application/xml" title="Sitemap" href={sitemapUrl} />
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"

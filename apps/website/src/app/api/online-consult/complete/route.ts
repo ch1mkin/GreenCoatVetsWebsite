@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { SENIOR_VET_ONLINE_CONSENT_TEXT, SENIOR_VET_ONLINE_CONSENT_VERSION } from "@/lib/booking/senior-vet-consent";
 import { createHostingerTransport, getHostingerFromAddress, resolveAdminNotificationEmail } from "@/lib/email/hostinger-mail";
 import { sendAppointmentBookingNotificationEmail } from "@/lib/email/send-appointment-booking-notification-email";
+import {
+  sendSeniorVetAdminConsentEmail,
+  sendSeniorVetDoctorConsultEmail,
+  sendSeniorVetOwnerConfirmationEmail,
+} from "@/lib/email/send-senior-vet-consult-emails";
 import { buildOnlineConsultConsentPdf } from "@/lib/pdf/online-consent-pdf";
 import { buildOnlineConsultJoinUrl } from "@/lib/online-consult/build-join-url";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
@@ -72,6 +77,9 @@ export async function POST(request: Request) {
       clinicName: clinic.name,
       ownerName: body.owner_full_name?.trim() || "Owner",
       petName: body.pet_name?.trim() || "Pet",
+      petSpecies: body.pet_species?.trim() || null,
+      chiefComplaint: body.chief_complaint?.trim() || null,
+      appointmentAtIso: body.starts_at ?? null,
       signedAtIso: signedAt,
       consentText: SENIOR_VET_ONLINE_CONSENT_TEXT,
       signaturePngBase64: body.signature_png,
@@ -136,6 +144,7 @@ export async function POST(request: Request) {
     };
     const transporter = createHostingerTransport();
     const from = getHostingerFromAddress();
+    const whenLabel = body.starts_at ? new Date(body.starts_at).toLocaleString() : "Scheduled time";
 
     try {
       await sendAppointmentBookingNotificationEmail({
@@ -161,19 +170,15 @@ export async function POST(request: Request) {
     const adminEmail = await resolveAdminNotificationEmail(supabase, clinic.id);
     if (adminEmail && transporter && from) {
       try {
-        await transporter.sendMail({
+        await sendSeniorVetAdminConsentEmail({
+          clinicName: clinic.name,
+          adminEmail,
+          ownerName: body.owner_full_name?.trim() || "Owner",
+          petName: body.pet_name?.trim() || "Pet",
+          whenLabel,
+          consentAttachment,
+          transporter,
           from,
-          to: adminEmail,
-          subject: `${clinic.name} — Senior Vet consent signed (${body.pet_name?.trim() || "Pet"})`,
-          text: `Signed Senior Vet online consent for ${body.owner_full_name?.trim() || "Owner"} / ${body.pet_name?.trim() || "Pet"}. PDF attached.`,
-          html: `<p>Signed Senior Vet online consent for <strong>${body.owner_full_name?.trim() || "Owner"}</strong> / <strong>${body.pet_name?.trim() || "Pet"}</strong>.</p><p>PDF attached.</p>`,
-          attachments: [
-            {
-              filename: consentAttachment.filename,
-              content: consentAttachment.content,
-              contentType: "application/pdf",
-            },
-          ],
         });
       } catch (adminMailErr) {
         console.error("[senior-vet] admin consent email failed", adminMailErr);
@@ -183,14 +188,16 @@ export async function POST(request: Request) {
     const ownerEmail = body.owner_email?.trim();
     if (ownerEmail && transporter && from) {
       try {
-        await transporter.sendMail({
+        await sendSeniorVetOwnerConfirmationEmail({
+          clinicName: clinic.name,
+          ownerName: body.owner_full_name?.trim() || "Owner",
+          ownerEmail,
+          petName: body.pet_name?.trim() || "Pet",
+          whenLabel,
+          joinUrl,
+          consentAttachment,
+          transporter,
           from,
-          to: ownerEmail,
-          subject: `${clinic.name} — Senior Vet online consultation confirmed`,
-          text: `Your consultation is booked. Join at the scheduled time: ${joinUrl ?? "link in portal"}. Consent PDF is on file at the clinic.`,
-          html: `<p>Your Senior Vet online consultation with <strong>${clinic.name}</strong> is confirmed.</p>
-            <p><a href="${joinUrl ?? "#"}">Join video call on our website</a></p>
-            <p>Your signed consent has been saved. You will receive a reminder before the session.</p>`,
         });
       } catch (ownerMailErr) {
         console.error("[senior-vet] owner email failed", ownerMailErr);
@@ -213,14 +220,20 @@ export async function POST(request: Request) {
             .maybeSingle();
           const doctorEmail = doctorUser?.email?.trim();
           if (doctorEmail) {
-            const doctorName = doctorProfile?.full_name?.trim() || "Doctor";
-            const when = body.starts_at ? new Date(body.starts_at).toLocaleString() : "scheduled time";
-            await transporter.sendMail({
+            await sendSeniorVetDoctorConsultEmail({
+              clinicName: clinic.name,
+              doctorName: doctorProfile?.full_name?.trim() || "Doctor",
+              doctorEmail,
+              ownerName: body.owner_full_name?.trim() || "Owner",
+              ownerEmail: body.owner_email?.trim() || null,
+              ownerPhone: body.owner_phone?.trim() || null,
+              petName: body.pet_name?.trim() || "Pet",
+              chiefComplaint: body.chief_complaint || null,
+              whenLabel,
+              doctorJoinUrl,
+              consentAttachment,
+              transporter,
               from,
-              to: doctorEmail,
-              subject: `${clinic.name} — Senior Vet consult link`,
-              text: `Hi ${doctorName}, consultation for ${body.pet_name?.trim() || "pet"} is booked at ${when}. Start call directly (no website login needed): ${doctorJoinUrl}`,
-              html: `<p>Hi ${doctorName},</p><p>Your Senior Vet consultation for <strong>${body.pet_name?.trim() || "pet"}</strong> is booked for <strong>${when}</strong>.</p><p><a href="${doctorJoinUrl}">Start consultation (no login required)</a></p>`,
             });
           }
         }
