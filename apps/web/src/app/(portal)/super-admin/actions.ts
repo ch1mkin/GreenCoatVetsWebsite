@@ -193,7 +193,7 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
   if (existingError) throw new Error(existingError.message);
 
   let nextLogo = (existing?.logo_url as string | null) ?? null;
-  let nextFavicon = (existing?.favicon_url as string | null) ?? null;
+  const nextFavicon = (existing?.favicon_url as string | null) ?? null;
 
   if (file && file.size > 0) {
     const lower = file.name.toLowerCase();
