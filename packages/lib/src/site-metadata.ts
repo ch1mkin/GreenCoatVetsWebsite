@@ -4,16 +4,15 @@ export type PlatformIconMetadata = {
   apple?: Array<{ url: string; type?: string; sizes?: string }>;
 };
 
-/** Static favicons in /public — stable for Google Search (48×48 minimum). */
+/** Dynamic /icon route — custom upload from platform control, otherwise default paw PNG. */
 export function buildPlatformIcons(): PlatformIconMetadata {
   return {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
-      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon", type: "image/png", sizes: "48x48" },
     ],
     shortcut: [{ url: "/favicon.ico" }],
-    apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
   };
 }
 

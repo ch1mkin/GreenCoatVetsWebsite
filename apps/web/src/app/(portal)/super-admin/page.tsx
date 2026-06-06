@@ -185,8 +185,7 @@ export default async function SuperAdminPage() {
               Platform branding
             </h2>
             <p className="mb-4 text-xs text-on-surface-variant">
-              PNG logo for the web app, mobile app, and marketing site header. For browser tabs, upload a separate
-              square PNG (32×32 or 64×64) as favicon — wide logos appear blank in tabs.
+              Product name and header logo for the clinic web portal, marketing website, and mobile app.
             </p>
             {platformBranding.logo_url ? (
               <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3">
@@ -196,7 +195,7 @@ export default async function SuperAdminPage() {
                   alt=""
                   className="h-14 w-14 shrink-0 rounded-md object-contain"
                 />
-                <p className="text-xs text-on-surface-variant">Current logo preview</p>
+                <p className="text-xs text-on-surface-variant">Current header logo</p>
               </div>
             ) : (
               <p className="mb-4 text-xs italic text-on-surface-variant">No custom logo yet — using default name only.</p>
@@ -272,8 +271,59 @@ export default async function SuperAdminPage() {
                 </SubmitButton>
               </div>
               <p className="text-[10px] text-on-surface-variant">
-                You can update the name only, logo only, or both. Logo is stored at <code className="rounded bg-surface-container-high px-1">platform/branding/logo.png</code>.
+                Logo is stored at <code className="rounded bg-surface-container-high px-1">platform/branding/logo.png</code>.
               </p>
+
+              <div className="border-t border-outline-variant/15 pt-4">
+                <h3 className="mb-2 font-headline text-sm font-bold text-on-surface">Browser tab icon (favicon)</h3>
+                <p className="mb-3 text-[10px] leading-relaxed text-on-surface-variant">
+                  Square PNG only — used on{" "}
+                  <strong className="font-semibold">web.greencoatvets.com</strong> (clinic portal) and{" "}
+                  <strong className="font-semibold">www.greencoatvets.com</strong> (public website). Use 48×48 px or
+                  larger; wide header logos will not work in browser tabs.
+                </p>
+                {platformBranding.favicon_url ? (
+                  <div className="mb-3 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={platformBranding.favicon_url}
+                      alt=""
+                      className="h-12 w-12 shrink-0 rounded-lg border border-outline-variant/20 object-contain"
+                    />
+                    <div className="min-w-0 text-xs text-on-surface-variant">
+                      <p className="font-semibold text-on-surface">Current favicon</p>
+                      <p className="truncate">Applies to clinic web + marketing website tabs</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mb-3 text-xs italic text-on-surface-variant">
+                    Using default GreenCoatVets paw icon until you upload one.
+                  </p>
+                )}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <label className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant">
+                    <span className="mb-1 block">Favicon (square PNG)</span>
+                    <input
+                      className="input-file-compact w-full"
+                      name="platform_favicon"
+                      type="file"
+                      accept="image/png,.png"
+                    />
+                  </label>
+                </div>
+                <form action={updatePlatformBrandingAsSuperAdmin} className="mt-3">
+                  <input type="hidden" name="clear_favicon" value="1" />
+                  <SubmitButton
+                    className="rounded-xl border border-outline-variant px-4 py-2.5 text-xs font-bold text-on-surface-variant"
+                    pendingLabel="Resetting…"
+                  >
+                    Reset favicon to default paw
+                  </SubmitButton>
+                </form>
+                <p className="mt-2 text-[10px] text-on-surface-variant">
+                  Stored at <code className="rounded bg-surface-container-high px-1">platform/branding/favicon.png</code>
+                </p>
+              </div>
             </form>
           </div>
 

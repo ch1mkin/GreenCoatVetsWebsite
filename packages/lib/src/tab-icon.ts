@@ -32,6 +32,30 @@ export function isSquareFavicon(bytes: ArrayBuffer): boolean {
   return ratio >= 0.85 && ratio <= 1.15;
 }
 
+export function validateSquarePngUpload(bytes: Uint8Array): { ok: true } | { ok: false; reason: string } {
+  const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  if (bytes.byteLength < 24) return { ok: false, reason: "Invalid PNG file." };
+  const dim = pngDimensions(buf);
+  if (!dim) return { ok: false, reason: "Favicon must be a PNG file." };
+  if (!isSquareFavicon(buf)) {
+    return { ok: false, reason: "Favicon must be square (same width and height)." };
+  }
+  if (dim.width < 32 || dim.height < 32) {
+    return { ok: false, reason: "Favicon must be at least 32×32 pixels (48×48 recommended for Google)." };
+  }
+  return { ok: true };
+}
+
+async function loadDefaultFaviconPng(): Promise<Uint8Array | null> {
+  try {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    return await readFile(path.join(process.cwd(), "public", "favicon-48x48.png"));
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTabIconResponse(faviconUrl: string | null): Promise<Response> {
   const trimmed = faviconUrl?.trim();
   if (trimmed) {
@@ -41,12 +65,27 @@ export async function fetchTabIconResponse(faviconUrl: string | null): Promise<R
         const bytes = await res.arrayBuffer();
         if (isSquareFavicon(bytes)) {
           const type = res.headers.get("content-type")?.trim() || "image/png";
-          return new Response(bytes, { headers: { "Content-Type": type } });
+          return new Response(bytes, {
+            headers: {
+              "Content-Type": type,
+              "Cache-Control": "public, max-age=3600, must-revalidate",
+            },
+          });
         }
       }
     } catch {
-      // Fall through to bundled SVG.
+      // Fall through to default paw mark.
     }
+  }
+
+  const png = await loadDefaultFaviconPng();
+  if (png) {
+    return new Response(png, {
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=86400, must-revalidate",
+      },
+    });
   }
 
   return new Response(DEFAULT_FAVICON_SVG, {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { provisionUserAccountForAdmin, rollbackProvisionedUser } from "@/lib/auth/provision-user-account";
 import { sendPortalPasswordResetLink } from "@/lib/auth/send-portal-password-reset";
 import { sendAdminCreatedPortalCredentialsEmail } from "@/lib/email/send-welcome-email";
+import { validateSquarePngUpload } from "@saasclinics/lib";
 import { createClient } from "@/lib/supabase/server";
 
 async function assertSuperAdmin() {
@@ -150,11 +151,15 @@ export async function updateClinicImageAsSuperAdmin(formData: FormData) {
 }
 
 const PLATFORM_LOGO_PATH = "platform/branding/logo.png";
+const PLATFORM_FAVICON_PATH = "platform/branding/favicon.png";
 
 export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
   await assertSuperAdmin();
   const logoFile = formData.get("platform_logo");
   const file = logoFile instanceof File ? logoFile : null;
+  const faviconFile = formData.get("platform_favicon");
+  const faviconUpload = faviconFile instanceof File ? faviconFile : null;
+  const clearFavicon = String(formData.get("clear_favicon") ?? "").trim() === "1";
   const nameRaw = String(formData.get("product_name") ?? "").trim();
   const websiteAdminCode = String(formData.get("website_admin_access_code") ?? "").trim();
   const websiteAdminCodeConfirm = String(formData.get("website_admin_access_code_confirm") ?? "").trim();
@@ -165,9 +170,18 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
     websiteStoreEnabledRaw === "true" || websiteStoreEnabledRaw === "on" || websiteStoreEnabledRaw === "1";
 
   const updatingCode = websiteAdminCode.length > 0 || websiteAdminCodeConfirm.length > 0;
-  if ((!file || file.size === 0) && !nameRaw && !updatingCode && !primaryClinicIdRaw && !websiteStoreEnabledRaw) {
+  const hasFaviconUpload = Boolean(faviconUpload && faviconUpload.size > 0);
+  if (
+    (!file || file.size === 0) &&
+    !hasFaviconUpload &&
+    !clearFavicon &&
+    !nameRaw &&
+    !updatingCode &&
+    !primaryClinicIdRaw &&
+    !websiteStoreEnabledRaw
+  ) {
     throw new Error(
-      "Enter a product name, choose a PNG logo, set primary clinic, toggle website store, and/or update website admin access code.",
+      "Enter a product name, choose a PNG logo, upload a square favicon, set primary clinic, toggle website store, and/or update website admin access code.",
     );
   }
 
@@ -193,7 +207,7 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
   if (existingError) throw new Error(existingError.message);
 
   let nextLogo = (existing?.logo_url as string | null) ?? null;
-  const nextFavicon = (existing?.favicon_url as string | null) ?? null;
+  let nextFavicon = clearFavicon ? null : ((existing?.favicon_url as string | null) ?? null);
 
   if (file && file.size > 0) {
     const lower = file.name.toLowerCase();
@@ -213,6 +227,30 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
     const { data: publicUrl } = supabase.storage.from("clinic-assets").getPublicUrl(PLATFORM_LOGO_PATH);
     const url = publicUrl.publicUrl;
     nextLogo = url;
+  }
+
+  if (faviconUpload && faviconUpload.size > 0) {
+    const lower = faviconUpload.name.toLowerCase();
+    if (!lower.endsWith(".png")) {
+      throw new Error("Favicon must be a PNG file.");
+    }
+
+    const bytes = new Uint8Array(await faviconUpload.arrayBuffer());
+    const validation = validateSquarePngUpload(bytes);
+    if (!validation.ok) {
+      throw new Error(validation.reason);
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from("clinic-assets")
+      .upload(PLATFORM_FAVICON_PATH, bytes, {
+        contentType: "image/png",
+        upsert: true,
+      });
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { data: publicUrl } = supabase.storage.from("clinic-assets").getPublicUrl(PLATFORM_FAVICON_PATH);
+    nextFavicon = `${publicUrl.publicUrl}?v=${Date.now()}`;
   }
 
   const nextName =
@@ -247,7 +285,7 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
   revalidatePath("/signup");
   revalidatePath("/", "layout");
   revalidatePath("/icon");
-  revalidatePath("/icon");
+  revalidatePath("/apple-icon");
 }
 
 export async function refreshUsersFromRegistryAsSuperAdmin() {
