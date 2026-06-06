@@ -97,6 +97,31 @@ export default async function AdminSeoPage({
             <li>Choose the HTML tag verification method and paste the content value below.</li>
             <li>Submit the sitemap URL: <span className="font-mono text-xs">{sitemapUrl}</span></li>
             <li>Use &quot;Ping Google&quot; after major content updates (blog, services, new pages).</li>
+            <li>
+              If Google still shows old WordPress pages, use URL Removal in Search Console for outdated URLs, then
+              resubmit the sitemap above.
+            </li>
+          </ol>
+        </div>
+
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm sm:col-span-2">
+          <p className="text-xs font-bold uppercase text-amber-800">Replacing an old WordPress site</p>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-amber-950">
+            <li>
+              Point DNS for <strong>www.greencoatvets.com</strong> and <strong>greencoatvets.com</strong> to Vercel only
+              — cancel or disable the old WordPress host so it cannot serve the domain.
+            </li>
+            <li>
+              Verify the new site in Search Console (HTML tag below). Old WordPress URLs now redirect to the homepage.
+            </li>
+            <li>
+              Submit <span className="font-mono text-xs">{sitemapUrl}</span> and use &quot;Request indexing&quot; on the
+              homepage.
+            </li>
+            <li>
+              In Search Console → Removals, temporarily remove outdated WordPress URLs Google still lists (optional,
+              speeds up the switch).
+            </li>
           </ol>
         </div>
       </section>

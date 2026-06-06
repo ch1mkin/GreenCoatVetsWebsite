@@ -38,7 +38,7 @@ export async function fetchPlatformBranding(supabase: SupabaseClient): Promise<P
   };
 }
 
-/** Use favicon_url when set; otherwise same PNG as logo works as tab icon. */
+/** Dedicated square favicon only — logos are often wide and invisible in browser tabs. */
 export function resolveFaviconUrl(branding: PlatformBranding): string | null {
-  return branding.favicon_url?.trim() || branding.logo_url?.trim() || null;
+  return branding.favicon_url?.trim() || null;
 }

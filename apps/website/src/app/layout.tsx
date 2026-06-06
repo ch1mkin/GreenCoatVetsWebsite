@@ -32,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase,
     title: { default: `${branding.product_name} — Clinical Sanctuary`, template: `%s · ${branding.product_name}` },
     description: "Veterinary care, appointments, store, and wellness — GreenCoatVets experience.",
-    icons: buildPlatformIcons(branding),
+    icons: buildPlatformIcons(),
     ...(verification
       ? { verification: { google: verification } }
       : {}),

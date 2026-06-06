@@ -213,7 +213,6 @@ export async function updatePlatformBrandingAsSuperAdmin(formData: FormData) {
     const { data: publicUrl } = supabase.storage.from("clinic-assets").getPublicUrl(PLATFORM_LOGO_PATH);
     const url = publicUrl.publicUrl;
     nextLogo = url;
-    nextFavicon = url;
   }
 
   const nextName =

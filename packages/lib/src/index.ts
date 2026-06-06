@@ -7,6 +7,8 @@ export {
 
 export { buildPlatformIcons, resolvePublicSiteUrl } from "./site-metadata";
 
+export { DEFAULT_FAVICON_SVG, fetchTabIconResponse, isSquareFavicon } from "./tab-icon";
+
 export { DATA_SHARING_CONSENT_KEY, DATA_SHARING_CONSENT_VERSION } from "./consent";
 
 export {

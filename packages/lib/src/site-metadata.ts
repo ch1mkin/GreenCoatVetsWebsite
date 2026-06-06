@@ -1,25 +1,18 @@
-import type { PlatformBranding } from "./platform-branding";
-import { resolveFaviconUrl } from "./platform-branding";
-
 export type PlatformIconMetadata = {
   icon?: Array<{ url: string; type?: string; sizes?: string }>;
   shortcut?: Array<{ url: string }>;
   apple?: Array<{ url: string; type?: string; sizes?: string }>;
 };
 
-/** One tab icon: custom platform PNG when set, otherwise static SVG. */
-export function buildPlatformIcons(branding: PlatformBranding): PlatformIconMetadata {
-  const custom = resolveFaviconUrl(branding);
-  if (custom) {
-    return {
-      icon: [{ url: custom, type: "image/png", sizes: "32x32" }],
-      shortcut: [{ url: custom }],
-      apple: [{ url: custom, sizes: "180x180" }],
-    };
-  }
+/** Same-origin icon routes so /icon can serve branding or the bundled paw mark. */
+export function buildPlatformIcons(): PlatformIconMetadata {
   return {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml", sizes: "any" }],
-    apple: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon", type: "image/png", sizes: "32x32" },
+    ],
+    shortcut: [{ url: "/favicon.ico" }],
+    apple: [{ url: "/apple-icon", type: "image/png", sizes: "180x180" }],
   };
 }
 

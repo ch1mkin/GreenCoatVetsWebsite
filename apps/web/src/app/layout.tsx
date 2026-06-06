@@ -23,7 +23,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase,
     title: { default: title, template: `%s · ${branding.product_name}` },
     description: "Veterinary clinic operations — appointments, records, pharmacy, and payments.",
-    icons: buildPlatformIcons(branding),
+    icons: buildPlatformIcons(),
     robots: { index: false, follow: false },
   };
 }

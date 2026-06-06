@@ -185,7 +185,8 @@ export default async function SuperAdminPage() {
               Platform branding
             </h2>
             <p className="mb-4 text-xs text-on-surface-variant">
-              PNG logo for web app, mobile app, marketing site, and browser tab (favicon). Replaces default text marks.
+              PNG logo for the web app, mobile app, and marketing site header. For browser tabs, upload a separate
+              square PNG (32×32 or 64×64) as favicon — wide logos appear blank in tabs.
             </p>
             {platformBranding.logo_url ? (
               <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3">
