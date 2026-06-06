@@ -151,7 +151,15 @@ export function SiteFooter({
         <p className="font-body text-sm text-slate-500 dark:text-slate-400">
           © {year} {productName}. All rights reserved.{" "}
           <span className="whitespace-nowrap text-slate-600 dark:text-slate-300">
-            Site &amp; platform · <span className="font-semibold">@salhantech</span>
+            Site &amp; platform ·{" "}
+            <a
+              href="https://salhantech.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-slate-600 underline-offset-2 hover:text-primary hover:underline dark:text-slate-300"
+            >
+              @salhantech
+            </a>
           </span>
         </p>
       </div>
