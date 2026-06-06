@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
-import { getRazorpayServerConfig } from "@/lib/payments/razorpay-server-config";
+import { describeRazorpayConfigGap, getRazorpayServerConfig } from "@/lib/payments/razorpay-server-config";
 import { isWebsiteStoreEnabled } from "@/lib/store/store-availability";
 import { createClientFromRouteRequest } from "@/lib/supabase/route-request-client";
 
@@ -19,10 +19,7 @@ export async function POST(request: Request) {
 
     const rz = await getRazorpayServerConfig();
     if (!rz) {
-      return NextResponse.json(
-        { error: "Razorpay is not configured. Set keys in the Payments admin (super admin) or RAZORPAY_* env vars." },
-        { status: 500 },
-      );
+      return NextResponse.json({ error: describeRazorpayConfigGap() }, { status: 500 });
     }
     const { keyId, keySecret, paymentMode } = rz;
 

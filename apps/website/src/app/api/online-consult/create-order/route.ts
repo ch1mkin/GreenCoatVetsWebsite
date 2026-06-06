@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Razorpay from "razorpay";
 import { resolveClinic } from "@/lib/clinic/resolve-clinic";
-import { getRazorpayServerConfig } from "@/lib/payments/razorpay-server-config";
+import { describeRazorpayConfigGap, getRazorpayServerConfig } from "@/lib/payments/razorpay-server-config";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST() {
@@ -29,7 +29,7 @@ export async function POST() {
 
     const rz = await getRazorpayServerConfig();
     if (!rz) {
-      return NextResponse.json({ error: "Payment gateway is not configured." }, { status: 500 });
+      return NextResponse.json({ error: describeRazorpayConfigGap() }, { status: 500 });
     }
 
     const amountPaise = settings.price_paise;
