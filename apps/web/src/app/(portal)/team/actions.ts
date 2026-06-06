@@ -60,7 +60,9 @@ export async function assignUserToClinicAction(formData: FormData) {
       | "pet_owner";
     const fullName = String(formData.get("full_name") ?? "").trim() || null;
     const phone = String(formData.get("phone") ?? "").trim() || null;
-    const workingHours = String(formData.get("working_hours") ?? "").trim() || null;
+    const workingHoursRaw = String(formData.get("working_hours") ?? "").trim();
+    const workingHours =
+      role === "doctor" || role === "senior_doctor" ? workingHoursRaw || "To be updated" : null;
     const confirm = String(formData.get("confirm_assign") ?? "") === "on";
     if (!email || !role) throw new Error("Email and role are required.");
     if (!confirm) throw new Error("Confirm assigning this role.");
